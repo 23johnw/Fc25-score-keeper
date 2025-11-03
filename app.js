@@ -253,6 +253,21 @@ class StatisticsCalculators {
         return this.registry.filter(calc => calc.category === category);
     }
     
+    static getBySubcategory(category, subcategory) {
+        return this.registry.filter(calc => 
+            calc.category === category && calc.subcategory === subcategory
+        );
+    }
+    
+    static getSubcategories(category) {
+        const subcategories = new Set(
+            this.registry
+                .filter(calc => calc.category === category && calc.subcategory)
+                .map(calc => calc.subcategory)
+        );
+        return Array.from(subcategories);
+    }
+    
     static getCategories() {
         const categories = new Set(this.registry.map(calc => calc.category));
         return Array.from(categories);
@@ -274,6 +289,7 @@ StatisticsCalculators.register({
     id: 'winLossDraw',
     name: 'Wins, Losses & Draws',
     category: 'performance',
+    subcategory: 'wins-losses',
     calculate: (matches, players) => {
         const stats = {};
         players.forEach(player => {
@@ -357,6 +373,7 @@ StatisticsCalculators.register({
     id: 'winRate',
     name: 'Win Rate',
     category: 'performance',
+    subcategory: 'win-rate',
     calculate: (matches, players) => {
         const wld = StatisticsCalculators.getById('winLossDraw').calculate(matches, players);
         const winRates = {};
@@ -398,6 +415,7 @@ StatisticsCalculators.register({
     id: 'streak',
     name: 'Current Streak',
     category: 'performance',
+    subcategory: 'streak',
     calculate: (matches, players) => {
         const streaks = {};
         players.forEach(player => {
@@ -967,17 +985,17 @@ class StatisticsDisplay {
         this.tracker = statisticsTracker;
     }
 
-    displaySeasonStats(seasonNumber, container, category = null) {
+    displaySeasonStats(seasonNumber, container, category = null, subcategory = null) {
         const stats = this.tracker.getSeasonStats(seasonNumber);
-        this.renderStats(stats, container, category);
+        this.renderStats(stats, container, category, subcategory);
     }
 
-    displayOverallStats(container, category = null) {
+    displayOverallStats(container, category = null, subcategory = null) {
         const stats = this.tracker.getOverallStats();
-        this.renderStats(stats, container, category);
+        this.renderStats(stats, container, category, subcategory);
     }
 
-    renderStats(stats, container, category = null) {
+    renderStats(stats, container, category = null, subcategory = null) {
         container.innerHTML = '';
         
         if (Object.keys(stats).length === 0) {
@@ -985,9 +1003,14 @@ class StatisticsDisplay {
             return;
         }
 
-        const calculators = category 
-            ? StatisticsCalculators.getByCategory(category)
-            : StatisticsCalculators.getAll();
+        let calculators;
+        if (category && subcategory) {
+            calculators = StatisticsCalculators.getBySubcategory(category, subcategory);
+        } else if (category) {
+            calculators = StatisticsCalculators.getByCategory(category);
+        } else {
+            calculators = StatisticsCalculators.getAll();
+        }
             
         calculators.forEach(calculator => {
             const data = stats[calculator.id];
@@ -1099,6 +1122,7 @@ class AppController {
         this.selectedStructureIndex = null;
         this.selectedStructure = null;
         this.currentGameIndex = 0;
+        this.currentStatsState = {};
         
         this.initializeEventListeners();
         this.initializeApp();
@@ -1514,7 +1538,7 @@ class AppController {
         }
     }
     
-    renderCategoryTabs(type) {
+    renderCategoryTabs(type, selectedCategory = 'all') {
         const categories = StatisticsCalculators.getCategories();
         const container = document.getElementById(type === 'season' ? 'seasonCategoryTabs' : 'overallCategoryTabs');
         
@@ -1528,30 +1552,62 @@ class AppController {
             'all': 'All'
         };
         
-        const tabsHTML = `
-            <button class="category-btn active" data-category="all">All</button>
+        // Subcategory display names
+        const subcategoryNames = {
+            'wins-losses': 'Wins/Losses',
+            'win-rate': 'Win Rate',
+            'streak': 'Streak'
+        };
+        
+        let tabsHTML = '';
+        
+        // Render main category tabs
+        tabsHTML += `
+            <button class="category-btn ${selectedCategory === 'all' ? 'active' : ''}" data-category="all">All</button>
             ${categories.map(cat => `
-                <button class="category-btn" data-category="${cat}">${categoryNames[cat] || cat}</button>
+                <button class="category-btn ${selectedCategory === cat ? 'active' : ''}" data-category="${cat}">${categoryNames[cat] || cat}</button>
             `).join('')}
         `;
         
+        // If performance is selected, show subcategory tabs
+        if (selectedCategory === 'performance') {
+            const subcategories = StatisticsCalculators.getSubcategories('performance');
+            tabsHTML += `<div class="subcategory-tabs">`;
+            tabsHTML += `<button class="subcategory-btn active" data-subcategory="all">All</button>`;
+            subcategories.forEach(subcat => {
+                tabsHTML += `<button class="subcategory-btn" data-subcategory="${subcat}">${subcategoryNames[subcat] || subcat}</button>`;
+            });
+            tabsHTML += `</div>`;
+        }
+        
         container.innerHTML = tabsHTML;
         
-        // Add event listeners
+        // Add event listeners for category buttons
         container.querySelectorAll('.category-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const category = e.target.dataset.category;
                 this.switchStatsCategory(type, category);
             });
         });
+        
+        // Add event listeners for subcategory buttons (if they exist)
+        container.querySelectorAll('.subcategory-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const subcategory = e.target.dataset.subcategory;
+                this.switchStatsSubcategory(type, 'performance', subcategory);
+            });
+        });
     }
     
     switchStatsCategory(type, category) {
-        // Update active button
-        const container = document.getElementById(type === 'season' ? 'seasonCategoryTabs' : 'overallCategoryTabs');
-        container.querySelectorAll('.category-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.category === category);
-        });
+        // Store current category for this type
+        if (!this.currentStatsState) {
+            this.currentStatsState = {};
+        }
+        this.currentStatsState[type] = { category, subcategory: null };
+        
+        // Re-render category tabs to show/hide subcategories
+        this.renderCategoryTabs(type, category);
         
         const currentSeason = this.seasonManager.getCurrentSeason();
         const selectedCategory = category === 'all' ? null : category;
@@ -1560,12 +1616,47 @@ class AppController {
             this.statisticsDisplay.displaySeasonStats(
                 currentSeason, 
                 document.getElementById('seasonStatsDisplay'),
-                selectedCategory
+                selectedCategory,
+                null
             );
         } else {
             this.statisticsDisplay.displayOverallStats(
                 document.getElementById('overallStatsDisplay'),
-                selectedCategory
+                selectedCategory,
+                null
+            );
+        }
+    }
+    
+    switchStatsSubcategory(type, category, subcategory) {
+        // Store current subcategory
+        if (!this.currentStatsState) {
+            this.currentStatsState = {};
+        }
+        this.currentStatsState[type] = { category, subcategory };
+        
+        // Update active subcategory button
+        const container = document.getElementById(type === 'season' ? 'seasonCategoryTabs' : 'overallCategoryTabs');
+        container.querySelectorAll('.subcategory-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.subcategory === subcategory);
+        });
+        
+        const currentSeason = this.seasonManager.getCurrentSeason();
+        const selectedCategory = category === 'all' ? null : category;
+        const selectedSubcategory = subcategory === 'all' ? null : subcategory;
+        
+        if (type === 'season') {
+            this.statisticsDisplay.displaySeasonStats(
+                currentSeason, 
+                document.getElementById('seasonStatsDisplay'),
+                selectedCategory,
+                selectedSubcategory
+            );
+        } else {
+            this.statisticsDisplay.displayOverallStats(
+                document.getElementById('overallStatsDisplay'),
+                selectedCategory,
+                selectedSubcategory
             );
         }
     }
