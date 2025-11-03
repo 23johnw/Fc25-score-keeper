@@ -343,25 +343,39 @@ StatisticsCalculators.register({
         const container = document.createElement('div');
         container.className = 'stat-card';
         
-        const html = Object.entries(data).map(([player, stats]) => `
-            <h4>${player}</h4>
-            <div class="stat-item">
-                <span class="label">Games Played:</span>
-                <span class="value">${stats.games}</span>
-            </div>
-            <div class="stat-item">
-                <span class="label">Wins:</span>
-                <span class="value">${stats.wins}</span>
-            </div>
-            <div class="stat-item">
-                <span class="label">Losses:</span>
-                <span class="value">${stats.losses}</span>
-            </div>
-            <div class="stat-item">
-                <span class="label">Draws:</span>
-                <span class="value">${stats.draws}</span>
-            </div>
-        `).join('');
+        // Sort by games played (descending), then wins
+        const sorted = Object.entries(data)
+            .sort((a, b) => {
+                if (b[1].games !== a[1].games) {
+                    return b[1].games - a[1].games;
+                }
+                return b[1].wins - a[1].wins;
+            });
+        
+        const html = `
+            <table class="league-table">
+                <thead>
+                    <tr>
+                        <th>Player</th>
+                        <th>GP</th>
+                        <th>W</th>
+                        <th>D</th>
+                        <th>L</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${sorted.map(([player, stats]) => `
+                        <tr>
+                            <td class="player-name">${player}</td>
+                            <td>${stats.games}</td>
+                            <td>${stats.wins}</td>
+                            <td>${stats.draws}</td>
+                            <td>${stats.losses}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
         
         container.innerHTML = html;
         return container;
@@ -391,19 +405,37 @@ StatisticsCalculators.register({
         const container = document.createElement('div');
         container.className = 'stat-card';
         
-        const html = Object.entries(data)
-            .sort((a, b) => parseFloat(b[1].winRate) - parseFloat(a[1].winRate))
-            .map(([player, stats]) => `
-                <h4>${player}</h4>
-                <div class="stat-item">
-                    <span class="label">Win Rate:</span>
-                    <span class="value">${stats.winRate}%</span>
-                </div>
-                <div class="stat-item">
-                    <span class="label">Games:</span>
-                    <span class="value">${stats.games}</span>
-                </div>
-            `).join('');
+        // Sort by win rate (descending), then games
+        const sorted = Object.entries(data)
+            .sort((a, b) => {
+                const rateA = parseFloat(a[1].winRate);
+                const rateB = parseFloat(b[1].winRate);
+                if (rateB !== rateA) {
+                    return rateB - rateA;
+                }
+                return b[1].games - a[1].games;
+            });
+        
+        const html = `
+            <table class="league-table">
+                <thead>
+                    <tr>
+                        <th>Player</th>
+                        <th>Win %</th>
+                        <th>GP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${sorted.map(([player, stats]) => `
+                        <tr>
+                            <td class="player-name">${player}</td>
+                            <td class="points">${stats.winRate}%</td>
+                            <td>${stats.games}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
         
         container.innerHTML = html;
         return container;
@@ -539,15 +571,34 @@ StatisticsCalculators.register({
         const container = document.createElement('div');
         container.className = 'stat-card';
         
-        const html = Object.entries(data)
-            .sort((a, b) => b[1].goals - a[1].goals)
-            .map(([player, stats]) => `
-                <h4>${player}</h4>
-                <div class="stat-item">
-                    <span class="label">Total Goals Scored:</span>
-                    <span class="value">${stats.goals}</span>
-                </div>
-            `).join('');
+        // Sort by goals (descending)
+        const sorted = Object.entries(data)
+            .sort((a, b) => b[1].goals - a[1].goals);
+        
+        const html = `
+            <table class="league-table">
+                <thead>
+                    <tr>
+                        <th>Pos</th>
+                        <th>Player</th>
+                        <th>Goals</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${sorted.map(([player, stats], index) => {
+                        const position = index + 1;
+                        const positionSymbol = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '';
+                        return `
+                            <tr ${position === 1 ? 'class="leader"' : ''}>
+                                <td class="position">${position}</td>
+                                <td class="player-name">${positionSymbol} ${player}</td>
+                                <td class="points">${stats.goals}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        `;
         
         container.innerHTML = html;
         return container;
@@ -559,6 +610,95 @@ StatisticsCalculators.register({
     id: 'goalDifference',
     name: 'Goal Difference',
     category: 'goals',
+    calculate: (matches, players) => {
+        const stats = {};
+        players.forEach(player => {
+            stats[player] = { goalsFor: 0, goalsAgainst: 0, goalDifference: 0 };
+        });
+
+        matches.forEach(match => {
+            const { team1, team2, team1Score, team2Score } = match;
+            
+            // Skip matches without scores
+            if (typeof team1Score === 'undefined' || typeof team2Score === 'undefined') {
+                return;
+            }
+            
+            const team1Players = Array.isArray(team1) ? team1 : [team1];
+            const team2Players = Array.isArray(team2) ? team2 : [team2];
+
+            // Team 1 players
+            team1Players.forEach(p => {
+                if (stats[p]) {
+                    stats[p].goalsFor += team1Score;
+                    stats[p].goalsAgainst += team2Score;
+                }
+            });
+
+            // Team 2 players
+            team2Players.forEach(p => {
+                if (stats[p]) {
+                    stats[p].goalsFor += team2Score;
+                    stats[p].goalsAgainst += team1Score;
+                }
+            });
+        });
+
+        // Calculate goal difference for each player
+        Object.keys(stats).forEach(player => {
+            stats[player].goalDifference = stats[player].goalsFor - stats[player].goalsAgainst;
+        });
+
+        return stats;
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card';
+        
+        // Sort by goal difference (descending), then goals for
+        const sorted = Object.entries(data)
+            .sort((a, b) => {
+                if (b[1].goalDifference !== a[1].goalDifference) {
+                    return b[1].goalDifference - a[1].goalDifference;
+                }
+                return b[1].goalsFor - a[1].goalsFor;
+            });
+        
+        const html = `
+            <table class="league-table">
+                <thead>
+                    <tr>
+                        <th>Pos</th>
+                        <th>Player</th>
+                        <th>GF</th>
+                        <th>GA</th>
+                        <th>GD</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${sorted.map(([player, stats], index) => {
+                        const position = index + 1;
+                        const positionSymbol = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '';
+                        const goalDiffClass = stats.goalDifference > 0 ? 'positive' : stats.goalDifference < 0 ? 'negative' : '';
+                        const goalDiffSign = stats.goalDifference > 0 ? '+' : '';
+                        const positionClass = position === 1 ? 'leader' : '';
+                        return `
+                            <tr class="${positionClass}">
+                                <td class="position">${position}</td>
+                                <td class="player-name">${positionSymbol} ${player}</td>
+                                <td>${stats.goalsFor}</td>
+                                <td>${stats.goalsAgainst}</td>
+                                <td class="goal-diff ${goalDiffClass}">${goalDiffSign}${stats.goalDifference}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        `;
+        
+        container.innerHTML = html;
+        return container;
+    }
 });
 
 // League Points Calculator
