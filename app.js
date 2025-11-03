@@ -541,43 +541,122 @@ StatisticsCalculators.register({
     id: 'goalDifference',
     name: 'Goal Difference',
     category: 'goals',
+});
+
+// Worst Losses Calculator
+StatisticsCalculators.register({
+    id: 'worstLosses',
+    name: 'Worst Losses',
+    category: 'records',
     calculate: (matches, players) => {
         const stats = {};
         players.forEach(player => {
-            stats[player] = { goalsFor: 0, goalsAgainst: 0, difference: 0 };
+            stats[player] = {
+                worstByGoalsAgainst: null,  // Match with most goals conceded in a loss
+                worstByDifference: null      // Match with biggest goal deficit in a loss
+            };
         });
 
         matches.forEach(match => {
-            const { team1, team2, team1Score, team2Score } = match;
+            const { team1, team2, team1Score, team2Score, result, timestamp } = match;
             
-            // Handle matches that might not have scores yet (backward compatibility)
+            // Skip matches without scores
             if (typeof team1Score === 'undefined' || typeof team2Score === 'undefined') {
-                return; // Skip matches without scores
+                return;
             }
             
             const team1Players = Array.isArray(team1) ? team1 : [team1];
             const team2Players = Array.isArray(team2) ? team2 : [team2];
-
-            // Team 1 players: goalsFor = team1Score, goalsAgainst = team2Score
-            team1Players.forEach(p => {
-                if (stats[p]) {
-                    stats[p].goalsFor += team1Score;
-                    stats[p].goalsAgainst += team2Score;
+            
+            // Helper function to format teammates
+            const getTeammates = (player, teamPlayers) => {
+                return teamPlayers.filter(p => p !== player);
+            };
+            
+            // Helper function to get opponents
+            const getOpponents = (player, team1Players, team2Players) => {
+                if (team1Players.includes(player)) {
+                    return team2Players;
+                } else {
+                    return team1Players;
                 }
-            });
-
-            // Team 2 players: goalsFor = team2Score, goalsAgainst = team1Score
-            team2Players.forEach(p => {
-                if (stats[p]) {
-                    stats[p].goalsFor += team2Score;
-                    stats[p].goalsAgainst += team1Score;
-                }
-            });
-        });
-
-        // Calculate difference for each player
-        Object.keys(stats).forEach(player => {
-            stats[player].difference = stats[player].goalsFor - stats[player].goalsAgainst;
+            };
+            
+            // Process team 1 players
+            if (result === 'team2') { // Team 1 lost
+                team1Players.forEach(player => {
+                    if (!stats[player]) return;
+                    
+                    const teammates = getTeammates(player, team1Players);
+                    const opponents = team2Players;
+                    const goalsAgainst = team2Score;
+                    const goalDifference = team1Score - team2Score;
+                    
+                    // Check worst by goals against
+                    if (!stats[player].worstByGoalsAgainst || 
+                        goalsAgainst > stats[player].worstByGoalsAgainst.goalsAgainst) {
+                        stats[player].worstByGoalsAgainst = {
+                            date: timestamp,
+                            teammates: teammates,
+                            opponents: opponents,
+                            score: `${team1Score} - ${team2Score}`,
+                            goalsAgainst: goalsAgainst,
+                            goalDifference: goalDifference
+                        };
+                    }
+                    
+                    // Check worst by goal difference
+                    if (!stats[player].worstByDifference || 
+                        goalDifference < stats[player].worstByDifference.goalDifference) {
+                        stats[player].worstByDifference = {
+                            date: timestamp,
+                            teammates: teammates,
+                            opponents: opponents,
+                            score: `${team1Score} - ${team2Score}`,
+                            goalsAgainst: goalsAgainst,
+                            goalDifference: goalDifference
+                        };
+                    }
+                });
+            }
+            
+            // Process team 2 players
+            if (result === 'team1') { // Team 2 lost
+                team2Players.forEach(player => {
+                    if (!stats[player]) return;
+                    
+                    const teammates = getTeammates(player, team2Players);
+                    const opponents = team1Players;
+                    const goalsAgainst = team1Score;
+                    const goalDifference = team2Score - team1Score;
+                    
+                    // Check worst by goals against
+                    if (!stats[player].worstByGoalsAgainst || 
+                        goalsAgainst > stats[player].worstByGoalsAgainst.goalsAgainst) {
+                        stats[player].worstByGoalsAgainst = {
+                            date: timestamp,
+                            teammates: teammates,
+                            opponents: opponents,
+                            score: `${team2Score} - ${team1Score}`,
+                            goalsAgainst: goalsAgainst,
+                            goalDifference: goalDifference
+                        };
+                    }
+                    
+                    // Check worst by goal difference
+                    if (!stats[player].worstByDifference || 
+                        goalDifference < stats[player].worstByDifference.goalDifference) {
+                        stats[player].worstByDifference = {
+                            date: timestamp,
+                            teammates: teammates,
+                            opponents: opponents,
+                            score: `${team2Score} - ${team1Score}`,
+                            goalsAgainst: goalsAgainst,
+                            goalDifference: goalDifference
+                        };
+                    }
+                });
+            }
         });
 
         return stats;
@@ -586,29 +665,78 @@ StatisticsCalculators.register({
         const container = document.createElement('div');
         container.className = 'stat-card';
         
+        // Helper function to format date
+        const formatDate = (timestamp) => {
+            const date = new Date(timestamp);
+            return date.toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric' 
+            });
+        };
+        
+        // Helper function to format team names
+        const formatTeamNames = (players) => {
+            if (players.length === 0) return 'Solo';
+            return players.join(' & ');
+        };
+        
         const html = Object.entries(data)
-            .sort((a, b) => b[1].difference - a[1].difference)
+            .filter(([player, stats]) => stats.worstByGoalsAgainst || stats.worstByDifference)
             .map(([player, stats]) => {
-                const diffClass = stats.difference > 0 ? 'positive' : stats.difference < 0 ? 'negative' : 'neutral';
-                const diffSign = stats.difference > 0 ? '+' : '';
-                return `
-                    <h4>${player}</h4>
-                    <div class="stat-item">
-                        <span class="label">Goals For:</span>
-                        <span class="value">${stats.goalsFor}</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="label">Goals Against:</span>
-                        <span class="value">${stats.goalsAgainst}</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="label">Goal Difference:</span>
-                        <span class="value ${diffClass}">${diffSign}${stats.difference}</span>
-                    </div>
-                `;
+                let html = `<h4>${player}</h4>`;
+                
+                // Worst by goals against
+                if (stats.worstByGoalsAgainst) {
+                    const match = stats.worstByGoalsAgainst;
+                    const teammates = match.teammates.length > 0 
+                        ? `With: ${formatTeamNames(match.teammates)}` 
+                        : '';
+                    const opponents = `Against: ${formatTeamNames(match.opponents)}`;
+                    html += `
+                        <div class="stat-item">
+                            <span class="label">Worst Loss (Goals Conceded):</span>
+                            <span class="value">${match.goalsAgainst} goals</span>
+                        </div>
+                        <div class="stat-item" style="font-size: 0.85rem; color: var(--text-secondary); padding-left: 1rem;">
+                            <div>Date: ${formatDate(match.date)}</div>
+                            <div>Score: ${match.score}</div>
+                            ${teammates ? `<div>${teammates}</div>` : ''}
+                            <div>${opponents}</div>
+                        </div>
+                    `;
+                }
+                
+                // Worst by goal difference
+                if (stats.worstByDifference) {
+                    const match = stats.worstByDifference;
+                    const teammates = match.teammates.length > 0 
+                        ? `With: ${formatTeamNames(match.teammates)}` 
+                        : '';
+                    const opponents = `Against: ${formatTeamNames(match.opponents)}`;
+                    html += `
+                        <div class="stat-item" style="margin-top: 0.75rem;">
+                            <span class="label">Worst Loss (Goal Deficit):</span>
+                            <span class="value negative">${match.goalDifference} goals</span>
+                        </div>
+                        <div class="stat-item" style="font-size: 0.85rem; color: var(--text-secondary); padding-left: 1rem;">
+                            <div>Date: ${formatDate(match.date)}</div>
+                            <div>Score: ${match.score}</div>
+                            ${teammates ? `<div>${teammates}</div>` : ''}
+                            <div>${opponents}</div>
+                        </div>
+                    `;
+                }
+                
+                return html;
             }).join('');
         
-        container.innerHTML = html;
+        if (!html) {
+            container.innerHTML = '<div class="empty-state"><p>No losses recorded yet.</p></div>';
+        } else {
+            container.innerHTML = html;
+        }
+        
         return container;
     }
 });
@@ -1233,6 +1361,7 @@ class AppController {
         const categoryNames = {
             'performance': 'Performance',
             'goals': 'Goals',
+            'records': 'Records',
             'general': 'General',
             'all': 'All'
         };
