@@ -1233,6 +1233,24 @@ class StatisticsTracker {
         const matches = this.getAllMatches();
         return this.calculateStatistics(matches, 'overall');
     }
+
+    getTodayMatches() {
+        const allMatches = this.getAllMatches();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        return allMatches.filter(match => {
+            if (!match.timestamp) return false;
+            const matchDate = new Date(match.timestamp);
+            matchDate.setHours(0, 0, 0, 0);
+            return matchDate.getTime() === today.getTime();
+        });
+    }
+
+    getTodayStats() {
+        const matches = this.getTodayMatches();
+        return this.calculateStatistics(matches, 'today');
+    }
 }
 
 // ============================================================================
@@ -1254,11 +1272,19 @@ class StatisticsDisplay {
         this.renderStats(stats, container, category, subcategory);
     }
 
-    renderStats(stats, container, category = null, subcategory = null) {
+    displayTodayStats(container, category = null, subcategory = null) {
+        const stats = this.tracker.getTodayStats();
+        this.renderStats(stats, container, category, subcategory, true);
+    }
+
+    renderStats(stats, container, category = null, subcategory = null, isToday = false) {
         container.innerHTML = '';
         
         if (Object.keys(stats).length === 0) {
-            container.innerHTML = '<div class="empty-state"><p>No statistics available yet. Play some matches first!</p></div>';
+            const message = isToday 
+                ? '<div class="empty-state"><p>No matches played today yet. Start playing to see today\'s statistics!</p></div>'
+                : '<div class="empty-state"><p>No statistics available yet. Play some matches first!</p></div>';
+            container.innerHTML = message;
             return;
         }
 
@@ -1786,20 +1812,34 @@ class AppController {
 
         document.getElementById('seasonStats').classList.toggle('active', tab === 'season');
         document.getElementById('overallStats').classList.toggle('active', tab === 'overall');
+        document.getElementById('todayStats').classList.toggle('active', tab === 'today');
 
         const currentSeason = this.seasonManager.getCurrentSeason();
         if (tab === 'season') {
             this.renderCategoryTabs('season');
             this.switchStatsCategory('season', 'all');
-        } else {
+        } else if (tab === 'overall') {
             this.renderCategoryTabs('overall');
             this.switchStatsCategory('overall', 'all');
+        } else if (tab === 'today') {
+            this.renderCategoryTabs('today');
+            this.switchStatsCategory('today', 'all');
         }
     }
     
     renderCategoryTabs(type, selectedCategory = 'all') {
         const categories = StatisticsCalculators.getCategories();
-        const container = document.getElementById(type === 'season' ? 'seasonCategoryTabs' : 'overallCategoryTabs');
+        let containerId;
+        if (type === 'season') {
+            containerId = 'seasonCategoryTabs';
+        } else if (type === 'overall') {
+            containerId = 'overallCategoryTabs';
+        } else if (type === 'today') {
+            containerId = 'todayCategoryTabs';
+        } else {
+            return;
+        }
+        const container = document.getElementById(containerId);
         
         // Category display names
         const categoryNames = {
@@ -1878,9 +1918,15 @@ class AppController {
                 selectedCategory,
                 null
             );
-        } else {
+        } else if (type === 'overall') {
             this.statisticsDisplay.displayOverallStats(
                 document.getElementById('overallStatsDisplay'),
+                selectedCategory,
+                null
+            );
+        } else if (type === 'today') {
+            this.statisticsDisplay.displayTodayStats(
+                document.getElementById('todayStatsDisplay'),
                 selectedCategory,
                 null
             );
@@ -1895,7 +1941,17 @@ class AppController {
         this.currentStatsState[type] = { category, subcategory };
         
         // Update active subcategory button
-        const container = document.getElementById(type === 'season' ? 'seasonCategoryTabs' : 'overallCategoryTabs');
+        let containerId;
+        if (type === 'season') {
+            containerId = 'seasonCategoryTabs';
+        } else if (type === 'overall') {
+            containerId = 'overallCategoryTabs';
+        } else if (type === 'today') {
+            containerId = 'todayCategoryTabs';
+        } else {
+            return;
+        }
+        const container = document.getElementById(containerId);
         container.querySelectorAll('.subcategory-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.subcategory === subcategory);
         });
@@ -1911,9 +1967,15 @@ class AppController {
                 selectedCategory,
                 selectedSubcategory
             );
-        } else {
+        } else if (type === 'overall') {
             this.statisticsDisplay.displayOverallStats(
                 document.getElementById('overallStatsDisplay'),
+                selectedCategory,
+                selectedSubcategory
+            );
+        } else if (type === 'today') {
+            this.statisticsDisplay.displayTodayStats(
+                document.getElementById('todayStatsDisplay'),
                 selectedCategory,
                 selectedSubcategory
             );
