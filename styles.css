@@ -595,6 +595,18 @@ body {
     border-bottom: none;
 }
 
+.league-entry:last-child {
+    border-bottom: none !important;
+}
+
+.league-entry {
+    transition: background-color 0.2s;
+}
+
+.league-entry:hover {
+    background-color: rgba(33, 150, 243, 0.05);
+}
+
 .stat-card h4 {
     font-size: 1.1rem;
     margin-bottom: 0.75rem;

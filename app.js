@@ -543,6 +543,115 @@ StatisticsCalculators.register({
     category: 'goals',
 });
 
+// League Points Calculator
+StatisticsCalculators.register({
+    id: 'leaguePoints',
+    name: 'League Table',
+    category: 'league',
+    calculate: (matches, players) => {
+        const stats = {};
+        players.forEach(player => {
+            stats[player] = { 
+                points: 0, 
+                wins: 0, 
+                draws: 0, 
+                losses: 0,
+                games: 0
+            };
+        });
+
+        matches.forEach(match => {
+            const { team1, team2, result } = match;
+            const team1Players = Array.isArray(team1) ? team1 : [team1];
+            const team2Players = Array.isArray(team2) ? team2 : [team2];
+
+            if (result === 'team1') {
+                // Team 1 wins - each player gets 1 point
+                team1Players.forEach(p => {
+                    if (stats[p]) {
+                        stats[p].points += 1;
+                        stats[p].wins++;
+                        stats[p].games++;
+                    }
+                });
+                // Team 2 loses - 0 points
+                team2Players.forEach(p => {
+                    if (stats[p]) {
+                        stats[p].losses++;
+                        stats[p].games++;
+                    }
+                });
+            } else if (result === 'team2') {
+                // Team 2 wins - each player gets 1 point
+                team2Players.forEach(p => {
+                    if (stats[p]) {
+                        stats[p].points += 1;
+                        stats[p].wins++;
+                        stats[p].games++;
+                    }
+                });
+                // Team 1 loses - 0 points
+                team1Players.forEach(p => {
+                    if (stats[p]) {
+                        stats[p].losses++;
+                        stats[p].games++;
+                    }
+                });
+            } else if (result === 'draw') {
+                // Draw - all players get 1 point
+                [...team1Players, ...team2Players].forEach(p => {
+                    if (stats[p]) {
+                        stats[p].points += 1;
+                        stats[p].draws++;
+                        stats[p].games++;
+                    }
+                });
+            }
+        });
+
+        return stats;
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card';
+        
+        // Sort by points (descending), then by games played (descending)
+        const sorted = Object.entries(data)
+            .sort((a, b) => {
+                if (b[1].points !== a[1].points) {
+                    return b[1].points - a[1].points;
+                }
+                return b[1].games - a[1].games;
+            });
+        
+        const html = sorted.map(([player, stats], index) => {
+            const position = index + 1;
+            const positionClass = position === 1 ? 'positive' : '';
+            const positionSymbol = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '';
+            
+            return `
+                <div class="league-entry" style="display: flex; align-items: center; gap: 1rem; padding: 0.75rem 0; border-bottom: 1px solid var(--border-color);">
+                    <div style="font-weight: 700; font-size: 1.1rem; min-width: 2rem; text-align: center; color: ${position === 1 ? 'var(--primary-color)' : 'var(--text-secondary)'};">${position}</div>
+                    <div style="flex: 1;">
+                        <h4 style="margin: 0 0 0.25rem 0; display: flex; align-items: center; gap: 0.5rem;">
+                            ${positionSymbol} ${player}
+                        </h4>
+                        <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                            ${stats.games} game${stats.games !== 1 ? 's' : ''} • ${stats.wins}W ${stats.draws}D ${stats.losses}L
+                        </div>
+                    </div>
+                    <div style="font-size: 1.5rem; font-weight: 700; color: ${positionClass ? 'var(--success-color)' : 'var(--text-primary)'};">
+                        ${stats.points}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        container.innerHTML = html;
+        return container;
+    }
+});
+
 // Worst Losses Calculator
 StatisticsCalculators.register({
     id: 'worstLosses',
@@ -1361,6 +1470,7 @@ class AppController {
         const categoryNames = {
             'performance': 'Performance',
             'goals': 'Goals',
+            'league': 'League',
             'records': 'Records',
             'general': 'General',
             'all': 'All'
