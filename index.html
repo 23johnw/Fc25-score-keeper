@@ -138,13 +138,19 @@
             <div class="stats-header">
                 <h2>Statistics</h2>
                 <div class="stats-tabs">
-                    <button class="tab-btn active" data-tab="season">Season</button>
+                    <button class="tab-btn active" data-tab="today">Today</button>
+                    <button class="tab-btn" data-tab="season">Season</button>
                     <button class="tab-btn" data-tab="overall">Overall</button>
-                    <button class="tab-btn" data-tab="today">Today</button>
                 </div>
             </div>
 
-            <div id="seasonStats" class="stats-content active">
+            <div id="todayStats" class="stats-content active">
+                <h3>Today's Statistics</h3>
+                <div class="category-tabs" id="todayCategoryTabs"></div>
+                <div id="todayStatsDisplay" class="stats-display"></div>
+            </div>
+
+            <div id="seasonStats" class="stats-content">
                 <h3>Season Statistics</h3>
                 <div class="category-tabs" id="seasonCategoryTabs"></div>
                 <div id="seasonStatsDisplay" class="stats-display"></div>
@@ -154,12 +160,6 @@
                 <h3>Overall Statistics</h3>
                 <div class="category-tabs" id="overallCategoryTabs"></div>
                 <div id="overallStatsDisplay" class="stats-display"></div>
-            </div>
-
-            <div id="todayStats" class="stats-content">
-                <h3>Today's Statistics</h3>
-                <div class="category-tabs" id="todayCategoryTabs"></div>
-                <div id="todayStatsDisplay" class="stats-display"></div>
             </div>
 
             <div class="button-group">
@@ -189,4 +189,5 @@
     <script src="app.js"></script>
 </body>
 </html>
+
 

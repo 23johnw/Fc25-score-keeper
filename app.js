@@ -1802,7 +1802,7 @@ class AppController {
 
     // Statistics
     loadStatistics() {
-        this.switchStatsTab('season');
+        this.switchStatsTab('today');
     }
 
     switchStatsTab(tab) {
