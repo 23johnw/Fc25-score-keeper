@@ -556,12 +556,20 @@ StatisticsCalculators.register({
                 wins: 0, 
                 draws: 0, 
                 losses: 0,
-                games: 0
+                games: 0,
+                goalsFor: 0,
+                goalsAgainst: 0
             };
         });
 
         matches.forEach(match => {
-            const { team1, team2, result } = match;
+            const { team1, team2, result, team1Score, team2Score } = match;
+            
+            // Skip matches without scores
+            if (typeof team1Score === 'undefined' || typeof team2Score === 'undefined') {
+                return;
+            }
+            
             const team1Players = Array.isArray(team1) ? team1 : [team1];
             const team2Players = Array.isArray(team2) ? team2 : [team2];
 
@@ -572,6 +580,8 @@ StatisticsCalculators.register({
                         stats[p].points += 1;
                         stats[p].wins++;
                         stats[p].games++;
+                        stats[p].goalsFor += team1Score;
+                        stats[p].goalsAgainst += team2Score;
                     }
                 });
                 // Team 2 loses - 0 points
@@ -579,6 +589,8 @@ StatisticsCalculators.register({
                     if (stats[p]) {
                         stats[p].losses++;
                         stats[p].games++;
+                        stats[p].goalsFor += team2Score;
+                        stats[p].goalsAgainst += team1Score;
                     }
                 });
             } else if (result === 'team2') {
@@ -588,6 +600,8 @@ StatisticsCalculators.register({
                         stats[p].points += 1;
                         stats[p].wins++;
                         stats[p].games++;
+                        stats[p].goalsFor += team2Score;
+                        stats[p].goalsAgainst += team1Score;
                     }
                 });
                 // Team 1 loses - 0 points
@@ -595,6 +609,8 @@ StatisticsCalculators.register({
                     if (stats[p]) {
                         stats[p].losses++;
                         stats[p].games++;
+                        stats[p].goalsFor += team1Score;
+                        stats[p].goalsAgainst += team2Score;
                     }
                 });
             } else if (result === 'draw') {
@@ -604,9 +620,22 @@ StatisticsCalculators.register({
                         stats[p].points += 1;
                         stats[p].draws++;
                         stats[p].games++;
+                        // Goals for/against depend on which team they're on
+                        if (team1Players.includes(p)) {
+                            stats[p].goalsFor += team1Score;
+                            stats[p].goalsAgainst += team2Score;
+                        } else {
+                            stats[p].goalsFor += team2Score;
+                            stats[p].goalsAgainst += team1Score;
+                        }
                     }
                 });
             }
+        });
+
+        // Calculate goal difference for each player
+        Object.keys(stats).forEach(player => {
+            stats[player].goalDifference = stats[player].goalsFor - stats[player].goalsAgainst;
         });
 
         return stats;
@@ -615,19 +644,24 @@ StatisticsCalculators.register({
         const container = document.createElement('div');
         container.className = 'stat-card';
         
-        // Sort by points (descending), then by games played (descending)
+        // Sort by points (descending), then by goal difference (descending), then by goals for (descending)
         const sorted = Object.entries(data)
             .sort((a, b) => {
                 if (b[1].points !== a[1].points) {
                     return b[1].points - a[1].points;
                 }
-                return b[1].games - a[1].games;
+                if (b[1].goalDifference !== a[1].goalDifference) {
+                    return b[1].goalDifference - a[1].goalDifference;
+                }
+                return b[1].goalsFor - a[1].goalsFor;
             });
         
         const html = sorted.map(([player, stats], index) => {
             const position = index + 1;
             const positionClass = position === 1 ? 'positive' : '';
             const positionSymbol = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '';
+            const goalDiffClass = stats.goalDifference > 0 ? 'positive' : stats.goalDifference < 0 ? 'negative' : '';
+            const goalDiffSign = stats.goalDifference > 0 ? '+' : '';
             
             return `
                 <div class="league-entry" style="display: flex; align-items: center; gap: 1rem; padding: 0.75rem 0; border-bottom: 1px solid var(--border-color);">
@@ -637,7 +671,10 @@ StatisticsCalculators.register({
                             ${positionSymbol} ${player}
                         </h4>
                         <div style="font-size: 0.85rem; color: var(--text-secondary);">
-                            ${stats.games} game${stats.games !== 1 ? 's' : ''} • ${stats.wins}W ${stats.draws}D ${stats.losses}L
+                            ${stats.games} game${stats.games !== 1 ? 's' : ''} • ${stats.wins}W ${stats.draws}D ${stats.losses}L • ${stats.goalsFor}GF ${stats.goalsAgainst}GA
+                        </div>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                            Goal Diff: <span class="value ${goalDiffClass}" style="font-weight: 600;">${goalDiffSign}${stats.goalDifference}</span>
                         </div>
                     </div>
                     <div style="font-size: 1.5rem; font-weight: 700; color: ${positionClass ? 'var(--success-color)' : 'var(--text-primary)'};">
