@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#2196F3">
+    <meta name="description" content="FC 25 Score Tracker - Track your football match scores and statistics">
+    <title>FC 25 Score Tracker</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="app-header">
+        <h1>FC 25 Score Tracker</h1>
+        <div class="season-info" id="seasonInfo" style="display: none;">
+            <span>Season <span id="currentSeasonNumber">1</span></span>
+        </div>
+    </header>
+
+    <!-- Player Management Screen -->
+    <section id="playerScreen" class="screen active">
+        <div class="screen-content">
+            <h2>Add Players</h2>
+            <p class="screen-description">Enter 1-4 player names to get started</p>
+            
+            <div class="player-input-container">
+                <div class="input-group">
+                    <input type="text" id="player1Input" placeholder="Player 1" maxlength="20">
+                    <button class="remove-btn" data-player="1" style="display: none;">×</button>
+                </div>
+                <div class="input-group">
+                    <input type="text" id="player2Input" placeholder="Player 2" maxlength="20">
+                    <button class="remove-btn" data-player="2" style="display: none;">×</button>
+                </div>
+                <div class="input-group">
+                    <input type="text" id="player3Input" placeholder="Player 3 (Optional)" maxlength="20">
+                    <button class="remove-btn" data-player="3" style="display: none;">×</button>
+                </div>
+                <div class="input-group">
+                    <input type="text" id="player4Input" placeholder="Player 4 (Optional)" maxlength="20">
+                    <button class="remove-btn" data-player="4" style="display: none;">×</button>
+                </div>
+            </div>
+
+            <div class="current-players" id="currentPlayers" style="display: none;">
+                <h3>Current Players</h3>
+                <ul id="playersList"></ul>
+            </div>
+
+            <!-- Add this new section after current-players -->
+            <div class="player-history" id="playerHistory" style="display: none;">
+                <h3>Previous Players</h3>
+                <p class="screen-description">Click a name to add to an empty slot</p>
+                <div id="playerHistoryList" class="player-history-list"></div>
+            </div>
+
+            <div class="button-group">
+                <button id="savePlayersBtn" class="btn btn-primary">Save Players</button>
+                <button id="startNewSessionBtn" class="btn btn-secondary" style="display: none;">Start New Session</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Team Combination Screen -->
+    <section id="teamScreen" class="screen">
+        <div class="screen-content">
+            <h2>Team Combinations</h2>
+            <p class="screen-description" id="teamScreenDescription">Select the order you want to play these matches</p>
+            
+            <div id="teamCombinations" class="team-combinations-grid"></div>
+            
+            <div class="button-group">
+                <button id="selectAllCombinationsBtn" class="btn btn-secondary">Select All</button>
+                <button id="confirmSequenceBtn" class="btn btn-primary" disabled>Confirm Sequence</button>
+                <button id="backToPlayersBtn" class="btn btn-secondary">Back to Players</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Game Sequence Screen -->
+    <section id="sequenceScreen" class="screen">
+        <div class="screen-content">
+            <h2>Game Sequence</h2>
+            <p class="screen-description">Your selected matches for tonight</p>
+            
+            <div id="sequenceList" class="sequence-list"></div>
+            
+            <div class="button-group">
+                <button id="startGamesBtn" class="btn btn-primary">Start Playing</button>
+                <button id="backToTeamsBtn" class="btn btn-secondary">Back to Teams</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Match Recording Screen -->
+    <section id="matchScreen" class="screen">
+        <div class="screen-content">
+            <h2>Record Match</h2>
+            <div class="match-info">
+                <div class="game-counter">
+                    <span id="currentGameNumber">1</span> / <span id="totalGames">1</span>
+                </div>
+                <div class="match-teams" id="matchTeams">
+                    <div class="team-display">
+                        <div class="team-players" id="team1Display"></div>
+                        <span class="vs">VS</span>
+                        <div class="team-players" id="team2Display"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="match-result">
+                <h3>Enter Scores</h3>
+                <div class="score-input-container">
+                    <div class="score-input-group">
+                        <label id="team1ScoreLabel">Team 1 Score</label>
+                        <input type="number" id="team1Score" min="0" max="99" value="0" class="score-input">
+                    </div>
+                    <span class="score-separator">-</span>
+                    <div class="score-input-group">
+                        <label id="team2ScoreLabel">Team 2 Score</label>
+                        <input type="number" id="team2Score" min="0" max="99" value="0" class="score-input">
+                    </div>
+                </div>
+                <button id="submitScoreBtn" class="btn btn-primary">Record Score</button>
+            </div>
+
+            <div class="button-group">
+                <button id="backToSequenceBtn" class="btn btn-secondary">Back to Sequence</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Statistics Screen -->
+    <section id="statsScreen" class="screen">
+        <div class="screen-content">
+            <div class="stats-header">
+                <h2>Statistics</h2>
+                <div class="stats-tabs">
+                    <button class="tab-btn active" data-tab="season">Season</button>
+                    <button class="tab-btn" data-tab="overall">Overall</button>
+                </div>
+            </div>
+
+            <div id="seasonStats" class="stats-content active">
+                <h3>Season Statistics</h3>
+                <div id="seasonStatsDisplay" class="stats-display"></div>
+            </div>
+
+            <div id="overallStats" class="stats-content">
+                <h3>Overall Statistics</h3>
+                <div id="overallStatsDisplay" class="stats-display"></div>
+            </div>
+
+            <div class="button-group">
+                <button id="newSeasonBtn" class="btn btn-primary">Start New Season</button>
+                <button id="clearOverallStatsBtn" class="btn btn-secondary" style="background-color: #f44336;">Clear All Statistics (Testing)</button>
+                <button id="backToMenuBtn" class="btn btn-secondary">Back to Menu</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Navigation -->
+    <nav class="bottom-nav">
+        <button class="nav-btn" data-screen="playerScreen">
+            <span>Players</span>
+        </button>
+        <button class="nav-btn" data-screen="teamScreen">
+            <span>Teams</span>
+        </button>
+        <button class="nav-btn" data-screen="matchScreen">
+            <span>Match</span>
+        </button>
+        <button class="nav-btn" data-screen="statsScreen">
+            <span>Stats</span>
+        </button>
+    </nav>
+
+    <script src="app.js"></script>
+</body>
+</html>
+
