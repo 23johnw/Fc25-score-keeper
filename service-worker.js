@@ -1,12 +1,13 @@
-const CACHE_NAME = 'fc25-score-tracker-v2';
+const CACHE_NAME = 'fc25-score-tracker-v3';
+const BASE_PATH = '/Fc25-score-keeper';
 const urlsToCache = [
-  './',
-  './index.html',
-  './styles.css',
-  './app.js',
-  './manifest.json',
-  './icon-192.png',
-  './icon-512.png'
+  `${BASE_PATH}/`,
+  `${BASE_PATH}/index.html`,
+  `${BASE_PATH}/styles.css`,
+  `${BASE_PATH}/app.js`,
+  `${BASE_PATH}/manifest.json`,
+  `${BASE_PATH}/icon-192.png`,
+  `${BASE_PATH}/icon-512.png`
 ];
 
 // Install event - cache assets
@@ -49,7 +50,7 @@ self.addEventListener('fetch', (event) => {
       .catch(() => {
         // If both fail, return offline page for navigation requests
         if (event.request.mode === 'navigate') {
-          return caches.match('./index.html');
+          return caches.match(`${BASE_PATH}/index.html`);
         }
       })
   );
