@@ -656,33 +656,48 @@ StatisticsCalculators.register({
                 return b[1].goalsFor - a[1].goalsFor;
             });
         
-        const html = sorted.map(([player, stats], index) => {
-            const position = index + 1;
-            const positionClass = position === 1 ? 'positive' : '';
-            const positionSymbol = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '';
-            const goalDiffClass = stats.goalDifference > 0 ? 'positive' : stats.goalDifference < 0 ? 'negative' : '';
-            const goalDiffSign = stats.goalDifference > 0 ? '+' : '';
-            
-            return `
-                <div class="league-entry" style="display: flex; align-items: center; gap: 1rem; padding: 0.75rem 0; border-bottom: 1px solid var(--border-color);">
-                    <div style="font-weight: 700; font-size: 1.1rem; min-width: 2rem; text-align: center; color: ${position === 1 ? 'var(--primary-color)' : 'var(--text-secondary)'};">${position}</div>
-                    <div style="flex: 1;">
-                        <h4 style="margin: 0 0 0.25rem 0; display: flex; align-items: center; gap: 0.5rem;">
-                            ${positionSymbol} ${player}
-                        </h4>
-                        <div style="font-size: 0.85rem; color: var(--text-secondary);">
-                            ${stats.games} game${stats.games !== 1 ? 's' : ''} • ${stats.wins}W ${stats.draws}D ${stats.losses}L • ${stats.goalsFor}GF ${stats.goalsAgainst}GA
-                        </div>
-                        <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">
-                            Goal Diff: <span class="value ${goalDiffClass}" style="font-weight: 600;">${goalDiffSign}${stats.goalDifference}</span>
-                        </div>
-                    </div>
-                    <div style="font-size: 1.5rem; font-weight: 700; color: ${positionClass ? 'var(--success-color)' : 'var(--text-primary)'};">
-                        ${stats.points}
-                    </div>
-                </div>
-            `;
-        }).join('');
+        const html = `
+            <table class="league-table">
+                <thead>
+                    <tr>
+                        <th>Pos</th>
+                        <th>Player</th>
+                        <th>Pts</th>
+                        <th>GP</th>
+                        <th>W</th>
+                        <th>D</th>
+                        <th>L</th>
+                        <th>GF</th>
+                        <th>GA</th>
+                        <th>GD</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${sorted.map(([player, stats], index) => {
+                        const position = index + 1;
+                        const positionSymbol = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '';
+                        const goalDiffClass = stats.goalDifference > 0 ? 'positive' : stats.goalDifference < 0 ? 'negative' : '';
+                        const goalDiffSign = stats.goalDifference > 0 ? '+' : '';
+                        const positionClass = position === 1 ? 'leader' : '';
+                        
+                        return `
+                            <tr class="${positionClass}">
+                                <td class="position">${position}</td>
+                                <td class="player-name">${positionSymbol} ${player}</td>
+                                <td class="points">${stats.points}</td>
+                                <td>${stats.games}</td>
+                                <td>${stats.wins}</td>
+                                <td>${stats.draws}</td>
+                                <td>${stats.losses}</td>
+                                <td>${stats.goalsFor}</td>
+                                <td>${stats.goalsAgainst}</td>
+                                <td class="goal-diff ${goalDiffClass}">${goalDiffSign}${stats.goalDifference}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        `;
         
         container.innerHTML = html;
         return container;

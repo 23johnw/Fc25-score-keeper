@@ -595,16 +595,113 @@ body {
     border-bottom: none;
 }
 
-.league-entry:last-child {
-    border-bottom: none !important;
+.league-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
 }
 
-.league-entry {
+.league-table thead {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.league-table th {
+    padding: 0.75rem 0.5rem;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.85rem;
+    border-right: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.league-table th:last-child {
+    border-right: none;
+}
+
+.league-table tbody tr {
+    border-bottom: 1px solid var(--border-color);
     transition: background-color 0.2s;
 }
 
-.league-entry:hover {
+.league-table tbody tr:hover {
     background-color: rgba(33, 150, 243, 0.05);
+}
+
+.league-table tbody tr.leader {
+    background-color: rgba(76, 175, 80, 0.1);
+    font-weight: 600;
+}
+
+.league-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.league-table td {
+    padding: 0.75rem 0.5rem;
+    text-align: center;
+    border-right: 1px solid var(--border-color);
+}
+
+.league-table td:last-child {
+    border-right: none;
+}
+
+.league-table .position {
+    font-weight: 700;
+    color: var(--text-secondary);
+    min-width: 2.5rem;
+}
+
+.league-table tbody tr.leader .position {
+    color: var(--primary-color);
+}
+
+.league-table .player-name {
+    text-align: left;
+    font-weight: 500;
+    padding-left: 0.75rem;
+}
+
+.league-table .points {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.league-table tbody tr.leader .points {
+    color: var(--success-color);
+    font-size: 1.2rem;
+}
+
+.league-table .goal-diff {
+    font-weight: 600;
+}
+
+.league-table .goal-diff.positive {
+    color: var(--success-color);
+}
+
+.league-table .goal-diff.negative {
+    color: #f44336;
+}
+
+@media (max-width: 480px) {
+    .league-table {
+        font-size: 0.75rem;
+    }
+    
+    .league-table th,
+    .league-table td {
+        padding: 0.5rem 0.25rem;
+    }
+    
+    .league-table .points {
+        font-size: 1rem;
+    }
+    
+    .league-table .player-name {
+        padding-left: 0.5rem;
+    }
 }
 
 .stat-card h4 {
