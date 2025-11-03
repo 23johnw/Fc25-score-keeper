@@ -12,7 +12,10 @@
 <body>
     <!-- Header -->
     <header class="app-header">
-        <h1>FC 25 Score Tracker</h1>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h1>FC 25 Score Tracker</h1>
+            <button id="darkModeToggle" class="dark-mode-toggle" title="Toggle Dark Mode">🌙</button>
+        </div>
         <div class="season-info" id="seasonInfo" style="display: none;">
             <span>Season <span id="currentSeasonNumber">1</span></span>
         </div>
@@ -164,11 +167,62 @@
 
             <div class="button-group">
                 <button id="newSeasonBtn" class="btn btn-primary">Start New Season</button>
+                <button id="exportDataBtn" class="btn btn-secondary">Export Data</button>
+                <button id="importDataBtn" class="btn btn-secondary">Import Data</button>
                 <button id="clearOverallStatsBtn" class="btn btn-secondary" style="background-color: #f44336;">Clear All Statistics (Testing)</button>
                 <button id="backToMenuBtn" class="btn btn-secondary">Back to Menu</button>
             </div>
         </div>
     </section>
+
+    <!-- Match History Screen -->
+    <section id="historyScreen" class="screen">
+        <div class="screen-content">
+            <h2>Match History</h2>
+            <p class="screen-description">View and manage all recorded matches</p>
+            
+            <div class="history-controls">
+                <select id="historyFilter" class="filter-select">
+                    <option value="all">All Seasons</option>
+                    <option value="current">Current Season</option>
+                    <option value="today">Today</option>
+                </select>
+                <input type="text" id="historySearch" placeholder="Search players..." class="search-input">
+            </div>
+            
+            <div id="matchHistoryList" class="match-history-list"></div>
+            
+            <div class="button-group">
+                <button id="backFromHistoryBtn" class="btn btn-secondary">Back</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Edit Match Modal -->
+    <div id="editMatchModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Edit Match</h3>
+            <div class="match-info">
+                <div id="editMatchTeams"></div>
+            </div>
+            <div class="score-input-container">
+                <div class="score-input-group">
+                    <label>Team 1 Score</label>
+                    <input type="number" id="editTeam1Score" min="0" max="99" value="0" class="score-input">
+                </div>
+                <span class="score-separator">-</span>
+                <div class="score-input-group">
+                    <label>Team 2 Score</label>
+                    <input type="number" id="editTeam2Score" min="0" max="99" value="0" class="score-input">
+                </div>
+            </div>
+            <div class="button-group">
+                <button id="saveEditMatchBtn" class="btn btn-primary">Save Changes</button>
+                <button id="cancelEditMatchBtn" class="btn btn-secondary">Cancel</button>
+                <button id="deleteMatchBtn" class="btn btn-secondary" style="background-color: #f44336;">Delete Match</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Navigation -->
     <nav class="bottom-nav">
@@ -184,7 +238,13 @@
         <button class="nav-btn" data-screen="statsScreen">
             <span>Stats</span>
         </button>
+        <button class="nav-btn" data-screen="historyScreen">
+            <span>History</span>
+        </button>
     </nav>
+
+    <!-- Hidden file input for import -->
+    <input type="file" id="importFileInput" accept=".json" style="display: none;">
 
     <script src="app.js"></script>
 </body>

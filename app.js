@@ -1179,6 +1179,326 @@ StatisticsCalculators.register({
     }
 });
 
+// Average Goals Per Game Calculator
+StatisticsCalculators.register({
+    id: 'avgGoalsPerGame',
+    name: 'Average Goals Per Game',
+    category: 'goals',
+    calculate: (matches, players) => {
+        const totalGoals = StatisticsCalculators.getById('totalGoals').calculate(matches, players);
+        const wld = StatisticsCalculators.getById('winLossDraw').calculate(matches, players);
+        
+        const stats = {};
+        players.forEach(player => {
+            const goals = totalGoals[player]?.goals || 0;
+            const games = wld[player]?.games || 0;
+            stats[player] = {
+                avgGoals: games > 0 ? (goals / games).toFixed(2) : 0,
+                totalGoals: goals,
+                games: games
+            };
+        });
+        
+        return stats;
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card';
+        
+        const sorted = Object.entries(data)
+            .sort((a, b) => parseFloat(b[1].avgGoals) - parseFloat(a[1].avgGoals));
+        
+        const html = `
+            <table class="league-table">
+                <thead>
+                    <tr>
+                        <th>Pos</th>
+                        <th>Player</th>
+                        <th>Avg</th>
+                        <th>GF</th>
+                        <th>GP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${sorted.map(([player, stats], index) => {
+                        const position = index + 1;
+                        const positionSymbol = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '';
+                        return `
+                            <tr ${position === 1 ? 'class="leader"' : ''}>
+                                <td class="position">${position}</td>
+                                <td class="player-name">${positionSymbol} ${player}</td>
+                                <td class="points">${stats.avgGoals}</td>
+                                <td>${stats.totalGoals}</td>
+                                <td>${stats.games}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        `;
+        
+        container.innerHTML = html;
+        return container;
+    }
+});
+
+// Form Tracking (Last 5 Games)
+StatisticsCalculators.register({
+    id: 'form',
+    name: 'Form (Last 5 Games)',
+    category: 'performance',
+    subcategory: 'form',
+    calculate: (matches, players) => {
+        const stats = {};
+        players.forEach(player => {
+            stats[player] = {
+                form: [],
+                wins: 0,
+                draws: 0,
+                losses: 0
+            };
+        });
+
+        // Sort matches by date (most recent first)
+        const sortedMatches = [...matches].sort((a, b) => 
+            new Date(b.timestamp) - new Date(a.timestamp)
+        );
+
+        // Track last 5 games for each player
+        players.forEach(player => {
+            let gamesCount = 0;
+            for (const match of sortedMatches) {
+                if (gamesCount >= 5) break;
+                
+                const { team1, team2, result } = match;
+                const team1Players = Array.isArray(team1) ? team1 : [team1];
+                const team2Players = Array.isArray(team2) ? team2 : [team2];
+                
+                const inTeam1 = team1Players.includes(player);
+                const inTeam2 = team2Players.includes(player);
+                
+                if (!inTeam1 && !inTeam2) continue;
+                
+                let outcome = '';
+                if (result === 'draw') {
+                    outcome = 'D';
+                    stats[player].draws++;
+                } else if ((result === 'team1' && inTeam1) || (result === 'team2' && inTeam2)) {
+                    outcome = 'W';
+                    stats[player].wins++;
+                } else {
+                    outcome = 'L';
+                    stats[player].losses++;
+                }
+                
+                stats[player].form.push(outcome);
+                gamesCount++;
+            }
+        });
+
+        return stats;
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card';
+        
+        const sorted = Object.entries(data)
+            .sort((a, b) => {
+                // Sort by points (W=3, D=1, L=0) then by most recent wins
+                const pointsA = b[1].wins * 3 + b[1].draws;
+                const pointsB = a[1].wins * 3 + a[1].draws;
+                if (pointsA !== pointsB) return pointsA - pointsB;
+                return b[1].wins - a[1].wins;
+            });
+        
+        const html = `
+            <table class="league-table">
+                <thead>
+                    <tr>
+                        <th>Player</th>
+                        <th>Form</th>
+                        <th>W</th>
+                        <th>D</th>
+                        <th>L</th>
+                        <th>Pts</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${sorted.map(([player, stats]) => {
+                        const formDisplay = stats.form.length > 0 
+                            ? stats.form.map(r => {
+                                if (r === 'W') return '<span style="color: #4CAF50; font-weight: bold;">W</span>';
+                                if (r === 'D') return '<span style="color: #FF9800; font-weight: bold;">D</span>';
+                                return '<span style="color: #f44336; font-weight: bold;">L</span>';
+                            }).join(' ')
+                            : '-';
+                        const points = stats.wins * 3 + stats.draws;
+                        return `
+                            <tr>
+                                <td class="player-name">${player}</td>
+                                <td>${formDisplay}</td>
+                                <td>${stats.wins}</td>
+                                <td>${stats.draws}</td>
+                                <td>${stats.losses}</td>
+                                <td class="points">${points}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        `;
+        
+        container.innerHTML = html;
+        return container;
+    }
+});
+
+// Head-to-Head Calculator
+StatisticsCalculators.register({
+    id: 'headToHead',
+    name: 'Head-to-Head',
+    category: 'performance',
+    subcategory: 'h2h',
+    calculate: (matches, players) => {
+        const stats = {};
+        
+        // Initialize all player pairs
+        for (let i = 0; i < players.length; i++) {
+            for (let j = i + 1; j < players.length; j++) {
+                const p1 = players[i];
+                const p2 = players[j];
+                const key = [p1, p2].sort().join(' vs ');
+                if (!stats[key]) {
+                    stats[key] = {
+                        player1: p1,
+                        player2: p2,
+                        together: { wins: 0, draws: 0, losses: 0, games: 0 },
+                        against: { wins: 0, draws: 0, losses: 0, games: 0 }
+                    };
+                }
+            }
+        }
+
+        matches.forEach(match => {
+            const { team1, team2, result } = match;
+            const team1Players = Array.isArray(team1) ? team1 : [team1];
+            const team2Players = Array.isArray(team2) ? team2 : [team2];
+            
+            // Check all player pairs
+            for (let i = 0; i < players.length; i++) {
+                for (let j = i + 1; j < players.length; j++) {
+                    const p1 = players[i];
+                    const p2 = players[j];
+                    const key = [p1, p2].sort().join(' vs ');
+                    
+                    const p1InTeam1 = team1Players.includes(p1);
+                    const p2InTeam1 = team1Players.includes(p2);
+                    const p1InTeam2 = team2Players.includes(p1);
+                    const p2InTeam2 = team2Players.includes(p2);
+                    
+                    // Playing together
+                    if ((p1InTeam1 && p2InTeam1) || (p1InTeam2 && p2InTeam2)) {
+                        stats[key].together.games++;
+                        if (result === 'draw') {
+                            stats[key].together.draws++;
+                        } else if ((result === 'team1' && p1InTeam1) || (result === 'team2' && p1InTeam2)) {
+                            stats[key].together.wins++;
+                        } else {
+                            stats[key].together.losses++;
+                        }
+                    }
+                    // Playing against each other
+                    else if ((p1InTeam1 && p2InTeam2) || (p1InTeam2 && p2InTeam1)) {
+                        stats[key].against.games++;
+                        if (result === 'draw') {
+                            stats[key].against.draws++;
+                        } else if ((result === 'team1' && p1InTeam1) || (result === 'team2' && p1InTeam2)) {
+                            stats[key].against.wins++;
+                        } else {
+                            stats[key].against.losses++;
+                        }
+                    }
+                }
+            }
+        });
+
+        return stats;
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card';
+        
+        const sorted = Object.entries(data)
+            .filter(([key, stats]) => stats.together.games > 0 || stats.against.games > 0)
+            .sort((a, b) => {
+                const totalA = a[1].together.games + a[1].against.games;
+                const totalB = b[1].together.games + b[1].against.games;
+                return totalB - totalA;
+            });
+        
+        if (sorted.length === 0) {
+            container.innerHTML = '<p>No head-to-head data available yet.</p>';
+            return container;
+        }
+        
+        const html = sorted.map(([key, stats]) => {
+            const [p1, p2] = key.split(' vs ');
+            return `
+                <div style="margin-bottom: 1.5rem; padding: 1rem; background-color: var(--background-color); border-radius: 8px;">
+                    <h4 style="margin-bottom: 0.75rem; font-size: 1.1rem;">${p1} vs ${p2}</h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div>
+                            <strong>Playing Together:</strong>
+                            <table class="league-table" style="margin-top: 0.5rem;">
+                                <thead>
+                                    <tr>
+                                        <th>GP</th>
+                                        <th>W</th>
+                                        <th>D</th>
+                                        <th>L</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>${stats.together.games}</td>
+                                        <td>${stats.together.wins}</td>
+                                        <td>${stats.together.draws}</td>
+                                        <td>${stats.together.losses}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div>
+                            <strong>Playing Against:</strong>
+                            <table class="league-table" style="margin-top: 0.5rem;">
+                                <thead>
+                                    <tr>
+                                        <th>GP</th>
+                                        <th>W</th>
+                                        <th>D</th>
+                                        <th>L</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>${stats.against.games}</td>
+                                        <td>${stats.against.wins}</td>
+                                        <td>${stats.against.draws}</td>
+                                        <td>${stats.against.losses}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        container.innerHTML = html;
+        return container;
+    }
+});
+
 // ============================================================================
 // StatisticsTracker - Core Statistics Framework
 // ============================================================================
@@ -1250,6 +1570,43 @@ class StatisticsTracker {
     getTodayStats() {
         const matches = this.getTodayMatches();
         return this.calculateStatistics(matches, 'today');
+    }
+
+    getMonthMatches(year, month) {
+        const allMatches = this.getAllMatches();
+        return allMatches.filter(match => {
+            if (!match.timestamp) return false;
+            const matchDate = new Date(match.timestamp);
+            return matchDate.getFullYear() === year && matchDate.getMonth() === month;
+        });
+    }
+
+    getCurrentMonthStats() {
+        const now = new Date();
+        const matches = this.getMonthMatches(now.getFullYear(), now.getMonth());
+        return this.calculateStatistics(matches, 'month');
+    }
+
+    getWeekMatches(startDate) {
+        const allMatches = this.getAllMatches();
+        const endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + 7);
+        
+        return allMatches.filter(match => {
+            if (!match.timestamp) return false;
+            const matchDate = new Date(match.timestamp);
+            return matchDate >= startDate && matchDate < endDate;
+        });
+    }
+
+    getCurrentWeekStats() {
+        const now = new Date();
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay()); // Start of week (Sunday)
+        startOfWeek.setHours(0, 0, 0, 0);
+        
+        const matches = this.getWeekMatches(startOfWeek);
+        return this.calculateStatistics(matches, 'week');
     }
 }
 
@@ -1353,6 +1710,60 @@ class MatchRecorder {
         const season = data.seasons[currentSeason];
         return season ? season.matches || [] : [];
     }
+
+    // Find match by timestamp and season, return {season, index}
+    findMatch(timestamp) {
+        const data = this.storage.getData();
+        for (const [seasonNum, season] of Object.entries(data.seasons)) {
+            if (season.matches) {
+                const index = season.matches.findIndex(m => m.timestamp === timestamp);
+                if (index !== -1) {
+                    return { season: parseInt(seasonNum), index };
+                }
+            }
+        }
+        return null;
+    }
+
+    // Update a match
+    updateMatch(timestamp, newTeam1Score, newTeam2Score) {
+        const matchInfo = this.findMatch(timestamp);
+        if (!matchInfo) return false;
+
+        let newResult;
+        if (newTeam1Score > newTeam2Score) {
+            newResult = 'team1';
+        } else if (newTeam2Score > newTeam1Score) {
+            newResult = 'team2';
+        } else {
+            newResult = 'draw';
+        }
+
+        return this.storage.updateData(data => {
+            const season = data.seasons[matchInfo.season];
+            if (season && season.matches[matchInfo.index]) {
+                season.matches[matchInfo.index].team1Score = newTeam1Score;
+                season.matches[matchInfo.index].team2Score = newTeam2Score;
+                season.matches[matchInfo.index].result = newResult;
+            }
+        });
+    }
+
+    // Delete a match
+    deleteMatch(timestamp) {
+        const matchInfo = this.findMatch(timestamp);
+        if (!matchInfo) return false;
+
+        return this.storage.updateData(data => {
+            const season = data.seasons[matchInfo.season];
+            if (season && season.matches) {
+                season.matches.splice(matchInfo.index, 1);
+                if (data.overallStats.totalMatches > 0) {
+                    data.overallStats.totalMatches--;
+                }
+            }
+        });
+    }
 }
 
 // ============================================================================
@@ -1408,6 +1819,7 @@ class AppController {
         this.selectedStructure = null;
         this.currentGameIndex = 0;
         this.currentStatsState = {};
+        this.editingMatchTimestamp = null;
         
         this.initializeEventListeners();
         this.initializeApp();
@@ -1460,8 +1872,28 @@ class AppController {
             btn.addEventListener('click', (e) => this.switchStatsTab(e.target.dataset.tab));
         });
         document.getElementById('newSeasonBtn').addEventListener('click', () => this.startNewSeason());
+        document.getElementById('exportDataBtn').addEventListener('click', () => this.exportData());
+        document.getElementById('importDataBtn').addEventListener('click', () => this.importData());
         document.getElementById('clearOverallStatsBtn').addEventListener('click', () => this.clearAllStatistics());
         document.getElementById('backToMenuBtn').addEventListener('click', () => this.showScreen('playerScreen'));
+
+        // History screen
+        document.getElementById('backFromHistoryBtn').addEventListener('click', () => this.showScreen('statsScreen'));
+        document.getElementById('historyFilter').addEventListener('change', () => this.loadMatchHistory());
+        document.getElementById('historySearch').addEventListener('input', () => this.loadMatchHistory());
+
+        // Edit match modal
+        document.getElementById('saveEditMatchBtn').addEventListener('click', () => this.saveEditMatch());
+        document.getElementById('cancelEditMatchBtn').addEventListener('click', () => this.closeEditModal());
+        document.getElementById('deleteMatchBtn').addEventListener('click', () => this.confirmDeleteMatch());
+        document.getElementById('importFileInput').addEventListener('change', (e) => this.handleFileImport(e));
+
+        // Dark mode toggle
+        const darkModeToggle = document.getElementById('darkModeToggle');
+        if (darkModeToggle) {
+            darkModeToggle.addEventListener('click', () => this.toggleDarkMode());
+            this.initializeDarkMode();
+        }
 
         // Navigation
         document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -1498,6 +1930,8 @@ class AppController {
                 this.loadStatistics();
             } else if (screenId === 'playerScreen') {
                 this.updatePlayerNameHistory(); // Add this line
+            } else if (screenId === 'historyScreen') {
+                this.loadMatchHistory();
             }
         }
     }
@@ -1855,7 +2289,9 @@ class AppController {
         const subcategoryNames = {
             'wins-losses': 'Wins/Losses',
             'win-rate': 'Win Rate',
-            'streak': 'Streak'
+            'streak': 'Streak',
+            'form': 'Form',
+            'h2h': 'Head-to-Head'
         };
         
         let tabsHTML = '';
@@ -2013,6 +2449,221 @@ class AppController {
                 alert('Error clearing statistics');
             }
         }
+    }
+
+    // Match History
+    loadMatchHistory() {
+        const container = document.getElementById('matchHistoryList');
+        if (!container) return;
+
+        const filter = document.getElementById('historyFilter').value;
+        const search = document.getElementById('historySearch').value.toLowerCase();
+
+        let allMatches = [];
+        const data = this.storage.getData();
+
+        if (filter === 'today') {
+            allMatches = this.statisticsTracker.getTodayMatches();
+        } else if (filter === 'current') {
+            const currentSeason = this.seasonManager.getCurrentSeason();
+            allMatches = this.statisticsTracker.getSeasonMatches(currentSeason);
+        } else {
+            allMatches = this.statisticsTracker.getAllMatches();
+        }
+
+        // Sort by date (newest first)
+        allMatches.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        // Filter by search term
+        if (search) {
+            allMatches = allMatches.filter(match => {
+                const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
+                const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
+                const allPlayers = [...team1Players, ...team2Players];
+                return allPlayers.some(p => p.toLowerCase().includes(search));
+            });
+        }
+
+        if (allMatches.length === 0) {
+            container.innerHTML = '<div class="empty-state"><p>No matches found.</p></div>';
+            return;
+        }
+
+        container.innerHTML = allMatches.map(match => {
+            const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
+            const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
+            const team1Display = team1Players.join(' & ');
+            const team2Display = team2Players.join(' & ');
+            
+            const date = new Date(match.timestamp);
+            const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            return `
+                <div class="match-history-item">
+                    <div class="match-history-info">
+                        <div class="match-history-teams">${team1Display} vs ${team2Display}</div>
+                        <div class="match-history-score">${match.team1Score || 0} - ${match.team2Score || 0}</div>
+                        <div class="match-history-date">${dateStr}</div>
+                    </div>
+                    <div class="match-history-actions">
+                        <button class="match-history-btn edit" data-timestamp="${match.timestamp}">Edit</button>
+                        <button class="match-history-btn delete" data-timestamp="${match.timestamp}">Delete</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Add event listeners
+        container.querySelectorAll('.match-history-btn.edit').forEach(btn => {
+            btn.addEventListener('click', () => this.editMatch(btn.dataset.timestamp));
+        });
+
+        container.querySelectorAll('.match-history-btn.delete').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (confirm('Delete this match? This cannot be undone.')) {
+                    this.deleteMatch(btn.dataset.timestamp);
+                }
+            });
+        });
+    }
+
+    editMatch(timestamp) {
+        const matchInfo = this.matchRecorder.findMatch(timestamp);
+        if (!matchInfo) return;
+
+        const data = this.storage.getData();
+        const match = data.seasons[matchInfo.season].matches[matchInfo.index];
+        
+        this.editingMatchTimestamp = timestamp;
+
+        const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
+        const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
+        const team1Display = team1Players.join(' & ');
+        const team2Display = team2Players.join(' & ');
+
+        document.getElementById('editMatchTeams').innerHTML = `
+            <div class="team-display">
+                <div class="team-players">${team1Display}</div>
+                <span class="vs">VS</span>
+                <div class="team-players">${team2Display}</div>
+            </div>
+        `;
+        document.getElementById('editTeam1Score').value = match.team1Score || 0;
+        document.getElementById('editTeam2Score').value = match.team2Score || 0;
+        document.getElementById('editMatchModal').style.display = 'flex';
+    }
+
+    saveEditMatch() {
+        if (!this.editingMatchTimestamp) return;
+
+        const team1Score = parseInt(document.getElementById('editTeam1Score').value) || 0;
+        const team2Score = parseInt(document.getElementById('editTeam2Score').value) || 0;
+
+        if (this.matchRecorder.updateMatch(this.editingMatchTimestamp, team1Score, team2Score)) {
+            this.closeEditModal();
+            this.loadMatchHistory();
+            // Refresh stats if on stats screen
+            if (this.currentScreen === 'statsScreen') {
+                const activeTab = document.querySelector('.tab-btn.active');
+                const currentTab = activeTab ? activeTab.dataset.tab : 'today';
+                this.switchStatsTab(currentTab);
+            }
+        } else {
+            alert('Error updating match');
+        }
+    }
+
+    confirmDeleteMatch() {
+        if (!this.editingMatchTimestamp) return;
+        
+        if (confirm('Delete this match? This cannot be undone.')) {
+            this.deleteMatch(this.editingMatchTimestamp);
+        }
+    }
+
+    deleteMatch(timestamp) {
+        if (this.matchRecorder.deleteMatch(timestamp)) {
+            this.closeEditModal();
+            this.loadMatchHistory();
+            // Refresh stats if on stats screen
+            if (this.currentScreen === 'statsScreen') {
+                const activeTab = document.querySelector('.tab-btn.active');
+                const currentTab = activeTab ? activeTab.dataset.tab : 'today';
+                this.switchStatsTab(currentTab);
+            }
+        } else {
+            alert('Error deleting match');
+        }
+    }
+
+    closeEditModal() {
+        document.getElementById('editMatchModal').style.display = 'none';
+        this.editingMatchTimestamp = null;
+    }
+
+    // Export/Import Data
+    exportData() {
+        const data = this.storage.getData();
+        const json = JSON.stringify(data, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `fc25-score-tracker-backup-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        alert('Data exported successfully!');
+    }
+
+    importData() {
+        document.getElementById('importFileInput').click();
+    }
+
+    handleFileImport(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const importedData = JSON.parse(e.target.result);
+                
+                // Basic validation
+                if (!importedData.players || !Array.isArray(importedData.players)) {
+                    throw new Error('Invalid data format');
+                }
+
+                if (confirm('This will replace ALL your current data. Continue?')) {
+                    this.storage.updateData(data => {
+                        Object.assign(data, importedData);
+                    });
+                    alert('Data imported successfully! Reloading...');
+                    location.reload();
+                }
+            } catch (error) {
+                alert('Error importing data: ' + error.message);
+            }
+        };
+        reader.readAsText(file);
+        event.target.value = ''; // Reset file input
+    }
+
+    // Dark Mode
+    initializeDarkMode() {
+        const isDark = localStorage.getItem('darkMode') === 'true';
+        if (isDark) {
+            document.body.classList.add('dark-mode');
+            document.getElementById('darkModeToggle').textContent = '☀️';
+        }
+    }
+
+    toggleDarkMode() {
+        document.body.classList.toggle('dark-mode');
+        const isDark = document.body.classList.contains('dark-mode');
+        localStorage.setItem('darkMode', isDark);
+        document.getElementById('darkModeToggle').textContent = isDark ? '☀️' : '🌙';
     }
 
     // Add this method to display player name history
