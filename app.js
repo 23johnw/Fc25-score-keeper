@@ -1022,9 +1022,9 @@ class AppController {
             
             return `
                 <div class="round-structure-card ${isSelected ? 'selected' : ''}" data-index="${structureIndex}">
-                    ${isSelected ? `<div class="selection-indicator">Selected</div>` : ''}
                     <div class="structure-header">
                         <h3>Round Structure ${structureIndex + 1}</h3>
+                        ${isSelected ? `<button class="select-structure-btn" data-index="${structureIndex}">Select</button>` : ''}
                     </div>
                     <div class="structure-matches">
                         ${matchesHTML}
@@ -1033,11 +1033,23 @@ class AppController {
             `;
         }).join('');
 
-        // Add click listeners
+        // Add click listeners for cards
         container.querySelectorAll('.round-structure-card').forEach(card => {
-            card.addEventListener('click', () => {
+            card.addEventListener('click', (e) => {
+                // Don't select if clicking the button
+                if (e.target.classList.contains('select-structure-btn')) {
+                    return;
+                }
                 const index = parseInt(card.dataset.index);
                 this.selectStructure(index);
+            });
+        });
+
+        // Add click listeners for select buttons
+        container.querySelectorAll('.select-structure-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent card click
+                this.confirmSequence();
             });
         });
 
