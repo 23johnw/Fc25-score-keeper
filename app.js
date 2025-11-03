@@ -241,8 +241,21 @@ class StatisticsCalculators {
 
     static register(calculator) {
         if (calculator.id && calculator.name && calculator.calculate && calculator.display) {
+            // Default category to 'general' if not specified
+            if (!calculator.category) {
+                calculator.category = 'general';
+            }
             this.registry.push(calculator);
         }
+    }
+    
+    static getByCategory(category) {
+        return this.registry.filter(calc => calc.category === category);
+    }
+    
+    static getCategories() {
+        const categories = new Set(this.registry.map(calc => calc.category));
+        return Array.from(categories);
     }
 
     static getAll() {
@@ -260,6 +273,7 @@ class StatisticsCalculators {
 StatisticsCalculators.register({
     id: 'winLossDraw',
     name: 'Wins, Losses & Draws',
+    category: 'performance',
     calculate: (matches, players) => {
         const stats = {};
         players.forEach(player => {
@@ -342,6 +356,7 @@ StatisticsCalculators.register({
 StatisticsCalculators.register({
     id: 'winRate',
     name: 'Win Rate',
+    category: 'performance',
     calculate: (matches, players) => {
         const wld = StatisticsCalculators.getById('winLossDraw').calculate(matches, players);
         const winRates = {};
@@ -382,6 +397,7 @@ StatisticsCalculators.register({
 StatisticsCalculators.register({
     id: 'streak',
     name: 'Current Streak',
+    category: 'performance',
     calculate: (matches, players) => {
         const streaks = {};
         players.forEach(player => {
@@ -466,6 +482,7 @@ StatisticsCalculators.register({
 StatisticsCalculators.register({
     id: 'totalGoals',
     name: 'Total Goals Scored',
+    category: 'goals',
     calculate: (matches, players) => {
         const stats = {};
         players.forEach(player => {
@@ -523,6 +540,7 @@ StatisticsCalculators.register({
 StatisticsCalculators.register({
     id: 'goalDifference',
     name: 'Goal Difference',
+    category: 'goals',
     calculate: (matches, players) => {
         const stats = {};
         players.forEach(player => {
@@ -660,17 +678,17 @@ class StatisticsDisplay {
         this.tracker = statisticsTracker;
     }
 
-    displaySeasonStats(seasonNumber, container) {
+    displaySeasonStats(seasonNumber, container, category = null) {
         const stats = this.tracker.getSeasonStats(seasonNumber);
-        this.renderStats(stats, container);
+        this.renderStats(stats, container, category);
     }
 
-    displayOverallStats(container) {
+    displayOverallStats(container, category = null) {
         const stats = this.tracker.getOverallStats();
-        this.renderStats(stats, container);
+        this.renderStats(stats, container, category);
     }
 
-    renderStats(stats, container) {
+    renderStats(stats, container, category = null) {
         container.innerHTML = '';
         
         if (Object.keys(stats).length === 0) {
@@ -678,7 +696,10 @@ class StatisticsDisplay {
             return;
         }
 
-        const calculators = StatisticsCalculators.getAll();
+        const calculators = category 
+            ? StatisticsCalculators.getByCategory(category)
+            : StatisticsCalculators.getAll();
+            
         calculators.forEach(calculator => {
             const data = stats[calculator.id];
             if (data && Object.keys(data).length > 0) {
@@ -1196,9 +1217,65 @@ class AppController {
 
         const currentSeason = this.seasonManager.getCurrentSeason();
         if (tab === 'season') {
-            this.statisticsDisplay.displaySeasonStats(currentSeason, document.getElementById('seasonStatsDisplay'));
+            this.renderCategoryTabs('season');
+            this.switchStatsCategory('season', 'all');
         } else {
-            this.statisticsDisplay.displayOverallStats(document.getElementById('overallStatsDisplay'));
+            this.renderCategoryTabs('overall');
+            this.switchStatsCategory('overall', 'all');
+        }
+    }
+    
+    renderCategoryTabs(type) {
+        const categories = StatisticsCalculators.getCategories();
+        const container = document.getElementById(type === 'season' ? 'seasonCategoryTabs' : 'overallCategoryTabs');
+        
+        // Category display names
+        const categoryNames = {
+            'performance': 'Performance',
+            'goals': 'Goals',
+            'general': 'General',
+            'all': 'All'
+        };
+        
+        const tabsHTML = `
+            <button class="category-btn active" data-category="all">All</button>
+            ${categories.map(cat => `
+                <button class="category-btn" data-category="${cat}">${categoryNames[cat] || cat}</button>
+            `).join('')}
+        `;
+        
+        container.innerHTML = tabsHTML;
+        
+        // Add event listeners
+        container.querySelectorAll('.category-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const category = e.target.dataset.category;
+                this.switchStatsCategory(type, category);
+            });
+        });
+    }
+    
+    switchStatsCategory(type, category) {
+        // Update active button
+        const container = document.getElementById(type === 'season' ? 'seasonCategoryTabs' : 'overallCategoryTabs');
+        container.querySelectorAll('.category-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.category === category);
+        });
+        
+        const currentSeason = this.seasonManager.getCurrentSeason();
+        const selectedCategory = category === 'all' ? null : category;
+        
+        if (type === 'season') {
+            this.statisticsDisplay.displaySeasonStats(
+                currentSeason, 
+                document.getElementById('seasonStatsDisplay'),
+                selectedCategory
+            );
+        } else {
+            this.statisticsDisplay.displayOverallStats(
+                document.getElementById('overallStatsDisplay'),
+                selectedCategory
+            );
         }
     }
 
@@ -1225,9 +1302,10 @@ class AppController {
             if (this.storage.clearAllStatistics()) {
                 alert('All statistics cleared. Players are kept.');
                 this.updateSeasonInfo();
-                this.switchStatsTab('season');
                 // Reload the statistics display
-                this.loadStatistics();
+                const activeTab = document.querySelector('.tab-btn.active');
+                const currentTab = activeTab ? activeTab.dataset.tab : 'season';
+                this.switchStatsTab(currentTab);
             } else {
                 alert('Error clearing statistics');
             }
