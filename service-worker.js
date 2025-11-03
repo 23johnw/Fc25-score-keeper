@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fc25-score-tracker-v3';
+const CACHE_NAME = 'fc25-score-tracker-v4';
 const BASE_PATH = '/Fc25-score-keeper';
 const urlsToCache = [
   `${BASE_PATH}/`,
@@ -39,20 +39,44 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event - network first for app files, cache for offline
 self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // Return cached version or fetch from network
-        return response || fetch(event.request);
-      })
-      .catch(() => {
-        // If both fail, return offline page for navigation requests
-        if (event.request.mode === 'navigate') {
-          return caches.match(`${BASE_PATH}/index.html`);
-        }
-      })
-  );
+  const url = new URL(event.request.url);
+  const isAppFile = url.pathname.endsWith('.js') || 
+                    url.pathname.endsWith('.css') || 
+                    url.pathname.endsWith('.html');
+  
+  if (isAppFile) {
+    // Network first strategy for app files to get latest updates
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          // Update cache with fresh response
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseClone);
+          });
+          return response;
+        })
+        .catch(() => {
+          // If network fails, try cache
+          return caches.match(event.request);
+        })
+    );
+  } else {
+    // Cache first for other assets (icons, etc.)
+    event.respondWith(
+      caches.match(event.request)
+        .then((response) => {
+          return response || fetch(event.request);
+        })
+        .catch(() => {
+          // If both fail, return offline page for navigation requests
+          if (event.request.mode === 'navigate') {
+            return caches.match(`${BASE_PATH}/index.html`);
+          }
+        })
+    );
+  }
 });
 
