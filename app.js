@@ -1098,16 +1098,18 @@ class AppController {
         const container = document.getElementById('sequenceList');
         
         container.innerHTML = this.selectedStructure.matches.map((match, index) => {
+            const team1Name = this.teamGenerator.formatTeamName(match.team1);
+            const team2Name = this.teamGenerator.formatTeamName(match.team2);
             return `
                 <div class="sequence-item">
                     <div class="sequence-number">Round ${index + 1}</div>
                     <div class="team-display">
                         <div class="team-players">
-                            ${match.team1.map(p => `<span class="player-name">${p}</span>`).join('')}
+                            <span class="player-name">${team1Name}</span>
                         </div>
                         <span class="vs">VS</span>
                         <div class="team-players">
-                            ${match.team2.map(p => `<span class="player-name">${p}</span>`).join('')}
+                            <span class="player-name">${team2Name}</span>
                         </div>
                     </div>
                 </div>
@@ -1135,13 +1137,12 @@ class AppController {
         document.getElementById('currentGameNumber').textContent = this.currentGameIndex + 1;
         document.getElementById('totalGames').textContent = this.selectedStructure.matches.length;
         
-        document.getElementById('team1Display').innerHTML = 
-            match.team1.map(p => `<span class="player-name">${p}</span>`).join('');
-        document.getElementById('team2Display').innerHTML = 
-            match.team2.map(p => `<span class="player-name">${p}</span>`).join('');
-        
         const team1Name = this.teamGenerator.formatTeamName(match.team1);
         const team2Name = this.teamGenerator.formatTeamName(match.team2);
+        document.getElementById('team1Display').innerHTML = 
+            `<span class="player-name">${team1Name}</span>`;
+        document.getElementById('team2Display').innerHTML = 
+            `<span class="player-name">${team2Name}</span>`;
         document.getElementById('team1ScoreLabel').textContent = `${team1Name} Score`;
         document.getElementById('team2ScoreLabel').textContent = `${team2Name} Score`;
         
