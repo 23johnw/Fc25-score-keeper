@@ -12,7 +12,8 @@ class LocalStorageManager {
         try {
             const stored = localStorage.getItem(this.storageKey);
             if (stored) {
-                return JSON.parse(stored);
+                const parsed = JSON.parse(stored);
+                return this.applyDefaults(parsed);
             }
         } catch (error) {
             console.error('Error loading data:', error);
@@ -29,8 +30,38 @@ class LocalStorageManager {
             overallStats: {
                 players: {},
                 totalMatches: 0
+            },
+            playerLock: {
+                player: null,
+                side: 'neutral'
             }
         };
+    }
+
+    applyDefaults(data) {
+        const defaults = this.getDefaultData();
+        const merged = {
+            ...defaults,
+            ...data,
+            seasons: data.seasons || defaults.seasons,
+            overallStats: {
+                ...defaults.overallStats,
+                ...(data.overallStats || {})
+            },
+            playerLock: data.playerLock || defaults.playerLock
+        };
+
+        if (!merged.playerLock || typeof merged.playerLock !== 'object') {
+            merged.playerLock = { ...defaults.playerLock };
+        } else {
+            const validSides = ['home', 'away', 'neutral'];
+            merged.playerLock = {
+                player: merged.playerLock.player || null,
+                side: validSides.includes(merged.playerLock.side) ? merged.playerLock.side : 'neutral'
+            };
+        }
+
+        return merged;
     }
 
     saveData() {
@@ -49,6 +80,7 @@ class LocalStorageManager {
 
     updateData(updater) {
         updater(this.data);
+        this.data = this.applyDefaults(this.data);
         return this.saveData();
     }
 
@@ -99,6 +131,7 @@ class PlayerManager {
         }
         return this.storage.updateData(data => {
             data.players = validPlayers;
+            this.ensureLockIntegrity(data);
         });
     }
 
@@ -109,12 +142,14 @@ class PlayerManager {
         
         return this.storage.updateData(data => {
             data.players.push(name.trim());
+            this.ensureLockIntegrity(data);
         });
     }
 
     removePlayer(name) {
         return this.storage.updateData(data => {
             data.players = data.players.filter(p => p !== name);
+            this.ensureLockIntegrity(data);
         });
     }
 
@@ -142,6 +177,70 @@ class PlayerManager {
             }
         });
     }
+
+    ensureLockIntegrity(data) {
+        if (!data.playerLock || typeof data.playerLock !== 'object') {
+            data.playerLock = {
+                player: null,
+                side: 'neutral'
+            };
+            return;
+        }
+
+        const validSides = ['home', 'away', 'neutral'];
+        if (!validSides.includes(data.playerLock.side)) {
+            data.playerLock.side = 'neutral';
+        }
+
+        const players = data.players || [];
+        if (!players.includes(data.playerLock.player)) {
+            data.playerLock.player = null;
+            data.playerLock.side = 'neutral';
+        }
+
+        if (data.playerLock.side === 'neutral') {
+            data.playerLock.player = null;
+        }
+    }
+
+    getPlayerLock() {
+        const data = this.storage.getData();
+        if (!data.playerLock) {
+            return { player: null, side: 'neutral' };
+        }
+        return {
+            player: data.playerLock.player || null,
+            side: data.playerLock.side || 'neutral'
+        };
+    }
+
+    setPlayerLock(player, side) {
+        const normalizedSide = ['home', 'away', 'neutral'].includes(side) ? side : 'neutral';
+        if (normalizedSide === 'neutral') {
+            return this.clearPlayerLock();
+        }
+
+        const players = this.getPlayers();
+        if (!players.includes(player)) {
+            return false;
+        }
+
+        return this.storage.updateData(data => {
+            data.playerLock = {
+                player,
+                side: normalizedSide
+            };
+        });
+    }
+
+    clearPlayerLock() {
+        return this.storage.updateData(data => {
+            data.playerLock = {
+                player: null,
+                side: 'neutral'
+            };
+        });
+    }
 }
 
 // ============================================================================
@@ -150,7 +249,7 @@ class PlayerManager {
 
 class TeamGenerator {
     // Generate all possible round structures where each structure is a complete set of matches
-    generateRoundStructures(players) {
+    generateRoundStructures(players, lock = { player: null, side: 'neutral' }) {
         const count = players.length;
         const structures = [];
 
@@ -198,7 +297,7 @@ class TeamGenerator {
             });
         }
 
-        return structures;
+        return this.applyPlayerLock(structures, players, lock);
     }
 
     // Helper function to generate all permutations of an array
@@ -218,6 +317,37 @@ class TeamGenerator {
         }
         
         return permutations;
+    }
+
+    applyPlayerLock(structures, players, lock) {
+        const lockActive = lock && lock.player && lock.side && lock.side !== 'neutral' && players.includes(lock.player);
+
+        return structures.map(structure => {
+            const matches = structure.matches.map(match => {
+                const originalTeam1 = Array.isArray(match.team1) ? match.team1 : [match.team1];
+                const originalTeam2 = Array.isArray(match.team2) ? match.team2 : [match.team2];
+                let team1 = [...originalTeam1];
+                let team2 = [...originalTeam2];
+
+                if (lockActive) {
+                    const playerInTeam1 = team1.includes(lock.player);
+                    const playerInTeam2 = team2.includes(lock.player);
+
+                    if (lock.side === 'home' && playerInTeam2) {
+                        [team1, team2] = [team2, team1];
+                    } else if (lock.side === 'away' && playerInTeam1) {
+                        [team1, team2] = [team2, team1];
+                    }
+                }
+
+                return {
+                    team1: [...team1],
+                    team2: [...team2]
+                };
+            });
+
+            return { matches };
+        });
     }
 
     formatTeamName(team) {
@@ -1820,6 +1950,13 @@ class AppController {
         this.currentGameIndex = 0;
         this.currentStatsState = {};
         this.editingMatchTimestamp = null;
+        this.playerEditorValues = [];
+        this.hasUnsavedPlayerChanges = false;
+        this.lockLabels = {
+            home: 'Home',
+            neutral: 'Neutral',
+            away: 'Away'
+        };
         
         this.initializeEventListeners();
         this.initializeApp();
@@ -1828,15 +1965,12 @@ class AppController {
     initializeApp() {
         // Load existing players
         const players = this.playerManager.getPlayers();
-        if (players.length >= 2) {
-            this.loadPlayersIntoUI(players);
-            this.showScreen('teamScreen');
-        } else {
-            this.showScreen('playerScreen');
-        }
+        this.loadPlayersIntoUI(players);
+        this.showScreen(players.length >= 2 ? 'teamScreen' : 'playerScreen');
         
         this.updateSeasonInfo();
         this.updatePlayerNameHistory(); // Add this line
+        this.renderPlayerLockOptions();
     }
 
     initializeEventListeners() {
@@ -1851,9 +1985,56 @@ class AppController {
             console.error('savePlayersBtn not found!');
         }
         document.getElementById('startNewSessionBtn').addEventListener('click', () => this.startNewSession());
-        document.querySelectorAll('.remove-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => this.removePlayerInput(e.target.dataset.player));
-        });
+        const addPlayerBtn = document.getElementById('addPlayerBtn');
+        if (addPlayerBtn) {
+            addPlayerBtn.addEventListener('click', () => this.addPlayerRow());
+        }
+
+        const editableList = document.getElementById('playerEditableList');
+        if (editableList) {
+            editableList.addEventListener('click', (e) => {
+                const deleteBtn = e.target.closest('.delete-player-btn');
+                if (deleteBtn) {
+                    const index = parseInt(deleteBtn.dataset.index);
+                    this.removePlayerRow(index);
+                }
+            });
+
+            editableList.addEventListener('input', (e) => {
+                const input = e.target.closest('.player-name-input');
+                if (input) {
+                    const index = parseInt(input.dataset.index);
+                    const value = input.value;
+                    this.updatePlayerRow(index, value);
+                }
+            });
+
+            editableList.addEventListener('change', (e) => {
+                const select = e.target.closest('.lock-select');
+                if (select) {
+                    const index = parseInt(select.dataset.index);
+                    const side = select.value;
+                    if (!isNaN(index) && side) {
+                        this.handleInlineLockToggle(index, side);
+                    }
+                }
+            });
+        }
+
+        const playerLockList = document.getElementById('playerLockList');
+        if (playerLockList) {
+            playerLockList.addEventListener('click', (event) => {
+                const button = event.target.closest('.lock-btn');
+                if (!button || button.disabled) {
+                    return;
+                }
+                const player = button.dataset.player;
+                const side = button.dataset.side;
+                if (player && side) {
+                    this.handleLockSelection(player, side);
+                }
+            });
+        }
 
         // Team screen
         document.getElementById('confirmSequenceBtn').addEventListener('click', () => this.confirmSequence());
@@ -1938,31 +2119,164 @@ class AppController {
 
     // Player Management
     loadPlayersIntoUI(players) {
-        const inputs = ['player1Input', 'player2Input', 'player3Input', 'player4Input'];
-        inputs.forEach((id, index) => {
-            const input = document.getElementById(id);
-            if (players[index]) {
-                input.value = players[index];
-                const removeBtn = input.nextElementSibling;
-                if (removeBtn && removeBtn.classList.contains('remove-btn')) {
-                    removeBtn.style.display = 'block';
-                }
-            }
-        });
+        this.playerEditorValues = Array.isArray(players) ? [...players] : [];
+        if (this.playerEditorValues.length === 0) {
+            this.playerEditorValues = ['', ''];
+        } else if (this.playerEditorValues.length === 1) {
+            this.playerEditorValues.push('');
+        }
+        this.renderEditablePlayerList();
         this.updateCurrentPlayersDisplay();
     }
 
-    removePlayerInput(playerNum) {
-        const input = document.getElementById(`player${playerNum}Input`);
-        if (input) {
-            input.value = '';
-            const removeBtn = input.nextElementSibling;
-            if (removeBtn && removeBtn.classList.contains('remove-btn')) {
-                removeBtn.style.display = 'none';
+    escapeHtml(str = '') {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    getEditorPlayersTrimmed() {
+        return this.playerEditorValues
+            .map(name => (typeof name === 'string' ? name.trim() : ''))
+            .filter(name => name.length > 0);
+    }
+
+    renderEditablePlayerList() {
+        const list = document.getElementById('playerEditableList');
+        if (!list) return;
+
+        const globalPlayers = this.playerManager.getPlayers();
+        const editorTrimmed = this.getEditorPlayersTrimmed();
+        const unsaved = editorTrimmed.length !== globalPlayers.length ||
+            editorTrimmed.some((name, index) => name !== globalPlayers[index]);
+        const lockState = this.playerManager.getPlayerLock();
+        const lockActive = lockState && lockState.player && lockState.side && lockState.side !== 'neutral';
+
+        list.innerHTML = this.playerEditorValues.map((player, index) => {
+            const value = typeof player === 'string' ? player : '';
+            const isFilled = value.trim().length > 0;
+            const trimmed = value.trim();
+            const isSavedPlayer = isFilled && globalPlayers.includes(trimmed);
+            const isLockedPlayer = isSavedPlayer && lockActive && lockState.player === trimmed;
+            const labels = this.lockLabels;
+            const canSelect = isSavedPlayer && !unsaved;
+            let selectedValue = 'neutral';
+            if (isLockedPlayer) {
+                selectedValue = lockState.side;
+            } else if (lockActive) {
+                selectedValue = 'neutral';
             }
-            // Refresh history to show the name is now available
-            this.updatePlayerNameHistory();
+
+            return `
+            <li class="player-editable-item${isFilled ? ' active' : ''}" data-index="${index}">
+                <div class="drag-handle" draggable="true" data-index="${index}">☰</div>
+                <input
+                    type="text"
+                    class="player-name-input"
+                    data-index="${index}"
+                    value="${this.escapeHtml(value)}"
+                    placeholder="Player ${index + 1}"
+                    maxlength="20"
+                />
+                <select class="lock-select" data-index="${index}" ${!canSelect ? 'disabled' : ''}>
+                    <option value="home" ${selectedValue === 'home' ? 'selected' : ''}>${this.escapeHtml(labels.home)}</option>
+                    <option value="neutral" ${selectedValue === 'neutral' ? 'selected' : ''}>${this.escapeHtml(labels.neutral)}</option>
+                    <option value="away" ${selectedValue === 'away' ? 'selected' : ''}>${this.escapeHtml(labels.away)}</option>
+                </select>
+                <div class="player-actions">
+                    <button class="delete-player-btn" data-index="${index}" title="Remove player">×</button>
+                </div>
+            </li>
+        `;
+        }).join('');
+
+        const addButton = document.getElementById('addPlayerBtn');
+        if (addButton) {
+            const count = this.playerEditorValues.length;
+            addButton.disabled = count >= 4;
+            addButton.textContent = count < 4 ? 'Add Player' : 'Max Players';
+            addButton.title = count < 4 ? 'Add another player slot' : 'Maximum of 4 players supported';
         }
+
+        this.initializeDragAndDrop();
+        this.updatePlayerNameHistory();
+        this.renderPlayerLockOptions();
+    }
+
+    initializeDragAndDrop() {
+        const list = document.getElementById('playerEditableList');
+        if (!list) return;
+
+        let draggedIndex = null;
+
+        list.querySelectorAll('.drag-handle').forEach(handle => {
+            handle.addEventListener('dragstart', (e) => {
+                draggedIndex = parseInt(e.target.dataset.index);
+                e.dataTransfer.effectAllowed = 'move';
+            });
+        });
+
+        list.querySelectorAll('.player-editable-item').forEach(item => {
+            item.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+            });
+
+            item.addEventListener('drop', (e) => {
+                e.preventDefault();
+                const targetIndex = parseInt(item.dataset.index);
+                if (draggedIndex === null || isNaN(targetIndex) || targetIndex === draggedIndex) {
+                    return;
+                }
+                this.reorderPlayers(draggedIndex, targetIndex);
+                draggedIndex = null;
+            });
+        });
+    }
+
+    reorderPlayers(fromIndex, toIndex) {
+        if (fromIndex < 0 || fromIndex >= this.playerEditorValues.length || toIndex < 0 || toIndex >= this.playerEditorValues.length) {
+            return;
+        }
+        const updated = [...this.playerEditorValues];
+        const [moved] = updated.splice(fromIndex, 1);
+        updated.splice(toIndex, 0, moved);
+        this.playerEditorValues = updated;
+        this.renderEditablePlayerList();
+    }
+
+    addPlayerRow() {
+        if (this.playerEditorValues.length >= 4) {
+            alert('Maximum 4 players allowed');
+            return;
+        }
+        this.playerEditorValues.push('');
+        this.renderEditablePlayerList();
+    }
+
+    removePlayerRow(index) {
+        if (index < 0 || index >= this.playerEditorValues.length) return;
+        this.playerEditorValues.splice(index, 1);
+        if (this.playerEditorValues.length === 0) {
+            this.playerEditorValues = ['', ''];
+        } else if (this.playerEditorValues.length === 1) {
+            this.playerEditorValues.push('');
+        }
+        this.renderEditablePlayerList();
+    }
+
+    updatePlayerRow(index, value) {
+        if (index < 0 || index >= this.playerEditorValues.length) return;
+        this.playerEditorValues[index] = value;
+        const listItems = document.querySelectorAll('.player-editable-item');
+        if (listItems[index]) {
+            listItems[index].classList.toggle('active', value.trim().length > 0);
+        }
+        this.updatePlayerNameHistory();
+        this.renderPlayerLockOptions();
     }
 
     updateCurrentPlayersDisplay() {
@@ -1978,32 +2292,162 @@ class AppController {
             container.style.display = 'none';
             document.getElementById('startNewSessionBtn').style.display = 'none';
         }
+        this.renderPlayerLockOptions();
+    }
+
+    renderPlayerLockOptions() {
+        const container = document.getElementById('playerLockContainer');
+        const list = document.getElementById('playerLockList');
+        const hint = document.getElementById('playerLockHint');
+        const unsavedHint = document.getElementById('playerLockUnsavedHint');
+
+        if (!container || !list) {
+            this.hasUnsavedPlayerChanges = false;
+            return;
+        }
+
+        const players = this.playerManager.getPlayers();
+        const editorPlayers = this.getEditorPlayersTrimmed();
+        const unsavedChanges = editorPlayers.length !== players.length ||
+            editorPlayers.some((name, index) => name !== players[index]);
+        this.hasUnsavedPlayerChanges = unsavedChanges;
+
+        const editableList = document.getElementById('playerEditableList');
+        if (editableList) {
+            editableList.classList.toggle('unsaved', unsavedChanges);
+        }
+
+        if (!players || players.length < 2) {
+            container.style.display = 'none';
+            list.innerHTML = '';
+            if (hint) {
+                hint.style.display = 'none';
+            }
+            if (unsavedHint) {
+                unsavedHint.style.display = 'none';
+            }
+            return;
+        }
+
+        container.style.display = 'block';
+        container.classList.toggle('unsaved', unsavedChanges);
+        const lockState = this.playerManager.getPlayerLock();
+        const lockActive = lockState.player && lockState.side && lockState.side !== 'neutral';
+
+        list.innerHTML = players.map(player => {
+            const isLockedPlayer = lockActive && lockState.player === player;
+            const homeActive = isLockedPlayer && lockState.side === 'home';
+            const awayActive = isLockedPlayer && lockState.side === 'away';
+            const homeDisabled = unsavedChanges || (lockActive && !isLockedPlayer);
+            const awayDisabled = unsavedChanges || (lockActive && !isLockedPlayer);
+            const neutralDisabled = unsavedChanges || (!isLockedPlayer && lockActive);
+            const homeClass = `lock-btn home${homeActive ? ' active' : ''}`;
+            const awayClass = `lock-btn away${awayActive ? ' active' : ''}`;
+            const neutralClass = 'lock-btn neutral';
+
+            return `
+                <div class="player-lock-row${isLockedPlayer ? ' locked' : ''}">
+                    <span class="player-lock-name">${this.escapeHtml(player)}</span>
+                    <div class="player-lock-options">
+                        <button class="${homeClass}" data-player="${this.escapeHtml(player)}" data-side="home" ${homeDisabled ? 'disabled' : ''}>${this.escapeHtml(this.lockLabels.home)}</button>
+                        <button class="${awayClass}" data-player="${this.escapeHtml(player)}" data-side="away" ${awayDisabled ? 'disabled' : ''}>${this.escapeHtml(this.lockLabels.away)}</button>
+                        <button class="${neutralClass}" data-player="${this.escapeHtml(player)}" data-side="neutral" ${neutralDisabled ? 'disabled' : ''}>${this.escapeHtml(this.lockLabels.neutral)}</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        if (hint) {
+            hint.style.display = lockActive ? 'block' : 'none';
+        }
+        if (unsavedHint) {
+            unsavedHint.style.display = unsavedChanges ? 'block' : 'none';
+        }
+    }
+
+    handleLockSelection(player, side) {
+        if (!player || !side) {
+            return;
+        }
+
+        let success = true;
+        if (side === 'neutral') {
+            success = this.playerManager.clearPlayerLock();
+        } else {
+            success = this.playerManager.setPlayerLock(player, side);
+        }
+
+        if (success === false) {
+            return;
+        }
+
+        this.resetSelectedStructure();
+        this.renderPlayerLockOptions();
+
+        if (this.currentScreen === 'teamScreen') {
+            this.loadTeamCombinations();
+        } else if (this.currentScreen === 'sequenceScreen' || this.currentScreen === 'matchScreen') {
+            this.showScreen('teamScreen');
+        }
+
+        this.renderEditablePlayerList();
+    }
+
+    handleInlineLockToggle(index, side) {
+        if (typeof index !== 'number' || isNaN(index) || !side) {
+            return;
+        }
+
+        if (this.hasUnsavedPlayerChanges) {
+            alert('Please save players before changing home/away settings.');
+            return;
+        }
+
+        const value = this.playerEditorValues[index];
+        const trimmed = value ? value.trim() : '';
+        if (!trimmed) {
+            return;
+        }
+
+        const players = this.playerManager.getPlayers();
+        if (!Array.isArray(players) || !players.includes(trimmed)) {
+            alert('Save players before changing home/away settings.');
+            return;
+        }
+
+        this.handleLockSelection(trimmed, side);
+    }
+
+    resetSelectedStructure() {
+        this.selectedStructureIndex = null;
+        this.selectedStructure = null;
+        this.currentGameIndex = 0;
+        this.currentMatch = null;
+
+        const confirmBtn = document.getElementById('confirmSequenceBtn');
+        if (confirmBtn) {
+            confirmBtn.disabled = true;
+        }
     }
 
     savePlayers() {
         console.log('savePlayers called'); // Debug log
         
-        const inputs = ['player1Input', 'player2Input', 'player3Input', 'player4Input'];
-        const players = inputs
-            .map(id => {
-                const input = document.getElementById(id);
-                if (!input) {
-                    console.error(`Input ${id} not found!`);
-                    return '';
-                }
-                return input.value.trim();
-            })
-            .filter(p => p.length > 0);
+        const rawPlayers = this.playerEditorValues
+            .map(name => (typeof name === 'string' ? name.trim() : ''))
+            .filter(name => name.length > 0);
+
+        const players = rawPlayers.filter((name, index) => rawPlayers.indexOf(name) === index);
+
+        if (players.length !== rawPlayers.length) {
+            alert('Duplicate player names detected. Please ensure each player has a unique name.');
+            return;
+        }
 
         console.log('Players extracted:', players); // Debug log
 
         if (players.length < 2) {
             alert('Please enter at least 2 players');
-            return;
-        }
-
-        if (players.length > 4) {
-            alert('Maximum 4 players allowed');
             return;
         }
 
@@ -2015,8 +2459,16 @@ class AppController {
             
             if (this.playerManager.setPlayers(players)) {
                 console.log('Players saved successfully');
+                this.playerEditorValues = [...players];
+                if (this.playerEditorValues.length === 1) {
+                    this.playerEditorValues.push('');
+                } else if (this.playerEditorValues.length === 0) {
+                    this.playerEditorValues = ['', ''];
+                }
+                this.renderEditablePlayerList();
                 this.updateCurrentPlayersDisplay();
                 this.updatePlayerNameHistory(); // Update the history display
+                this.resetSelectedStructure();
                 this.showScreen('teamScreen');
             } else {
                 console.error('Failed to save players');
@@ -2029,9 +2481,7 @@ class AppController {
     }
 
     startNewSession() {
-        this.selectedStructureIndex = null;
-        this.selectedStructure = null;
-        this.currentGameIndex = 0;
+        this.resetSelectedStructure();
         this.showScreen('teamScreen');
     }
 
@@ -2043,7 +2493,8 @@ class AppController {
             return;
         }
 
-        const structures = this.teamGenerator.generateRoundStructures(players);
+        const lockState = this.playerManager.getPlayerLock();
+        const structures = this.teamGenerator.generateRoundStructures(players, lockState);
         const container = document.getElementById('teamCombinations');
         
         if (structures.length === 0) {
@@ -2123,7 +2574,8 @@ class AppController {
 
     selectStructure(structureIndex) {
         const players = this.playerManager.getPlayers();
-        const structures = this.teamGenerator.generateRoundStructures(players);
+        const lockState = this.playerManager.getPlayerLock();
+        const structures = this.teamGenerator.generateRoundStructures(players, lockState);
         
         if (structureIndex >= 0 && structureIndex < structures.length) {
             this.selectedStructureIndex = structureIndex;
@@ -2676,12 +3128,7 @@ class AppController {
             container.style.display = 'block';
             
             list.innerHTML = history.map(name => {
-                // Check if this name is already in one of the input fields
-                const inputs = ['player1Input', 'player2Input', 'player3Input', 'player4Input'];
-                const isUsed = inputs.some(id => {
-                    const input = document.getElementById(id);
-                    return input && input.value.trim() === name;
-                });
+                const isUsed = this.playerEditorValues.some(value => (value || '').trim() === name);
                 
                 return `
                     <button class="player-history-btn ${isUsed ? 'used' : ''}" 
@@ -2708,24 +3155,26 @@ class AppController {
 
     // Add this method to fill the first empty input
     fillEmptyPlayerInput(playerName) {
-        const inputs = ['player1Input', 'player2Input', 'player3Input', 'player4Input'];
-        
-        for (const id of inputs) {
-            const input = document.getElementById(id);
-            if (input && !input.value.trim()) {
-                input.value = playerName;
-                // Show remove button if it exists
-                const removeBtn = input.nextElementSibling;
-                if (removeBtn && removeBtn.classList.contains('remove-btn')) {
-                    removeBtn.style.display = 'block';
-                }
-                // Update history display to show this name as used
-                this.updatePlayerNameHistory();
-                // Focus the next empty input for better UX
-                input.focus();
-                break;
-            }
+        const trimmed = (playerName || '').trim();
+        if (!trimmed) return;
+
+        if (this.playerEditorValues.some(value => (value || '').trim() === trimmed)) {
+            alert(`${trimmed} is already in the list.`);
+            return;
         }
+
+        const emptyIndex = this.playerEditorValues.findIndex(value => (value || '').trim().length === 0);
+        if (emptyIndex !== -1) {
+            this.playerEditorValues[emptyIndex] = trimmed;
+        } else if (this.playerEditorValues.length < 4) {
+            this.playerEditorValues.push(trimmed);
+        } else {
+            alert('Maximum 4 players allowed');
+            return;
+        }
+
+        this.renderEditablePlayerList();
+        this.updatePlayerNameHistory();
     }
 }
 

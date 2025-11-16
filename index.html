@@ -27,23 +27,15 @@
             <h2>Add Players</h2>
             <p class="screen-description">Enter 1-4 player names to get started</p>
             
-            <div class="player-input-container">
-                <div class="input-group">
-                    <input type="text" id="player1Input" placeholder="Player 1" maxlength="20">
-                    <button class="remove-btn" data-player="1" style="display: none;">×</button>
+            <div class="player-editor">
+                <div class="player-editor-header">
+                    <div>
+                        <h3>Players</h3>
+                        <p class="screen-description">Tap a name to edit. Drag to reorder. Max 4 players.</p>
+                    </div>
+                    <button id="addPlayerBtn" class="btn btn-secondary">Add Player</button>
                 </div>
-                <div class="input-group">
-                    <input type="text" id="player2Input" placeholder="Player 2" maxlength="20">
-                    <button class="remove-btn" data-player="2" style="display: none;">×</button>
-                </div>
-                <div class="input-group">
-                    <input type="text" id="player3Input" placeholder="Player 3 (Optional)" maxlength="20">
-                    <button class="remove-btn" data-player="3" style="display: none;">×</button>
-                </div>
-                <div class="input-group">
-                    <input type="text" id="player4Input" placeholder="Player 4 (Optional)" maxlength="20">
-                    <button class="remove-btn" data-player="4" style="display: none;">×</button>
-                </div>
+                <ul id="playerEditableList" class="player-editable-list"></ul>
             </div>
 
             <div class="current-players" id="currentPlayers" style="display: none;">
@@ -56,6 +48,14 @@
                 <h3>Previous Players</h3>
                 <p class="screen-description">Click a name to add to an empty slot</p>
                 <div id="playerHistoryList" class="player-history-list"></div>
+            </div>
+
+            <div class="player-lock" id="playerLockContainer" style="display: none;">
+                <h3>Home/Away Lock</h3>
+                <p class="screen-description">Choose one player to always appear on Home or Away.</p>
+                <div id="playerLockList" class="player-lock-list"></div>
+                <p class="player-lock-hint" id="playerLockHint" style="display: none;">Set the locked player to Neutral before selecting someone else.</p>
+                <p class="player-lock-hint" id="playerLockUnsavedHint" style="display: none;">Save player changes to update lock options.</p>
             </div>
 
             <div class="button-group">
