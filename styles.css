@@ -922,6 +922,109 @@ body.dark-mode .player-editable-item.active {
     .nav-btn span {
         font-size: 0.75rem;
     }
+    
+    /* Fix player editable items on mobile portrait */
+    .player-editable-item {
+        gap: 0.4rem;
+        padding: 0.5rem;
+        overflow: hidden;
+    }
+    
+    .player-name-input {
+        min-width: 0;
+        flex: 1;
+        font-size: 0.9rem;
+        padding: 0.5rem;
+    }
+    
+    .lock-select {
+        min-width: 0;
+        width: 85px;
+        font-size: 0.8rem;
+        padding: 0.4rem 0.35rem;
+        flex-shrink: 0;
+    }
+    
+    .drag-handle {
+        width: 26px;
+        height: 26px;
+        flex-shrink: 0;
+        font-size: 0.9rem;
+    }
+    
+    .delete-player-btn {
+        width: 30px;
+        height: 30px;
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+    
+    .player-actions {
+        flex-shrink: 0;
+    }
+    
+    /* Ensure player lock options wrap properly */
+    .player-lock-row {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    
+    .player-lock-name {
+        width: 100%;
+        margin-bottom: 0.25rem;
+    }
+    
+    .player-lock-options {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    
+    .lock-btn {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: 0.8rem;
+        padding: 0.35rem 0.5rem;
+    }
+}
+
+/* Extra small mobile devices (portrait phones) */
+@media (max-width: 375px) {
+    .screen {
+        padding: 0.75rem;
+    }
+    
+    .player-editor {
+        padding: 0.75rem;
+    }
+    
+    .player-editable-item {
+        gap: 0.3rem;
+        padding: 0.4rem;
+    }
+    
+    .player-name-input {
+        font-size: 0.85rem;
+        padding: 0.4rem;
+        min-width: 0;
+    }
+    
+    .lock-select {
+        width: 70px;
+        font-size: 0.7rem;
+        padding: 0.35rem 0.2rem;
+    }
+    
+    .drag-handle {
+        width: 24px;
+        height: 24px;
+        font-size: 0.85rem;
+    }
+    
+    .delete-player-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 0.9rem;
+    }
 }
 
 /* Loading and empty states */
