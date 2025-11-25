@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#2196F3">
     <meta name="description" content="FC 25 Score Tracker - Track your football match scores and statistics">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>FC 25 Score Tracker</title>
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="styles.css">
@@ -14,7 +17,10 @@
     <header class="app-header">
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <h1>FC 25 Score Tracker</h1>
-            <button id="darkModeToggle" class="dark-mode-toggle" title="Toggle Dark Mode">🌙</button>
+            <div style="display: flex; gap: 0.5rem;">
+                <button id="refreshAppBtn" class="dark-mode-toggle" title="Check for Updates" style="font-size: 1rem;">🔄</button>
+                <button id="darkModeToggle" class="dark-mode-toggle" title="Toggle Dark Mode">🌙</button>
+            </div>
         </div>
         <div class="season-info" id="seasonInfo" style="display: none;">
             <span>Season <span id="currentSeasonNumber">1</span></span>

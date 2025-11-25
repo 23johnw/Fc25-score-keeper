@@ -2487,6 +2487,12 @@ class AppController {
             darkModeToggle.addEventListener('click', () => this.toggleDarkMode());
             this.initializeDarkMode();
         }
+        
+        // Refresh/Update button
+        const refreshAppBtn = document.getElementById('refreshAppBtn');
+        if (refreshAppBtn) {
+            refreshAppBtn.addEventListener('click', () => this.checkForUpdates());
+        }
 
         // Navigation
         document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -3631,6 +3637,36 @@ class AppController {
         document.getElementById('darkModeToggle').textContent = isDark ? '☀️' : '🌙';
     }
 
+    // Check for app updates
+    async checkForUpdates() {
+        const refreshBtn = document.getElementById('refreshAppBtn');
+        if (refreshBtn) {
+            refreshBtn.disabled = true;
+            refreshBtn.textContent = '⏳';
+        }
+        
+        try {
+            if ('serviceWorker' in navigator) {
+                // Unregister all service workers
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                await Promise.all(registrations.map(reg => reg.unregister()));
+                
+                // Clear all caches
+                if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    await Promise.all(cacheNames.map(name => caches.delete(name)));
+                }
+            }
+            
+            // Force reload with cache bypass
+            window.location.href = window.location.href.split('?')[0] + '?v=' + Date.now();
+        } catch (error) {
+            console.error('Error checking for updates:', error);
+            // Fallback: reload
+            window.location.reload();
+        }
+    }
+
     // Add this method to display player name history
     updatePlayerNameHistory() {
         const history = this.playerManager.getPlayerNameHistory();
@@ -3696,14 +3732,52 @@ document.addEventListener('DOMContentLoaded', () => {
     new AppController();
 });
 
-// Register service worker for PWA
+// Register service worker for PWA with update checking
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/Fc25-score-keeper/service-worker.js', {
-            scope: '/Fc25-score-keeper/'
+            scope: '/Fc25-score-keeper/',
+            updateViaCache: 'none' // Always check for updates
         })
-            .then(reg => console.log('Service Worker registered'))
+            .then(reg => {
+                console.log('Service Worker registered');
+                
+                // Check for updates immediately
+                reg.update();
+                
+                // Check for updates periodically (every hour)
+                setInterval(() => {
+                    reg.update();
+                }, 3600000);
+                
+                // Listen for updates
+                reg.addEventListener('updatefound', () => {
+                    const newWorker = reg.installing;
+                    if (newWorker) {
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                // New service worker available
+                                console.log('New service worker available');
+                                // Show update notification
+                                if (confirm('A new version is available! Reload to update?')) {
+                                    window.location.reload();
+                                }
+                            }
+                        });
+                    }
+                });
+            })
             .catch(err => console.log('Service Worker registration failed:', err));
+        
+        // Listen for controller change (service worker updated)
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!refreshing) {
+                refreshing = true;
+                console.log('Service worker updated, reloading page...');
+                window.location.reload();
+            }
+        });
     });
 }
 
