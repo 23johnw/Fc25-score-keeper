@@ -2250,16 +2250,118 @@ class ShareManager {
                     });
                     yPos += 5;
                 } else {
-                    // Individual stats
+                    // Individual stats - format based on calculator type
                     doc.setFontSize(10);
                     doc.setTextColor(0, 0, 0);
-                    Object.entries(data).slice(0, 10).forEach(([key, value]) => {
+                    
+                    // Helper function to format statistic value
+                    const formatStatValue = (playerName, statValue, calcId) => {
+                        if (typeof statValue === 'object' && statValue !== null) {
+                            // Format based on calculator type
+                            if (calcId === 'totalGoals') {
+                                return `${playerName}: ${statValue.goals || 0} goals`;
+                            } else if (calcId === 'goalDifference') {
+                                return `${playerName}: GD ${statValue.goalDifference || 0} (GF: ${statValue.goalsFor || 0}, GA: ${statValue.goalsAgainst || 0})`;
+                            } else if (calcId === 'avgGoalsPerGame') {
+                                return `${playerName}: ${statValue.avgGoals || 0} avg (${statValue.totalGoals || 0} goals in ${statValue.games || 0} games)`;
+                            } else if (calcId === 'winLossDraw') {
+                                return `${playerName}: W: ${statValue.wins || 0}, D: ${statValue.draws || 0}, L: ${statValue.losses || 0}, GP: ${statValue.games || 0}`;
+                            } else if (calcId === 'winRate') {
+                                return `${playerName}: ${statValue.winRate || 0}% (${statValue.games || 0} games)`;
+                            } else if (calcId === 'streak') {
+                                const streakType = statValue.streakType === 'win' ? 'Wins' : statValue.streakType === 'loss' ? 'Losses' : 'None';
+                                return `${playerName}: ${statValue.currentStreak || 0} ${streakType}`;
+                            } else if (calcId === 'form') {
+                                const formStr = (statValue.form || []).slice(-5).map(f => f === 'W' ? 'W' : f === 'D' ? 'D' : 'L').join('');
+                                return `${playerName}: ${formStr || 'N/A'} (W: ${statValue.wins || 0}, D: ${statValue.draws || 0}, L: ${statValue.losses || 0}, Pts: ${(statValue.wins || 0) * 3 + (statValue.draws || 0)})`;
+                            } else if (calcId === 'leaguePoints') {
+                                return `${playerName}: ${statValue.points || 0} pts (W: ${statValue.wins || 0}, D: ${statValue.draws || 0}, L: ${statValue.losses || 0}, GP: ${statValue.games || 0})`;
+                            } else if (calcId === 'worstLosses') {
+                                // Format records
+                                const records = [];
+                                if (statValue.bestByGoalsFor) {
+                                    records.push(`Best GF: ${statValue.bestByGoalsFor.score} vs ${(statValue.bestByGoalsFor.opponents || []).join(' & ')}`);
+                                }
+                                if (statValue.bestBySurplus) {
+                                    records.push(`Best Surplus: ${statValue.bestBySurplus.score} vs ${(statValue.bestBySurplus.opponents || []).join(' & ')}`);
+                                }
+                                if (statValue.worstByGoalsAgainst) {
+                                    records.push(`Worst GA: ${statValue.worstByGoalsAgainst.score} vs ${(statValue.worstByGoalsAgainst.opponents || []).join(' & ')}`);
+                                }
+                                if (statValue.worstByDifference) {
+                                    records.push(`Worst Deficit: ${statValue.worstByDifference.score} vs ${(statValue.worstByDifference.opponents || []).join(' & ')}`);
+                                }
+                                return `${playerName}: ${records.length > 0 ? records.join(' | ') : 'No records yet'}`;
+                            } else if (calcId === 'headToHead') {
+                                // Head-to-head is more complex, show summary
+                                const together = statValue.together || {};
+                                const against = statValue.against || {};
+                                return `${playerName}: Together (W: ${together.wins || 0}, D: ${together.draws || 0}, L: ${together.losses || 0}) | Against (W: ${against.wins || 0}, D: ${against.draws || 0}, L: ${against.losses || 0})`;
+                            } else {
+                                // Generic formatting - show all numeric properties
+                                const props = Object.entries(statValue)
+                                    .filter(([k, v]) => typeof v === 'number')
+                                    .map(([k, v]) => `${k}: ${v}`)
+                                    .join(', ');
+                                return `${playerName}: ${props || 'N/A'}`;
+                            }
+                        } else {
+                            // Simple value
+                            return `${playerName}: ${statValue}`;
+                        }
+                    };
+                    
+                    // Sort entries based on calculator type for better display
+                    let sortedEntries = Object.entries(data);
+                    if (calculator.id === 'totalGoals') {
+                        sortedEntries = sortedEntries.sort((a, b) => (b[1].goals || 0) - (a[1].goals || 0));
+                    } else if (calculator.id === 'goalDifference') {
+                        sortedEntries = sortedEntries.sort((a, b) => (b[1].goalDifference || 0) - (a[1].goalDifference || 0));
+                    } else if (calculator.id === 'avgGoalsPerGame') {
+                        sortedEntries = sortedEntries.sort((a, b) => parseFloat(b[1].avgGoals || 0) - parseFloat(a[1].avgGoals || 0));
+                    } else if (calculator.id === 'winLossDraw') {
+                        sortedEntries = sortedEntries.sort((a, b) => {
+                            if (b[1].games !== a[1].games) {
+                                return b[1].games - a[1].games;
+                            }
+                            return b[1].wins - a[1].wins;
+                        });
+                    } else if (calculator.id === 'winRate') {
+                        sortedEntries = sortedEntries.sort((a, b) => {
+                            const rateA = parseFloat(a[1].winRate || 0);
+                            const rateB = parseFloat(b[1].winRate || 0);
+                            if (rateB !== rateA) {
+                                return rateB - rateA;
+                            }
+                            return b[1].games - a[1].games;
+                        });
+                    } else if (calculator.id === 'streak') {
+                        sortedEntries = sortedEntries.sort((a, b) => (b[1].currentStreak || 0) - (a[1].currentStreak || 0));
+                    } else if (calculator.id === 'form' || calculator.id === 'leaguePoints') {
+                        sortedEntries = sortedEntries.sort((a, b) => {
+                            const pointsA = (b[1].wins || 0) * 3 + (b[1].draws || 0);
+                            const pointsB = (a[1].wins || 0) * 3 + (a[1].draws || 0);
+                            return pointsA - pointsB;
+                        });
+                    }
+                    
+                    sortedEntries.slice(0, 15).forEach(([playerName, statValue]) => {
                         if (yPos > 270) {
                             doc.addPage();
                             yPos = 20;
                         }
-                        doc.text(`${key}: ${value}`, 25, yPos);
-                        yPos += 7;
+                        const formattedText = formatStatValue(playerName, statValue, calculator.id);
+                        // Split long text across multiple lines if needed
+                        const maxWidth = 170; // mm
+                        const lines = doc.splitTextToSize(formattedText, maxWidth);
+                        lines.forEach((line, lineIndex) => {
+                            if (yPos > 270) {
+                                doc.addPage();
+                                yPos = 20;
+                            }
+                            doc.text(line, 25, yPos);
+                            yPos += 7;
+                        });
                     });
                     yPos += 5;
                 }
