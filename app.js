@@ -3431,7 +3431,9 @@ class AppController {
             } else {
                 console.error('Failed to save players');
                 this.toastManager.error('Error saving players');
-            } else {
+            }
+            
+            if (success) {
                 this.toastManager.success('Players saved successfully!');
             }
         } catch (error) {
