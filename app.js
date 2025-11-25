@@ -1849,6 +1849,100 @@ class StatisticsTracker {
 }
 
 // ============================================================================
+// ToastManager - Toast Notifications
+// ============================================================================
+
+class ToastManager {
+    constructor() {
+        this.container = document.getElementById('toastContainer');
+        if (!this.container) {
+            this.container = document.createElement('div');
+            this.container.id = 'toastContainer';
+            this.container.className = 'toast-container';
+            document.body.appendChild(this.container);
+        }
+    }
+
+    show(message, type = 'info', duration = 3000, title = null) {
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        
+        const icons = {
+            success: '✅',
+            error: '❌',
+            warning: '⚠️',
+            info: 'ℹ️'
+        };
+
+        const icon = icons[type] || icons.info;
+        
+        toast.innerHTML = `
+            <span class="toast-icon">${icon}</span>
+            <div class="toast-content">
+                ${title ? `<div class="toast-title">${this.escapeHtml(title)}</div>` : ''}
+                <div class="toast-message">${this.escapeHtml(message)}</div>
+            </div>
+            <button class="toast-close" aria-label="Close">×</button>
+        `;
+
+        this.container.appendChild(toast);
+
+        // Auto remove after duration
+        const autoRemove = setTimeout(() => {
+            this.remove(toast);
+        }, duration);
+
+        // Manual close
+        const closeBtn = toast.querySelector('.toast-close');
+        closeBtn.addEventListener('click', () => {
+            clearTimeout(autoRemove);
+            this.remove(toast);
+        });
+
+        // Trigger animation
+        requestAnimationFrame(() => {
+            toast.style.animation = 'toastSlideIn 0.3s ease-out';
+        });
+
+        return toast;
+    }
+
+    remove(toast) {
+        toast.classList.add('slide-out');
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 300);
+    }
+
+    success(message, title = null, duration = 3000) {
+        return this.show(message, 'success', duration, title);
+    }
+
+    error(message, title = null, duration = 4000) {
+        return this.show(message, 'error', duration, title);
+    }
+
+    warning(message, title = null, duration = 3500) {
+        return this.show(message, 'warning', duration, title);
+    }
+
+    info(message, title = null, duration = 3000) {
+        return this.show(message, 'info', duration, title);
+    }
+
+    escapeHtml(str = '') {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+}
+
+// ============================================================================
 // StatisticsDisplay - Render Statistics
 // ============================================================================
 
@@ -2683,6 +2777,17 @@ class ShareManager {
         document.body.removeChild(link);
     }
 
+    // Haptic Feedback Helper
+    vibrate(pattern = [50]) {
+        if ('vibrate' in navigator) {
+            try {
+                navigator.vibrate(pattern);
+            } catch (e) {
+                // Vibration not supported or failed
+            }
+        }
+    }
+
     // Load external script
     loadScript(src) {
         return new Promise((resolve, reject) => {
@@ -2707,6 +2812,7 @@ class AppController {
     constructor() {
         this.storage = new LocalStorageManager();
         this.settingsManager = new SettingsManager(this.storage);
+        this.toastManager = new ToastManager();
         this.playerManager = new PlayerManager(this.storage);
         this.teamGenerator = new TeamGenerator();
         this.seasonManager = new SeasonManager(this.storage);
@@ -3251,7 +3357,7 @@ class AppController {
         }
 
         if (this.hasUnsavedPlayerChanges) {
-            alert('Please save players before changing home/away settings.');
+            this.toastManager.warning('Please save players before changing home/away settings.');
             return;
         }
 
@@ -3263,7 +3369,7 @@ class AppController {
 
         const players = this.playerManager.getPlayers();
         if (!Array.isArray(players) || !players.includes(trimmed)) {
-            alert('Save players before changing home/away settings.');
+            this.toastManager.warning('Save players before changing home/away settings.');
             return;
         }
 
@@ -3292,14 +3398,14 @@ class AppController {
         const players = rawPlayers.filter((name, index) => rawPlayers.indexOf(name) === index);
 
         if (players.length !== rawPlayers.length) {
-            alert('Duplicate player names detected. Please ensure each player has a unique name.');
+            this.toastManager.error('Duplicate player names detected. Please ensure each player has a unique name.', 'Validation Error');
             return;
         }
 
         console.log('Players extracted:', players); // Debug log
 
         if (players.length < 2) {
-            alert('Please enter at least 2 players');
+            this.toastManager.warning('Please enter at least 2 players', 'Player Requirement');
             return;
         }
 
@@ -3324,11 +3430,13 @@ class AppController {
                 this.showScreen('teamScreen');
             } else {
                 console.error('Failed to save players');
-                alert('Error saving players');
+                this.toastManager.error('Error saving players');
+            } else {
+                this.toastManager.success('Players saved successfully!');
             }
         } catch (error) {
             console.error('Error in savePlayers:', error);
-            alert('Error saving players: ' + error.message);
+            this.toastManager.error('Error saving players: ' + error.message);
         }
     }
 
@@ -3439,9 +3547,12 @@ class AppController {
 
     confirmSequence() {
         if (this.selectedStructureIndex === null || !this.selectedStructure) {
-            alert('Please select a round structure');
+            this.toastManager.warning('Please select a round structure', 'Selection Required');
             return;
         }
+        
+        // Haptic feedback
+        this.vibrate([30, 50, 30]);
         this.showScreen('sequenceScreen');
     }
 
@@ -3532,7 +3643,7 @@ class AppController {
                 this.showCurrentMatch();
             }
         } else {
-            alert('Error recording match result');
+            this.toastManager.error('Error recording match result');
         }
     }
 
@@ -3725,9 +3836,9 @@ class AppController {
             if (this.seasonManager.startNewSeason()) {
                 this.updateSeasonInfo();
                 this.switchStatsTab('season');
-                alert('New season started!');
+                this.toastManager.success('New season started!', 'Season Reset');
             } else {
-                alert('Error starting new season');
+                this.toastManager.error('Error starting new season');
             }
         }
     }
@@ -3748,7 +3859,7 @@ class AppController {
                 const currentTab = activeTab ? activeTab.dataset.tab : 'season';
                 this.switchStatsTab(currentTab);
             } else {
-                alert('Error clearing statistics');
+                this.toastManager.error('Error clearing statistics');
             }
         }
     }
@@ -3822,7 +3933,7 @@ class AppController {
             await this.shareManager.exportLeaderboardPDF(statsType, category);
         } catch (error) {
             console.error('Error exporting PDF:', error);
-            alert('Error exporting PDF. Please try again.');
+            this.toastManager.error('Error exporting PDF. Please try again.');
         }
     }
 
@@ -3831,7 +3942,7 @@ class AppController {
         try {
             const matchInfo = this.matchRecorder.findMatch(timestamp);
             if (!matchInfo) {
-                alert('Match not found');
+                this.toastManager.error('Match not found');
                 return;
             }
             
@@ -3909,8 +4020,9 @@ class AppController {
         }
 
         if (allMatches.length === 0) {
-            listContainer.innerHTML = '<div class="empty-state"><p>No matches found.</p></div>';
-            timelineContainer.innerHTML = '<div class="empty-state"><p>No matches found.</p></div>';
+            const emptyMessage = '<div class="empty-state"><div class="empty-state-icon">📅</div><h3>No Matches Found</h3><p>Try adjusting your filters or start recording matches!</p></div>';
+            listContainer.innerHTML = emptyMessage;
+            timelineContainer.innerHTML = emptyMessage;
             return;
         }
 
@@ -4103,6 +4215,9 @@ class AppController {
         const team2Score = parseInt(document.getElementById('editTeam2Score').value) || 0;
 
         if (this.matchRecorder.updateMatch(this.editingMatchTimestamp, team1Score, team2Score)) {
+            // Haptic feedback
+            this.vibrate([50]);
+            this.toastManager.success('Match updated successfully', 'Match Saved');
             this.closeEditModal();
             this.loadMatchHistory();
             // Refresh stats if on stats screen
@@ -4112,7 +4227,7 @@ class AppController {
                 this.switchStatsTab(currentTab);
             }
         } else {
-            alert('Error updating match');
+            this.toastManager.error('Error updating match');
         }
     }
 
@@ -4126,6 +4241,9 @@ class AppController {
 
     deleteMatch(timestamp) {
         if (this.matchRecorder.deleteMatch(timestamp)) {
+            // Haptic feedback
+            this.vibrate([100, 50, 100]);
+            this.toastManager.success('Match deleted successfully', 'Match Removed');
             this.closeEditModal();
             this.loadMatchHistory();
             // Refresh stats if on stats screen
@@ -4135,7 +4253,7 @@ class AppController {
                 this.switchStatsTab(currentTab);
             }
         } else {
-            alert('Error deleting match');
+            this.toastManager.error('Error deleting match');
         }
     }
 
