@@ -2178,20 +2178,92 @@ class ShareManager {
             title = 'Overall Statistics';
         }
         
+        // Helper function to draw a table
+        const drawTable = (headers, rows, startY, colWidths, headerColor = [33, 150, 243]) => {
+            let currentY = startY;
+            const pageWidth = 210;
+            const margin = 15;
+            const tableWidth = pageWidth - (margin * 2);
+            
+            // Draw header background
+            doc.setFillColor(...headerColor);
+            doc.rect(margin, currentY - 5, tableWidth, 7, 'F');
+            
+            // Draw header text
+            doc.setFontSize(9);
+            doc.setTextColor(255, 255, 255);
+            doc.setFont(undefined, 'bold');
+            let xPos = margin + 2;
+            headers.forEach((header, i) => {
+                doc.text(header, xPos, currentY);
+                xPos += colWidths[i];
+            });
+            
+            currentY += 5;
+            
+            // Draw rows
+            doc.setFontSize(8);
+            doc.setTextColor(0, 0, 0);
+            doc.setFont(undefined, 'normal');
+            
+            rows.forEach((row, rowIndex) => {
+                // Check if we need a new page
+                if (currentY > 270) {
+                    doc.addPage();
+                    currentY = 20;
+                    // Redraw header on new page
+                    doc.setFillColor(...headerColor);
+                    doc.rect(margin, currentY - 5, tableWidth, 7, 'F');
+                    doc.setFontSize(9);
+                    doc.setTextColor(255, 255, 255);
+                    doc.setFont(undefined, 'bold');
+                    xPos = margin + 2;
+                    headers.forEach((header, i) => {
+                        doc.text(header, xPos, currentY);
+                        xPos += colWidths[i];
+                    });
+                    currentY += 5;
+                    doc.setFontSize(8);
+                    doc.setTextColor(0, 0, 0);
+                    doc.setFont(undefined, 'normal');
+                }
+                
+                // Alternate row background
+                if (rowIndex % 2 === 0) {
+                    doc.setFillColor(245, 245, 245);
+                    doc.rect(margin, currentY - 4, tableWidth, 5, 'F');
+                }
+                
+                // Draw row text
+                xPos = margin + 2;
+                row.forEach((cell, i) => {
+                    const cellText = String(cell || '').substring(0, 25); // Limit text length
+                    doc.text(cellText, xPos, currentY);
+                    xPos += colWidths[i];
+                });
+                
+                currentY += 5;
+            });
+            
+            return currentY + 3;
+        };
+        
         // Header
         doc.setFontSize(20);
         doc.setTextColor(33, 150, 243);
+        doc.setFont(undefined, 'bold');
         doc.text('FC 25 Score Tracker', 105, 20, { align: 'center' });
         
-        doc.setFontSize(16);
+        doc.setFontSize(14);
         doc.setTextColor(0, 0, 0);
-        doc.text(title, 105, 30, { align: 'center' });
+        doc.text(title, 105, 28, { align: 'center' });
         
-        doc.setFontSize(10);
+        doc.setFontSize(9);
         doc.setTextColor(117, 117, 117);
-        doc.text(new Date().toLocaleDateString(), 105, 37, { align: 'center' });
+        doc.setFont(undefined, 'normal');
+        doc.text(new Date().toLocaleDateString(), 105, 35, { align: 'center' });
         
-        let yPos = 50;
+        let yPos = 42;
         
         // Get calculators
         let calculators;
@@ -2204,166 +2276,201 @@ class ShareManager {
         calculators.forEach(calculator => {
             const data = stats[calculator.id];
             if (data && Object.keys(data).length > 0) {
-                // Add page break if needed
+                // Check if we need a new page
                 if (yPos > 250) {
                     doc.addPage();
                     yPos = 20;
                 }
                 
                 // Category title
-                doc.setFontSize(14);
+                doc.setFontSize(12);
                 doc.setTextColor(33, 150, 243);
                 doc.setFont(undefined, 'bold');
-                doc.text(calculator.name, 20, yPos);
-                yPos += 10;
+                doc.text(calculator.name, 15, yPos);
+                yPos += 8;
                 
-                // Draw stats
-                if (calculator.id === 'league-table') {
-                    // League table
-                    doc.setFontSize(10);
-                    doc.setTextColor(0, 0, 0);
-                    doc.setFont(undefined, 'bold');
-                    
-                    // Header
-                    doc.text('Pos', 20, yPos);
-                    doc.text('Player', 35, yPos);
-                    doc.text('W', 100, yPos);
-                    doc.text('L', 110, yPos);
-                    doc.text('D', 120, yPos);
-                    doc.text('Pts', 130, yPos);
-                    yPos += 7;
-                    
-                    // Rows
-                    doc.setFont(undefined, 'normal');
-                    data.slice(0, 15).forEach((row, index) => {
-                        if (yPos > 270) {
-                            doc.addPage();
-                            yPos = 20;
-                        }
-                        doc.text((index + 1).toString(), 20, yPos);
-                        doc.text((row.player || row.name || 'Unknown').substring(0, 20), 35, yPos);
-                        doc.text((row.wins || 0).toString(), 100, yPos);
-                        doc.text((row.losses || 0).toString(), 110, yPos);
-                        doc.text((row.draws || 0).toString(), 120, yPos);
-                        doc.text((row.points || 0).toString(), 130, yPos);
-                        yPos += 7;
-                    });
-                    yPos += 5;
-                } else {
-                    // Individual stats - format based on calculator type
-                    doc.setFontSize(10);
-                    doc.setTextColor(0, 0, 0);
-                    
-                    // Helper function to format statistic value
-                    const formatStatValue = (playerName, statValue, calcId) => {
-                        if (typeof statValue === 'object' && statValue !== null) {
-                            // Format based on calculator type
-                            if (calcId === 'totalGoals') {
-                                return `${playerName}: ${statValue.goals || 0} goals`;
-                            } else if (calcId === 'goalDifference') {
-                                return `${playerName}: GD ${statValue.goalDifference || 0} (GF: ${statValue.goalsFor || 0}, GA: ${statValue.goalsAgainst || 0})`;
-                            } else if (calcId === 'avgGoalsPerGame') {
-                                return `${playerName}: ${statValue.avgGoals || 0} avg (${statValue.totalGoals || 0} goals in ${statValue.games || 0} games)`;
-                            } else if (calcId === 'winLossDraw') {
-                                return `${playerName}: W: ${statValue.wins || 0}, D: ${statValue.draws || 0}, L: ${statValue.losses || 0}, GP: ${statValue.games || 0}`;
-                            } else if (calcId === 'winRate') {
-                                return `${playerName}: ${statValue.winRate || 0}% (${statValue.games || 0} games)`;
-                            } else if (calcId === 'streak') {
-                                const streakType = statValue.streakType === 'win' ? 'Wins' : statValue.streakType === 'loss' ? 'Losses' : 'None';
-                                return `${playerName}: ${statValue.currentStreak || 0} ${streakType}`;
-                            } else if (calcId === 'form') {
-                                const formStr = (statValue.form || []).slice(-5).map(f => f === 'W' ? 'W' : f === 'D' ? 'D' : 'L').join('');
-                                return `${playerName}: ${formStr || 'N/A'} (W: ${statValue.wins || 0}, D: ${statValue.draws || 0}, L: ${statValue.losses || 0}, Pts: ${(statValue.wins || 0) * 3 + (statValue.draws || 0)})`;
-                            } else if (calcId === 'leaguePoints') {
-                                return `${playerName}: ${statValue.points || 0} pts (W: ${statValue.wins || 0}, D: ${statValue.draws || 0}, L: ${statValue.losses || 0}, GP: ${statValue.games || 0})`;
-                            } else if (calcId === 'worstLosses') {
-                                // Format records
-                                const records = [];
-                                if (statValue.bestByGoalsFor) {
-                                    records.push(`Best GF: ${statValue.bestByGoalsFor.score} vs ${(statValue.bestByGoalsFor.opponents || []).join(' & ')}`);
-                                }
-                                if (statValue.bestBySurplus) {
-                                    records.push(`Best Surplus: ${statValue.bestBySurplus.score} vs ${(statValue.bestBySurplus.opponents || []).join(' & ')}`);
-                                }
-                                if (statValue.worstByGoalsAgainst) {
-                                    records.push(`Worst GA: ${statValue.worstByGoalsAgainst.score} vs ${(statValue.worstByGoalsAgainst.opponents || []).join(' & ')}`);
-                                }
-                                if (statValue.worstByDifference) {
-                                    records.push(`Worst Deficit: ${statValue.worstByDifference.score} vs ${(statValue.worstByDifference.opponents || []).join(' & ')}`);
-                                }
-                                return `${playerName}: ${records.length > 0 ? records.join(' | ') : 'No records yet'}`;
-                            } else if (calcId === 'headToHead') {
-                                // Head-to-head is more complex, show summary
-                                const together = statValue.together || {};
-                                const against = statValue.against || {};
-                                return `${playerName}: Together (W: ${together.wins || 0}, D: ${together.draws || 0}, L: ${together.losses || 0}) | Against (W: ${against.wins || 0}, D: ${against.draws || 0}, L: ${against.losses || 0})`;
-                            } else {
-                                // Generic formatting - show all numeric properties
-                                const props = Object.entries(statValue)
-                                    .filter(([k, v]) => typeof v === 'number')
-                                    .map(([k, v]) => `${k}: ${v}`)
-                                    .join(', ');
-                                return `${playerName}: ${props || 'N/A'}`;
-                            }
-                        } else {
-                            // Simple value
-                            return `${playerName}: ${statValue}`;
-                        }
-                    };
-                    
-                    // Sort entries based on calculator type for better display
-                    let sortedEntries = Object.entries(data);
-                    if (calculator.id === 'totalGoals') {
-                        sortedEntries = sortedEntries.sort((a, b) => (b[1].goals || 0) - (a[1].goals || 0));
-                    } else if (calculator.id === 'goalDifference') {
-                        sortedEntries = sortedEntries.sort((a, b) => (b[1].goalDifference || 0) - (a[1].goalDifference || 0));
-                    } else if (calculator.id === 'avgGoalsPerGame') {
-                        sortedEntries = sortedEntries.sort((a, b) => parseFloat(b[1].avgGoals || 0) - parseFloat(a[1].avgGoals || 0));
-                    } else if (calculator.id === 'winLossDraw') {
-                        sortedEntries = sortedEntries.sort((a, b) => {
-                            if (b[1].games !== a[1].games) {
-                                return b[1].games - a[1].games;
-                            }
-                            return b[1].wins - a[1].wins;
-                        });
-                    } else if (calculator.id === 'winRate') {
-                        sortedEntries = sortedEntries.sort((a, b) => {
-                            const rateA = parseFloat(a[1].winRate || 0);
-                            const rateB = parseFloat(b[1].winRate || 0);
-                            if (rateB !== rateA) {
-                                return rateB - rateA;
-                            }
+                // Sort entries based on calculator type
+                let sortedEntries = Object.entries(data);
+                if (calculator.id === 'totalGoals') {
+                    sortedEntries = sortedEntries.sort((a, b) => (b[1].goals || 0) - (a[1].goals || 0));
+                } else if (calculator.id === 'goalDifference') {
+                    sortedEntries = sortedEntries.sort((a, b) => (b[1].goalDifference || 0) - (a[1].goalDifference || 0));
+                } else if (calculator.id === 'avgGoalsPerGame') {
+                    sortedEntries = sortedEntries.sort((a, b) => parseFloat(b[1].avgGoals || 0) - parseFloat(a[1].avgGoals || 0));
+                } else if (calculator.id === 'winLossDraw') {
+                    sortedEntries = sortedEntries.sort((a, b) => {
+                        if (b[1].games !== a[1].games) {
                             return b[1].games - a[1].games;
-                        });
-                    } else if (calculator.id === 'streak') {
-                        sortedEntries = sortedEntries.sort((a, b) => (b[1].currentStreak || 0) - (a[1].currentStreak || 0));
-                    } else if (calculator.id === 'form' || calculator.id === 'leaguePoints') {
-                        sortedEntries = sortedEntries.sort((a, b) => {
-                            const pointsA = (b[1].wins || 0) * 3 + (b[1].draws || 0);
-                            const pointsB = (a[1].wins || 0) * 3 + (a[1].draws || 0);
-                            return pointsA - pointsB;
-                        });
-                    }
-                    
-                    sortedEntries.slice(0, 15).forEach(([playerName, statValue]) => {
-                        if (yPos > 270) {
-                            doc.addPage();
-                            yPos = 20;
                         }
-                        const formattedText = formatStatValue(playerName, statValue, calculator.id);
-                        // Split long text across multiple lines if needed
-                        const maxWidth = 170; // mm
-                        const lines = doc.splitTextToSize(formattedText, maxWidth);
-                        lines.forEach((line, lineIndex) => {
-                            if (yPos > 270) {
-                                doc.addPage();
-                                yPos = 20;
-                            }
-                            doc.text(line, 25, yPos);
-                            yPos += 7;
-                        });
+                        return b[1].wins - a[1].wins;
                     });
-                    yPos += 5;
+                } else if (calculator.id === 'winRate') {
+                    sortedEntries = sortedEntries.sort((a, b) => {
+                        const rateA = parseFloat(a[1].winRate || 0);
+                        const rateB = parseFloat(b[1].winRate || 0);
+                        if (rateB !== rateA) {
+                            return rateB - rateA;
+                        }
+                        return b[1].games - a[1].games;
+                    });
+                } else if (calculator.id === 'streak') {
+                    sortedEntries = sortedEntries.sort((a, b) => (b[1].currentStreak || 0) - (a[1].currentStreak || 0));
+                } else if (calculator.id === 'form' || calculator.id === 'leaguePoints') {
+                    sortedEntries = sortedEntries.sort((a, b) => {
+                        const pointsA = (b[1].wins || 0) * 3 + (b[1].draws || 0);
+                        const pointsB = (a[1].wins || 0) * 3 + (a[1].draws || 0);
+                        return pointsA - pointsB;
+                    });
+                }
+                
+                // Format data into table rows based on calculator type
+                let headers = [];
+                let rows = [];
+                let colWidths = [];
+                
+                if (calculator.id === 'leaguePoints' || calculator.id === 'league-table') {
+                    // League table format
+                    headers = ['Pos', 'Player', 'Pts', 'W', 'D', 'L', 'GP'];
+                    colWidths = [12, 60, 18, 15, 15, 15, 18];
+                    if (Array.isArray(data)) {
+                        rows = data.slice(0, 20).map((row, index) => [
+                            (index + 1).toString(),
+                            (row.player || row.name || 'Unknown').substring(0, 20),
+                            (row.points || 0).toString(),
+                            (row.wins || 0).toString(),
+                            (row.draws || 0).toString(),
+                            (row.losses || 0).toString(),
+                            (row.games || 0).toString()
+                        ]);
+                    } else {
+                        rows = sortedEntries.slice(0, 20).map(([player, stats], index) => [
+                            (index + 1).toString(),
+                            player.substring(0, 20),
+                            (stats.points || 0).toString(),
+                            (stats.wins || 0).toString(),
+                            (stats.draws || 0).toString(),
+                            (stats.losses || 0).toString(),
+                            (stats.games || 0).toString()
+                        ]);
+                    }
+                } else if (calculator.id === 'totalGoals') {
+                    headers = ['Pos', 'Player', 'Goals'];
+                    colWidths = [12, 120, 30];
+                    rows = sortedEntries.slice(0, 20).map(([player, stats], index) => [
+                        (index + 1).toString(),
+                        player.substring(0, 25),
+                        (stats.goals || 0).toString()
+                    ]);
+                } else if (calculator.id === 'goalDifference') {
+                    headers = ['Pos', 'Player', 'GD', 'GF', 'GA'];
+                    colWidths = [12, 80, 20, 20, 20];
+                    rows = sortedEntries.slice(0, 20).map(([player, stats], index) => [
+                        (index + 1).toString(),
+                        player.substring(0, 20),
+                        (stats.goalDifference || 0).toString(),
+                        (stats.goalsFor || 0).toString(),
+                        (stats.goalsAgainst || 0).toString()
+                    ]);
+                } else if (calculator.id === 'avgGoalsPerGame') {
+                    headers = ['Pos', 'Player', 'Avg', 'GF', 'GP'];
+                    colWidths = [12, 80, 25, 25, 25];
+                    rows = sortedEntries.slice(0, 20).map(([player, stats], index) => [
+                        (index + 1).toString(),
+                        player.substring(0, 20),
+                        (stats.avgGoals || 0).toString(),
+                        (stats.totalGoals || 0).toString(),
+                        (stats.games || 0).toString()
+                    ]);
+                } else if (calculator.id === 'winLossDraw') {
+                    headers = ['Pos', 'Player', 'GP', 'W', 'D', 'L'];
+                    colWidths = [12, 80, 20, 20, 20, 20];
+                    rows = sortedEntries.slice(0, 20).map(([player, stats], index) => [
+                        (index + 1).toString(),
+                        player.substring(0, 20),
+                        (stats.games || 0).toString(),
+                        (stats.wins || 0).toString(),
+                        (stats.draws || 0).toString(),
+                        (stats.losses || 0).toString()
+                    ]);
+                } else if (calculator.id === 'winRate') {
+                    headers = ['Pos', 'Player', 'Win %', 'GP'];
+                    colWidths = [12, 100, 30, 30];
+                    rows = sortedEntries.slice(0, 20).map(([player, stats], index) => [
+                        (index + 1).toString(),
+                        player.substring(0, 25),
+                        `${(stats.winRate || 0)}%`,
+                        (stats.games || 0).toString()
+                    ]);
+                } else if (calculator.id === 'streak') {
+                    headers = ['Pos', 'Player', 'Streak', 'Type'];
+                    colWidths = [12, 100, 25, 35];
+                    rows = sortedEntries.slice(0, 20).map(([player, stats], index) => {
+                        const streakType = stats.streakType === 'win' ? 'Wins' : stats.streakType === 'loss' ? 'Losses' : 'None';
+                        return [
+                            (index + 1).toString(),
+                            player.substring(0, 25),
+                            (stats.currentStreak || 0).toString(),
+                            streakType
+                        ];
+                    });
+                } else if (calculator.id === 'form') {
+                    headers = ['Pos', 'Player', 'Form', 'W', 'D', 'L', 'Pts'];
+                    colWidths = [12, 70, 25, 15, 15, 15, 20];
+                    rows = sortedEntries.slice(0, 20).map(([player, stats], index) => {
+                        const formStr = (stats.form || []).slice(-5).map(f => f === 'W' ? 'W' : f === 'D' ? 'D' : 'L').join('');
+                        const points = (stats.wins || 0) * 3 + (stats.draws || 0);
+                        return [
+                            (index + 1).toString(),
+                            player.substring(0, 18),
+                            formStr || 'N/A',
+                            (stats.wins || 0).toString(),
+                            (stats.draws || 0).toString(),
+                            (stats.losses || 0).toString(),
+                            points.toString()
+                        ];
+                    });
+                } else if (calculator.id === 'worstLosses') {
+                    headers = ['Player', 'Record'];
+                    colWidths = [50, 130];
+                    rows = sortedEntries.slice(0, 15).map(([player, stats]) => {
+                        const records = [];
+                        if (stats.bestByGoalsFor) {
+                            records.push(`Best GF: ${stats.bestByGoalsFor.score}`);
+                        }
+                        if (stats.worstByGoalsAgainst) {
+                            records.push(`Worst GA: ${stats.worstByGoalsAgainst.score}`);
+                        }
+                        return [
+                            player.substring(0, 20),
+                            records.length > 0 ? records.join(', ') : 'No records'
+                        ];
+                    });
+                } else if (calculator.id === 'headToHead') {
+                    headers = ['Players', 'Together (W-D-L)', 'Against (W-D-L)'];
+                    colWidths = [60, 50, 50];
+                    rows = sortedEntries.slice(0, 15).map(([pair, stats]) => {
+                        const together = stats.together || {};
+                        const against = stats.against || {};
+                        return [
+                            pair.substring(0, 20),
+                            `${together.wins || 0}-${together.draws || 0}-${together.losses || 0}`,
+                            `${against.wins || 0}-${against.draws || 0}-${against.losses || 0}`
+                        ];
+                    });
+                } else {
+                    // Generic table for other stats
+                    headers = ['Player', 'Value'];
+                    colWidths = [100, 80];
+                    rows = sortedEntries.slice(0, 20).map(([player, stats]) => {
+                        const value = typeof stats === 'object' 
+                            ? Object.entries(stats).filter(([k, v]) => typeof v === 'number').map(([k, v]) => `${k}:${v}`).join(', ')
+                            : String(stats);
+                        return [player.substring(0, 25), value.substring(0, 30)];
+                    });
+                }
+                
+                if (rows.length > 0) {
+                    yPos = drawTable(headers, rows, yPos, colWidths);
                 }
             }
         });
