@@ -112,6 +112,114 @@ class LocalStorageManager {
 }
 
 // ============================================================================
+// SettingsManager - Settings Management
+// ============================================================================
+
+class SettingsManager {
+    constructor(storageManager) {
+        this.storage = storageManager;
+        this.settingsKey = 'fc25_settings';
+        this.settings = this.loadSettings();
+    }
+
+    getDefaultSettings() {
+        return {
+            labels: {
+                home: 'Home',
+                away: 'Away',
+                neutral: 'Neutral'
+            },
+            playerColors: {},
+            darkMode: false
+        };
+    }
+
+    loadSettings() {
+        try {
+            const stored = localStorage.getItem(this.settingsKey);
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                return { ...this.getDefaultSettings(), ...parsed };
+            }
+        } catch (error) {
+            console.error('Error loading settings:', error);
+        }
+        return this.getDefaultSettings();
+    }
+
+    saveSettings() {
+        try {
+            localStorage.setItem(this.settingsKey, JSON.stringify(this.settings));
+            return true;
+        } catch (error) {
+            console.error('Error saving settings:', error);
+            return false;
+        }
+    }
+
+    getSettings() {
+        return this.settings;
+    }
+
+    updateSettings(updater) {
+        updater(this.settings);
+        return this.saveSettings();
+    }
+
+    getLabel(type) {
+        return this.settings.labels[type] || this.getDefaultSettings().labels[type];
+    }
+
+    setLabel(type, value) {
+        if (['home', 'away', 'neutral'].includes(type)) {
+            this.settings.labels[type] = value || this.getDefaultSettings().labels[type];
+            return this.saveSettings();
+        }
+        return false;
+    }
+
+    getPlayerColor(playerName) {
+        return this.settings.playerColors[playerName] || null;
+    }
+
+    setPlayerColor(playerName, color) {
+        if (playerName && color) {
+            this.settings.playerColors[playerName] = color;
+            return this.saveSettings();
+        }
+        return false;
+    }
+
+    removePlayerColor(playerName) {
+        if (this.settings.playerColors[playerName]) {
+            delete this.settings.playerColors[playerName];
+            return this.saveSettings();
+        }
+        return false;
+    }
+
+    isDarkMode() {
+        return this.settings.darkMode || false;
+    }
+
+    setDarkMode(enabled) {
+        this.settings.darkMode = enabled;
+        this.saveSettings();
+        return enabled;
+    }
+
+    resetLabels() {
+        this.settings.labels = { ...this.getDefaultSettings().labels };
+        return this.saveSettings();
+    }
+
+    resetAll() {
+        this.settings = this.getDefaultSettings();
+        return this.saveSettings();
+    }
+}
+
+// ============================================================================
 // PlayerManager - Player CRUD Operations
 // ============================================================================
 
@@ -2549,6 +2657,7 @@ class ShareManager {
 class AppController {
     constructor() {
         this.storage = new LocalStorageManager();
+        this.settingsManager = new SettingsManager(this.storage);
         this.playerManager = new PlayerManager(this.storage);
         this.teamGenerator = new TeamGenerator();
         this.seasonManager = new SeasonManager(this.storage);
@@ -2565,14 +2674,19 @@ class AppController {
         this.editingMatchTimestamp = null;
         this.playerEditorValues = [];
         this.hasUnsavedPlayerChanges = false;
-        this.lockLabels = {
-            home: 'Home',
-            neutral: 'Neutral',
-            away: 'Away'
-        };
         
         this.initializeEventListeners();
         this.initializeApp();
+        this.updateLockLabels();
+    }
+    
+    updateLockLabels() {
+        // Update lock labels from settings
+        this.lockLabels = {
+            home: this.settingsManager.getLabel('home'),
+            away: this.settingsManager.getLabel('away'),
+            neutral: this.settingsManager.getLabel('neutral')
+        };
     }
 
     initializeApp() {
@@ -2684,6 +2798,24 @@ class AppController {
         document.getElementById('historyFilter').addEventListener('change', () => this.loadMatchHistory());
         document.getElementById('historySearch').addEventListener('input', () => this.loadMatchHistory());
 
+        // Settings screen
+        document.querySelectorAll('.settings-tab-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.switchSettingsTab(e.target.dataset.settingsTab));
+        });
+        document.getElementById('saveSettingsBtn').addEventListener('click', () => this.saveSettings());
+        document.getElementById('backFromSettingsBtn').addEventListener('click', () => this.showScreen('playerScreen'));
+        document.getElementById('resetLabelsBtn').addEventListener('click', () => this.resetLabels());
+        document.getElementById('exportDataSettingsBtn').addEventListener('click', () => this.exportData());
+        document.getElementById('importDataSettingsBtn').addEventListener('click', () => this.importData());
+        document.getElementById('clearAllDataBtn').addEventListener('click', () => this.confirmClearAllData());
+        const darkModeSetting = document.getElementById('darkModeSetting');
+        if (darkModeSetting) {
+            darkModeSetting.addEventListener('change', (e) => {
+                this.settingsManager.setDarkMode(e.target.checked);
+                this.toggleDarkMode();
+            });
+        }
+
         // Edit match modal
         document.getElementById('saveEditMatchBtn').addEventListener('click', () => this.saveEditMatch());
         document.getElementById('cancelEditMatchBtn').addEventListener('click', () => this.closeEditModal());
@@ -2740,6 +2872,8 @@ class AppController {
                 this.updatePlayerNameHistory(); // Add this line
             } else if (screenId === 'historyScreen') {
                 this.loadMatchHistory();
+            } else if (screenId === 'settingsScreen') {
+                this.loadSettingsScreen();
             }
         }
     }
@@ -3933,6 +4067,124 @@ class AppController {
 
         this.renderEditablePlayerList();
         this.updatePlayerNameHistory();
+    }
+
+    // Settings Management
+    switchSettingsTab(tabId) {
+        // Update tab buttons
+        document.querySelectorAll('.settings-tab-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.settingsTab === tabId);
+        });
+        
+        // Update tab content
+        document.querySelectorAll('.settings-tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        
+        const targetTab = document.getElementById(`${tabId}SettingsTab`) || 
+                         document.getElementById(`${tabId}ConfigTab`);
+        if (targetTab) {
+            targetTab.classList.add('active');
+        }
+        
+        // Load tab-specific content
+        if (tabId === 'visual') {
+            this.renderPlayerColors();
+        }
+    }
+
+    loadSettingsScreen() {
+        // Load current settings into UI
+        const settings = this.settingsManager.getSettings();
+        
+        // Load labels
+        document.getElementById('homeLabelInput').value = settings.labels.home || 'Home';
+        document.getElementById('awayLabelInput').value = settings.labels.away || 'Away';
+        document.getElementById('neutralLabelInput').value = settings.labels.neutral || 'Neutral';
+        
+        // Load dark mode
+        const darkModeSetting = document.getElementById('darkModeSetting');
+        if (darkModeSetting) {
+            darkModeSetting.checked = settings.darkMode || false;
+        }
+        
+        // Render player colors
+        this.renderPlayerColors();
+    }
+
+    renderPlayerColors() {
+        const container = document.getElementById('playerColorsList');
+        if (!container) return;
+        
+        const players = this.playerManager.getPlayers();
+        const settings = this.settingsManager.getSettings();
+        
+        if (players.length === 0) {
+            container.innerHTML = '<p style="color: var(--text-secondary);">Add players first to assign colors</p>';
+            return;
+        }
+        
+        container.innerHTML = players.map(player => {
+            const currentColor = settings.playerColors[player] || '#2196F3';
+            return `
+                <div class="player-color-item">
+                    <label>${this.escapeHtml(player)}</label>
+                    <input type="color" 
+                           class="player-color-picker" 
+                           value="${currentColor}"
+                           data-player="${this.escapeHtml(player)}"
+                           title="Choose color for ${this.escapeHtml(player)}">
+                </div>
+            `;
+        }).join('');
+        
+        // Add event listeners for color changes
+        container.querySelectorAll('.player-color-picker').forEach(picker => {
+            picker.addEventListener('change', (e) => {
+                const player = e.target.dataset.player;
+                const color = e.target.value;
+                this.settingsManager.setPlayerColor(player, color);
+            });
+        });
+    }
+
+    saveSettings() {
+        // Save labels
+        const homeLabel = document.getElementById('homeLabelInput').value.trim() || 'Home';
+        const awayLabel = document.getElementById('awayLabelInput').value.trim() || 'Away';
+        const neutralLabel = document.getElementById('neutralLabelInput').value.trim() || 'Neutral';
+        
+        this.settingsManager.setLabel('home', homeLabel);
+        this.settingsManager.setLabel('away', awayLabel);
+        this.settingsManager.setLabel('neutral', neutralLabel);
+        
+        // Update lock labels in app
+        this.updateLockLabels();
+        
+        // Refresh UI that uses labels
+        this.renderPlayerLockOptions();
+        
+        // Show success message
+        alert('Settings saved successfully!');
+    }
+
+    resetLabels() {
+        if (confirm('Reset labels to default values?')) {
+            this.settingsManager.resetLabels();
+            this.loadSettingsScreen();
+            this.updateLockLabels();
+            this.renderPlayerLockOptions();
+        }
+    }
+
+    confirmClearAllData() {
+        if (confirm('Are you sure you want to clear ALL data? This cannot be undone!\n\nThis will delete:\n- All matches\n- All statistics\n- All settings\n- All player data')) {
+            if (confirm('This is your last chance. Are you absolutely sure?')) {
+                this.storage.clearAll();
+                this.settingsManager.resetAll();
+                location.reload();
+            }
+        }
     }
 }
 

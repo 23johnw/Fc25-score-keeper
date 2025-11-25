@@ -248,6 +248,79 @@
         </div>
     </div>
 
+    <!-- Settings Screen -->
+    <section id="settingsScreen" class="screen">
+        <div class="screen-content">
+            <h2>Settings</h2>
+            <p class="screen-description">Customize your score tracker</p>
+            
+            <div class="settings-tabs">
+                <button class="settings-tab-btn active" data-settings-tab="game">Game Config</button>
+                <button class="settings-tab-btn" data-settings-tab="visual">Visual</button>
+                <button class="settings-tab-btn" data-settings-tab="data">Data</button>
+            </div>
+            
+            <!-- Game Configuration Tab -->
+            <div id="gameConfigTab" class="settings-tab-content active">
+                <div class="settings-section">
+                    <h3>Team Labels</h3>
+                    <p class="settings-description">Customize the labels used for team positions</p>
+                    <div class="settings-group">
+                        <label for="homeLabelInput">Home Label:</label>
+                        <input type="text" id="homeLabelInput" placeholder="Home" maxlength="20" class="settings-input">
+                    </div>
+                    <div class="settings-group">
+                        <label for="awayLabelInput">Away Label:</label>
+                        <input type="text" id="awayLabelInput" placeholder="Away" maxlength="20" class="settings-input">
+                    </div>
+                    <div class="settings-group">
+                        <label for="neutralLabelInput">Neutral Label:</label>
+                        <input type="text" id="neutralLabelInput" placeholder="Neutral" maxlength="20" class="settings-input">
+                    </div>
+                    <button id="resetLabelsBtn" class="btn btn-secondary" style="margin-top: 1rem;">Reset to Default</button>
+                </div>
+            </div>
+            
+            <!-- Visual Settings Tab -->
+            <div id="visualSettingsTab" class="settings-tab-content">
+                <div class="settings-section">
+                    <h3>Player Colors</h3>
+                    <p class="settings-description">Assign colors to players for visual identification</p>
+                    <div id="playerColorsList" class="player-colors-list"></div>
+                </div>
+                <div class="settings-section" style="margin-top: 2rem;">
+                    <h3>Theme</h3>
+                    <div class="settings-group">
+                        <label>
+                            <input type="checkbox" id="darkModeSetting" class="settings-checkbox">
+                            Enable Dark Mode
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Data Management Tab -->
+            <div id="dataSettingsTab" class="settings-tab-content">
+                <div class="settings-section">
+                    <h3>Data Management</h3>
+                    <div class="button-group">
+                        <button id="exportDataSettingsBtn" class="btn btn-primary">Export All Data</button>
+                        <button id="importDataSettingsBtn" class="btn btn-secondary">Import Data</button>
+                        <button id="clearAllDataBtn" class="btn btn-secondary" style="background-color: #f44336; margin-top: 1rem;">Clear All Data</button>
+                    </div>
+                    <p class="settings-description" style="margin-top: 1rem; font-size: 0.85rem; color: #f44336;">
+                        Warning: Clearing all data cannot be undone. This will delete all matches, statistics, and settings.
+                    </p>
+                </div>
+            </div>
+            
+            <div class="button-group" style="margin-top: 2rem;">
+                <button id="saveSettingsBtn" class="btn btn-primary">Save Settings</button>
+                <button id="backFromSettingsBtn" class="btn btn-secondary">Back</button>
+            </div>
+        </div>
+    </section>
+
     <!-- Navigation -->
     <nav class="bottom-nav">
         <button class="nav-btn" data-screen="playerScreen">
@@ -264,6 +337,9 @@
         </button>
         <button class="nav-btn" data-screen="historyScreen">
             <span>History</span>
+        </button>
+        <button class="nav-btn" data-screen="settingsScreen">
+            <span>Settings</span>
         </button>
     </nav>
 
