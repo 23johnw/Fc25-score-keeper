@@ -205,16 +205,25 @@
             <h2>Match History</h2>
             <p class="screen-description">View and manage all recorded matches</p>
             
+            <div class="history-view-toggle">
+                <button id="historyListViewBtn" class="view-toggle-btn active" data-view="list">📋 List</button>
+                <button id="historyTimelineViewBtn" class="view-toggle-btn" data-view="timeline">📅 Timeline</button>
+            </div>
+            
             <div class="history-controls">
                 <select id="historyFilter" class="filter-select">
                     <option value="all">All Seasons</option>
                     <option value="current">Current Season</option>
                     <option value="today">Today</option>
                 </select>
+                <input type="date" id="historyDateFrom" class="date-input" title="From Date">
+                <input type="date" id="historyDateTo" class="date-input" title="To Date">
                 <input type="text" id="historySearch" placeholder="Search players..." class="search-input">
+                <button id="clearHistoryFiltersBtn" class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Clear</button>
             </div>
             
             <div id="matchHistoryList" class="match-history-list"></div>
+            <div id="matchHistoryTimeline" class="match-history-timeline" style="display: none;"></div>
             
             <div class="button-group">
                 <button id="backFromHistoryBtn" class="btn btn-secondary">Back</button>

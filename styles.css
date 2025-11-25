@@ -1513,11 +1513,221 @@ body.dark-mode .league-table td {
     flex: 2;
 }
 
+/* History View Toggle */
+.history-view-toggle {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    justify-content: center;
+}
+
+.view-toggle-btn {
+    flex: 1;
+    padding: 0.75rem;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--surface-color);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.view-toggle-btn.active {
+    background-color: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+.view-toggle-btn:hover:not(.active) {
+    border-color: var(--primary-color);
+    background-color: #E3F2FD;
+}
+
+/* History Controls */
+.history-controls {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.date-input {
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.9rem;
+    background-color: var(--surface-color);
+    color: var(--text-primary);
+    flex: 1;
+    min-width: 120px;
+}
+
+.date-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
 .match-history-list {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
     margin-bottom: 1rem;
+}
+
+/* Timeline View */
+.match-history-timeline {
+    margin-bottom: 1rem;
+}
+
+.timeline-date-group {
+    margin-bottom: 2rem;
+    position: relative;
+    padding-left: 2rem;
+}
+
+.timeline-date-group::before {
+    content: '';
+    position: absolute;
+    left: 0.5rem;
+    top: 0;
+    bottom: -2rem;
+    width: 2px;
+    background-color: var(--border-color);
+}
+
+.timeline-date-group:last-child::before {
+    display: none;
+}
+
+.timeline-date-header {
+    position: relative;
+    margin-bottom: 1rem;
+    padding-left: 1rem;
+}
+
+.timeline-date-header::before {
+    content: '';
+    position: absolute;
+    left: -1.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: var(--primary-color);
+    border: 3px solid var(--surface-color);
+    box-shadow: 0 0 0 2px var(--primary-color);
+}
+
+.timeline-date-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--primary-color);
+    margin-bottom: 0.25rem;
+}
+
+.timeline-date-count {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.timeline-match-item {
+    background-color: var(--surface-color);
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    margin-bottom: 0.75rem;
+    margin-left: 1rem;
+    position: relative;
+    border-left: 4px solid var(--border-color);
+    transition: all 0.3s;
+    cursor: pointer;
+}
+
+.timeline-match-item:hover {
+    box-shadow: var(--shadow-hover);
+    transform: translateX(4px);
+}
+
+.timeline-match-item.team1-win {
+    border-left-color: #4CAF50;
+}
+
+.timeline-match-item.team2-win {
+    border-left-color: #4CAF50;
+}
+
+.timeline-match-item.draw {
+    border-left-color: #FF9800;
+}
+
+.timeline-match-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.timeline-match-teams {
+    flex: 1;
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+
+.timeline-match-score {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    white-space: nowrap;
+}
+
+.timeline-match-time {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+}
+
+.timeline-match-details {
+    display: none;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.timeline-match-item.expanded .timeline-match-details {
+    display: block;
+}
+
+.timeline-match-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.timeline-result-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+}
+
+.timeline-result-indicator.win {
+    background-color: #4CAF50;
+}
+
+.timeline-result-indicator.loss {
+    background-color: #f44336;
+}
+
+.timeline-result-indicator.draw {
+    background-color: #FF9800;
 }
 
 .match-history-item {
@@ -1698,6 +1908,27 @@ body.dark-mode .match-history-btn.share:hover {
     .match-history-btn.share {
         font-size: 1rem;
         padding: 0.4rem 0.6rem;
+    }
+    
+    .history-controls {
+        flex-direction: column;
+    }
+    
+    .date-input {
+        width: 100%;
+    }
+    
+    .timeline-date-group {
+        padding-left: 1.5rem;
+    }
+    
+    .timeline-match-item {
+        margin-left: 0.5rem;
+    }
+    
+    .view-toggle-btn {
+        font-size: 0.85rem;
+        padding: 0.6rem;
     }
 }
 

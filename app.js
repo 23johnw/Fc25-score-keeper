@@ -2723,6 +2723,7 @@ class AppController {
         this.editingMatchTimestamp = null;
         this.playerEditorValues = [];
         this.hasUnsavedPlayerChanges = false;
+        this.currentHistoryView = 'list'; // 'list' or 'timeline'
         
         // Initialize lock labels before anything else that might use them
         this.updateLockLabels();
@@ -2848,6 +2849,11 @@ class AppController {
         document.getElementById('backFromHistoryBtn').addEventListener('click', () => this.showScreen('statsScreen'));
         document.getElementById('historyFilter').addEventListener('change', () => this.loadMatchHistory());
         document.getElementById('historySearch').addEventListener('input', () => this.loadMatchHistory());
+        document.getElementById('historyDateFrom').addEventListener('change', () => this.loadMatchHistory());
+        document.getElementById('historyDateTo').addEventListener('change', () => this.loadMatchHistory());
+        document.getElementById('clearHistoryFiltersBtn').addEventListener('click', () => this.clearHistoryFilters());
+        document.getElementById('historyListViewBtn').addEventListener('click', () => this.switchHistoryView('list'));
+        document.getElementById('historyTimelineViewBtn').addEventListener('click', () => this.switchHistoryView('timeline'));
 
         // Settings screen
         document.querySelectorAll('.settings-tab-btn').forEach(btn => {
@@ -2925,6 +2931,15 @@ class AppController {
                 this.loadPlayersIntoUI(players);
                 this.updatePlayerNameHistory();
             } else if (screenId === 'historyScreen') {
+                // Initialize view toggle state
+                const listBtn = document.getElementById('historyListViewBtn');
+                const timelineBtn = document.getElementById('historyTimelineViewBtn');
+                if (listBtn && timelineBtn) {
+                    listBtn.classList.toggle('active', this.currentHistoryView === 'list');
+                    timelineBtn.classList.toggle('active', this.currentHistoryView === 'timeline');
+                    document.getElementById('matchHistoryList').style.display = this.currentHistoryView === 'list' ? 'flex' : 'none';
+                    document.getElementById('matchHistoryTimeline').style.display = this.currentHistoryView === 'timeline' ? 'block' : 'none';
+                }
                 this.loadMatchHistory();
             } else if (screenId === 'settingsScreen') {
                 this.loadSettingsScreen();
@@ -3836,14 +3851,16 @@ class AppController {
 
     // Match History
     loadMatchHistory() {
-        const container = document.getElementById('matchHistoryList');
-        if (!container) return;
+        const listContainer = document.getElementById('matchHistoryList');
+        const timelineContainer = document.getElementById('matchHistoryTimeline');
+        if (!listContainer || !timelineContainer) return;
 
         const filter = document.getElementById('historyFilter').value;
         const search = document.getElementById('historySearch').value.toLowerCase();
+        const dateFrom = document.getElementById('historyDateFrom').value;
+        const dateTo = document.getElementById('historyDateTo').value;
 
         let allMatches = [];
-        const data = this.storage.getData();
 
         if (filter === 'today') {
             allMatches = this.statisticsTracker.getTodayMatches();
@@ -3854,8 +3871,25 @@ class AppController {
             allMatches = this.statisticsTracker.getAllMatches();
         }
 
-        // Sort by date (newest first)
-        allMatches.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        // Filter by date range
+        if (dateFrom) {
+            const fromDate = new Date(dateFrom);
+            fromDate.setHours(0, 0, 0, 0);
+            allMatches = allMatches.filter(match => {
+                const matchDate = new Date(match.timestamp);
+                matchDate.setHours(0, 0, 0, 0);
+                return matchDate >= fromDate;
+            });
+        }
+
+        if (dateTo) {
+            const toDate = new Date(dateTo);
+            toDate.setHours(23, 59, 59, 999);
+            allMatches = allMatches.filter(match => {
+                const matchDate = new Date(match.timestamp);
+                return matchDate <= toDate;
+            });
+        }
 
         // Filter by search term
         if (search) {
@@ -3867,12 +3901,28 @@ class AppController {
             });
         }
 
+        // Sort by date (newest first for list, oldest first for timeline)
+        if (this.currentHistoryView === 'timeline') {
+            allMatches.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        } else {
+            allMatches.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        }
+
         if (allMatches.length === 0) {
-            container.innerHTML = '<div class="empty-state"><p>No matches found.</p></div>';
+            listContainer.innerHTML = '<div class="empty-state"><p>No matches found.</p></div>';
+            timelineContainer.innerHTML = '<div class="empty-state"><p>No matches found.</p></div>';
             return;
         }
 
-        container.innerHTML = allMatches.map(match => {
+        if (this.currentHistoryView === 'timeline') {
+            this.renderTimelineView(allMatches, timelineContainer);
+        } else {
+            this.renderListView(allMatches, listContainer);
+        }
+    }
+
+    renderListView(matches, container) {
+        container.innerHTML = matches.map(match => {
             const team1Display = this.formatTeamWithColors(match.team1);
             const team2Display = this.formatTeamWithColors(match.team2);
             
@@ -3895,22 +3945,129 @@ class AppController {
             `;
         }).join('');
 
-        // Add event listeners
+        this.attachHistoryEventListeners(container);
+    }
+
+    renderTimelineView(matches, container) {
+        // Group matches by date
+        const matchesByDate = {};
+        matches.forEach(match => {
+            const date = new Date(match.timestamp);
+            const dateKey = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+            if (!matchesByDate[dateKey]) {
+                matchesByDate[dateKey] = [];
+            }
+            matchesByDate[dateKey].push(match);
+        });
+
+        container.innerHTML = Object.entries(matchesByDate).map(([dateKey, dateMatches]) => {
+            const dateHeader = `
+                <div class="timeline-date-group">
+                    <div class="timeline-date-header">
+                        <div class="timeline-date-title">${dateKey}</div>
+                        <div class="timeline-date-count">${dateMatches.length} match${dateMatches.length !== 1 ? 'es' : ''}</div>
+                    </div>
+            `;
+
+            const matchesHTML = dateMatches.map(match => {
+                const team1Display = this.formatTeamWithColors(match.team1);
+                const team2Display = this.formatTeamWithColors(match.team2);
+                
+                const date = new Date(match.timestamp);
+                const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                
+                // Determine result class and indicator
+                let resultClass = 'draw';
+                let resultIndicator = 'draw';
+                if (match.result === 'team1' || match.result === 'team2') {
+                    resultClass = match.result === 'team1' ? 'team1-win' : 'team2-win';
+                    resultIndicator = 'win';
+                }
+
+                return `
+                    <div class="timeline-match-item ${resultClass}" data-timestamp="${match.timestamp}">
+                        <div class="timeline-match-header">
+                            <div class="timeline-match-teams">
+                                <span class="timeline-result-indicator ${resultIndicator}"></span>
+                                ${team1Display} vs ${team2Display}
+                            </div>
+                            <div class="timeline-match-score">${match.team1Score || 0} - ${match.team2Score || 0}</div>
+                        </div>
+                        <div class="timeline-match-time">${timeStr}</div>
+                        <div class="timeline-match-details">
+                            <div class="timeline-match-actions">
+                                <button class="match-history-btn share" data-timestamp="${match.timestamp}" title="Share Match">📤 Share</button>
+                                <button class="match-history-btn edit" data-timestamp="${match.timestamp}">Edit</button>
+                                <button class="match-history-btn delete" data-timestamp="${match.timestamp}">Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            return dateHeader + matchesHTML + '</div>';
+        }).join('');
+
+        this.attachHistoryEventListeners(container);
+        
+        // Add click handlers to expand/collapse match details
+        container.querySelectorAll('.timeline-match-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                // Don't expand if clicking on a button
+                if (e.target.closest('.match-history-btn')) {
+                    return;
+                }
+                item.classList.toggle('expanded');
+            });
+        });
+    }
+
+    attachHistoryEventListeners(container) {
         container.querySelectorAll('.match-history-btn.share').forEach(btn => {
-            btn.addEventListener('click', () => this.shareMatch(btn.dataset.timestamp));
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.shareMatch(btn.dataset.timestamp);
+            });
         });
 
         container.querySelectorAll('.match-history-btn.edit').forEach(btn => {
-            btn.addEventListener('click', () => this.editMatch(btn.dataset.timestamp));
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.editMatch(btn.dataset.timestamp);
+            });
         });
 
         container.querySelectorAll('.match-history-btn.delete').forEach(btn => {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
                 if (confirm('Delete this match? This cannot be undone.')) {
                     this.deleteMatch(btn.dataset.timestamp);
                 }
             });
         });
+    }
+
+    switchHistoryView(view) {
+        this.currentHistoryView = view;
+        
+        // Update toggle buttons
+        document.getElementById('historyListViewBtn').classList.toggle('active', view === 'list');
+        document.getElementById('historyTimelineViewBtn').classList.toggle('active', view === 'timeline');
+        
+        // Show/hide containers
+        document.getElementById('matchHistoryList').style.display = view === 'list' ? 'flex' : 'none';
+        document.getElementById('matchHistoryTimeline').style.display = view === 'timeline' ? 'block' : 'none';
+        
+        // Reload history with current view
+        this.loadMatchHistory();
+    }
+
+    clearHistoryFilters() {
+        document.getElementById('historyFilter').value = 'all';
+        document.getElementById('historySearch').value = '';
+        document.getElementById('historyDateFrom').value = '';
+        document.getElementById('historyDateTo').value = '';
+        this.loadMatchHistory();
     }
 
     editMatch(timestamp) {
