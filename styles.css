@@ -820,6 +820,74 @@ body.dark-mode .player-editable-item.active {
     }
 }
 
+/* Performance Insights Styles */
+.insights-card {
+    padding: 1.5rem;
+}
+
+.insight-player-section {
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.insight-player-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.insight-player-section h4 {
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+.insights-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.insight-item {
+    background: linear-gradient(135deg, rgba(33, 150, 243, 0.1), rgba(33, 150, 243, 0.05));
+    padding: 1rem;
+    border-radius: 8px;
+    border-left: 4px solid var(--primary-color);
+    animation: fadeIn 0.5s ease-out;
+}
+
+.insight-text {
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--text-primary);
+    display: block;
+}
+
+.insight-stats {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+    flex-wrap: wrap;
+}
+
+.insight-stats span {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    background-color: var(--background-color);
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+}
+
+body.dark-mode .insight-item {
+    background: linear-gradient(135deg, rgba(33, 150, 243, 0.2), rgba(33, 150, 243, 0.1));
+}
+
+body.dark-mode .insight-stats span {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
 .league-table {
     width: 100%;
     border-collapse: collapse;

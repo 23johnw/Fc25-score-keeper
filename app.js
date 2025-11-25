@@ -2108,6 +2108,267 @@ StatisticsCalculators.register({
     }
 });
 
+// Performance Insights - AI-like Analysis
+StatisticsCalculators.register({
+    id: 'performanceInsights',
+    name: 'Performance Insights',
+    category: 'visualization',
+    subcategory: 'insights',
+    calculate: (matches, players) => {
+        if (matches.length === 0) return {};
+
+        const insights = {};
+        
+        players.forEach(player => {
+            const playerInsights = [];
+            const playerMatches = matches.filter(match => {
+                const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
+                const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
+                return team1Players.includes(player) || team2Players.includes(player);
+            });
+
+            if (playerMatches.length === 0) {
+                insights[player] = { insights: ['No matches played yet'] };
+                return;
+            }
+
+            // Calculate basic stats
+            let wins = 0, losses = 0, draws = 0;
+            let goalsFor = 0, goalsAgainst = 0;
+            const dayOfWeekStats = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 }; // Sunday = 0
+            const dayOfWeekWins = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+            const recentMatches = playerMatches.slice(-10); // Last 10 matches
+            const olderMatches = playerMatches.slice(0, -10);
+
+            playerMatches.forEach(match => {
+                const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
+                const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
+                const inTeam1 = team1Players.includes(player);
+                const inTeam2 = team2Players.includes(player);
+
+                if (match.timestamp) {
+                    const date = new Date(match.timestamp);
+                    const dayOfWeek = date.getDay();
+                    dayOfWeekStats[dayOfWeek]++;
+                    if ((match.result === 'team1' && inTeam1) || (match.result === 'team2' && inTeam2)) {
+                        dayOfWeekWins[dayOfWeek]++;
+                    }
+                }
+
+                if (inTeam1) {
+                    goalsFor += match.team1Score || 0;
+                    goalsAgainst += match.team2Score || 0;
+                    if (match.result === 'team1') wins++;
+                    else if (match.result === 'team2') losses++;
+                    else draws++;
+                } else if (inTeam2) {
+                    goalsFor += match.team2Score || 0;
+                    goalsAgainst += match.team1Score || 0;
+                    if (match.result === 'team2') wins++;
+                    else if (match.result === 'team1') losses++;
+                    else draws++;
+                }
+            });
+
+            const totalGames = wins + losses + draws;
+            const winRate = totalGames > 0 ? (wins / totalGames) * 100 : 0;
+            const goalDifference = goalsFor - goalsAgainst;
+
+            // Insight 1: Overall performance
+            if (winRate >= 60) {
+                playerInsights.push(`🏆 Excellent win rate of ${winRate.toFixed(1)}%! You're dominating!`);
+            } else if (winRate >= 50) {
+                playerInsights.push(`✅ Strong performance with ${winRate.toFixed(1)}% win rate`);
+            } else if (winRate >= 40) {
+                playerInsights.push(`📊 Decent ${winRate.toFixed(1)}% win rate - room for improvement`);
+            } else {
+                playerInsights.push(`💪 Keep practicing! Your win rate is ${winRate.toFixed(1)}%`);
+            }
+
+            // Insight 2: Recent form vs overall
+            if (recentMatches.length >= 5 && olderMatches.length >= 5) {
+                let recentWins = 0, recentGames = 0;
+                let olderWins = 0, olderGames = 0;
+
+                recentMatches.forEach(match => {
+                    const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
+                    const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
+                    const inTeam1 = team1Players.includes(player);
+                    const inTeam2 = team2Players.includes(player);
+                    if (!inTeam1 && !inTeam2) return;
+
+                    recentGames++;
+                    if ((match.result === 'team1' && inTeam1) || (match.result === 'team2' && inTeam2)) {
+                        recentWins++;
+                    }
+                });
+
+                olderMatches.forEach(match => {
+                    const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
+                    const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
+                    const inTeam1 = team1Players.includes(player);
+                    const inTeam2 = team2Players.includes(player);
+                    if (!inTeam1 && !inTeam2) return;
+
+                    olderGames++;
+                    if ((match.result === 'team1' && inTeam1) || (match.result === 'team2' && inTeam2)) {
+                        olderWins++;
+                    }
+                });
+
+                const recentWinRate = recentGames > 0 ? (recentWins / recentGames) * 100 : 0;
+                const olderWinRate = olderGames > 0 ? (olderWins / olderGames) * 100 : 0;
+
+                if (recentWinRate > olderWinRate + 10) {
+                    playerInsights.push(`📈 Your form is improving! Recent win rate (${recentWinRate.toFixed(1)}%) is much better than earlier (${olderWinRate.toFixed(1)}%)`);
+                } else if (recentWinRate < olderWinRate - 10) {
+                    playerInsights.push(`📉 Your recent form has declined (${recentWinRate.toFixed(1)}% vs ${olderWinRate.toFixed(1)}% earlier)`);
+                } else if (recentWinRate > olderWinRate) {
+                    playerInsights.push(`📊 Slight improvement in recent matches`);
+                }
+            }
+
+            // Insight 3: Best day of week
+            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            let bestDay = null;
+            let bestDayWinRate = 0;
+            let bestDayGames = 0;
+
+            for (let day = 0; day < 7; day++) {
+                if (dayOfWeekStats[day] >= 3) { // Need at least 3 games
+                    const dayWinRate = dayOfWeekStats[day] > 0 
+                        ? (dayOfWeekWins[day] / dayOfWeekStats[day]) * 100 
+                        : 0;
+                    if (dayWinRate > bestDayWinRate) {
+                        bestDayWinRate = dayWinRate;
+                        bestDay = day;
+                        bestDayGames = dayOfWeekStats[day];
+                    }
+                }
+            }
+
+            if (bestDay !== null && bestDayWinRate >= 50) {
+                playerInsights.push(`📅 You play best on ${dayNames[bestDay]}s! ${bestDayWinRate.toFixed(1)}% win rate (${bestDayGames} games)`);
+            }
+
+            // Insight 4: Goal difference
+            if (goalDifference > 20) {
+                playerInsights.push(`⚽ Excellent goal difference of +${goalDifference}! You're scoring freely`);
+            } else if (goalDifference > 10) {
+                playerInsights.push(`⚽ Strong goal difference of +${goalDifference}`);
+            } else if (goalDifference < -10) {
+                playerInsights.push(`⚽ Focus on defense - goal difference is ${goalDifference}`);
+            }
+
+            // Insight 5: Streak analysis
+            let currentStreak = 0;
+            let streakType = 'none';
+            const sortedMatches = [...playerMatches].sort((a, b) => 
+                new Date(b.timestamp || 0) - new Date(a.timestamp || 0)
+            );
+
+            for (const match of sortedMatches) {
+                const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
+                const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
+                const inTeam1 = team1Players.includes(player);
+                const inTeam2 = team2Players.includes(player);
+                if (!inTeam1 && !inTeam2) continue;
+
+                let won = false;
+                if (match.result === 'team1' && inTeam1) won = true;
+                if (match.result === 'team2' && inTeam2) won = true;
+
+                if (streakType === 'none') {
+                    streakType = won ? 'win' : 'loss';
+                    currentStreak = 1;
+                } else if ((streakType === 'win' && won) || (streakType === 'loss' && !won && match.result !== 'draw')) {
+                    currentStreak++;
+                } else {
+                    break;
+                }
+
+                if (match.result === 'draw') break;
+            }
+
+            if (currentStreak >= 5 && streakType === 'win') {
+                playerInsights.push(`🔥 On fire! ${currentStreak} game winning streak!`);
+            } else if (currentStreak >= 3 && streakType === 'win') {
+                playerInsights.push(`🔥 ${currentStreak} game winning streak - keep it up!`);
+            } else if (currentStreak >= 3 && streakType === 'loss') {
+                playerInsights.push(`💪 ${currentStreak} game losing streak - time to bounce back!`);
+            }
+
+            // Insight 6: Games played milestone
+            if (totalGames >= 100) {
+                playerInsights.push(`🎯 Milestone: ${totalGames} games played!`);
+            } else if (totalGames >= 50) {
+                playerInsights.push(`🎯 ${totalGames} games played - great dedication!`);
+            }
+
+            insights[player] = {
+                insights: playerInsights.length > 0 ? playerInsights : ['Keep playing to unlock insights!'],
+                stats: {
+                    winRate: winRate.toFixed(1),
+                    totalGames,
+                    goalDifference
+                }
+            };
+        });
+
+        return insights;
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card insights-card';
+        
+        const escapeHtml = (str = '') => {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        };
+        
+        const players = Object.keys(data);
+        if (players.length === 0) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🤖</div><h3>No Insights Yet</h3><p>Play some matches to unlock AI insights!</p></div>';
+            return container;
+        }
+
+        const html = players.map(player => {
+            const playerData = data[player];
+            const color = window.appController && window.appController.settingsManager
+                ? window.appController.settingsManager.getPlayerColor(player)
+                : null;
+            const playerStyle = color ? `style="color: ${color}; font-weight: 600;"` : '';
+
+            return `
+                <div class="insight-player-section">
+                    <h4 ${playerStyle}>${escapeHtml(player)}</h4>
+                    <div class="insights-list">
+                        ${playerData.insights.map(insight => `
+                            <div class="insight-item">
+                                <span class="insight-text">${escapeHtml(insight)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    ${playerData.stats ? `
+                        <div class="insight-stats">
+                            <span>Win Rate: ${playerData.stats.winRate}%</span>
+                            <span>Games: ${playerData.stats.totalGames}</span>
+                            <span>Goal Diff: ${playerData.stats.goalDifference > 0 ? '+' : ''}${playerData.stats.goalDifference}</span>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = html;
+        return container;
+    }
+});
+
 // ============================================================================
 // StatisticsTracker - Core Statistics Framework
 // ============================================================================
@@ -4080,7 +4341,8 @@ class AppController {
             'form': 'Form',
             'h2h': 'Head-to-Head',
             'trends': 'Trends',
-            'overview': 'Overview'
+            'overview': 'Overview',
+            'insights': 'Insights'
         };
         
         let tabsHTML = '';
