@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fc25-score-tracker-v4';
+const CACHE_NAME = 'fc25-score-tracker-v6';
 const BASE_PATH = '/Fc25-score-keeper';
 const urlsToCache = [
   `${BASE_PATH}/`,
@@ -15,10 +15,29 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
+        console.log('Opened cache:', CACHE_NAME);
+        // Fetch fresh versions with cache busting
+        return Promise.all(urlsToCache.map(url => {
+          return fetch(url + '?v=' + CACHE_NAME + '&t=' + Date.now(), { cache: 'no-store' })
+            .then(response => {
+              if (response.ok) {
+                // Store without query params for clean cache keys
+                return cache.put(url, response);
+              }
+            })
+            .catch(err => {
+              console.error('Failed to cache:', url, err);
+              // Fallback: try without cache busting
+              return fetch(url).then(response => {
+                if (response.ok) {
+                  return cache.put(url, response);
+                }
+              });
+            });
+        }));
       })
   );
+  // Force activation of new service worker
   self.skipWaiting();
 });
 
@@ -34,9 +53,11 @@ self.addEventListener('activate', (event) => {
           }
         })
       );
+    }).then(() => {
+      // Claim all clients immediately
+      return self.clients.claim();
     })
   );
-  self.clients.claim();
 });
 
 // Fetch event - network first for app files, cache for offline
@@ -48,19 +69,24 @@ self.addEventListener('fetch', (event) => {
   
   if (isAppFile) {
     // Network first strategy for app files to get latest updates
+    // Add cache busting for app files to ensure fresh content
+    const requestUrl = event.request.url.split('?')[0] + '?v=' + Date.now();
     event.respondWith(
-      fetch(event.request)
+      fetch(requestUrl, { cache: 'no-cache' })
         .then((response) => {
-          // Update cache with fresh response
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
-          });
+          // Update cache with fresh response (without query param)
+          if (response.ok) {
+            const responseClone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              // Store without query param for future cache lookups
+              cache.put(event.request.url.split('?')[0], responseClone);
+            });
+          }
           return response;
         })
         .catch(() => {
-          // If network fails, try cache
-          return caches.match(event.request);
+          // If network fails, try cache (without query param)
+          return caches.match(event.request.url.split('?')[0]);
         })
     );
   } else {
