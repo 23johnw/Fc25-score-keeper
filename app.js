@@ -1853,8 +1853,31 @@ class StatisticsTracker {
 // ============================================================================
 
 class StatisticsDisplay {
-    constructor(statisticsTracker) {
+    constructor(statisticsTracker, settingsManager = null) {
         this.tracker = statisticsTracker;
+        this.settingsManager = settingsManager;
+    }
+    
+    // Helper to format player name with color
+    formatPlayerNameWithColor(playerName) {
+        if (!this.settingsManager) {
+            return this.escapeHtml(playerName);
+        }
+        const color = this.settingsManager.getPlayerColor(playerName);
+        const escapedName = this.escapeHtml(playerName);
+        if (color) {
+            return `<span style="color: ${color}; font-weight: 600;">${escapedName}</span>`;
+        }
+        return escapedName;
+    }
+    
+    escapeHtml(str = '') {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
     displaySeasonStats(seasonNumber, container, category = null, subcategory = null) {
@@ -1896,8 +1919,34 @@ class StatisticsDisplay {
             const data = stats[calculator.id];
             if (data && Object.keys(data).length > 0) {
                 const element = calculator.display(data);
+                // Apply player colors to the rendered element
+                this.applyPlayerColorsToElement(element);
                 container.appendChild(element);
             }
+        });
+    }
+    
+    // Post-process HTML to apply player colors
+    applyPlayerColorsToElement(element) {
+        if (!this.settingsManager) return;
+        
+        const players = this.tracker.getPlayers();
+        // Apply colors to all player-name elements
+        element.querySelectorAll('.player-name').forEach(el => {
+            const text = el.textContent.trim();
+            // Remove emoji symbols for matching (🥇🥈🥉)
+            const cleanText = text.replace(/[🥇🥈🥉]/g, '').trim();
+            
+            // Try to match player name (handle cases where name might have emoji prefix)
+            players.forEach(player => {
+                if (cleanText === player || text === player) {
+                    const color = this.settingsManager.getPlayerColor(player);
+                    if (color && !el.style.color) {
+                        el.style.color = color;
+                        el.style.fontWeight = '600';
+                    }
+                }
+            });
         });
     }
 }
@@ -2663,7 +2712,7 @@ class AppController {
         this.seasonManager = new SeasonManager(this.storage);
         this.matchRecorder = new MatchRecorder(this.storage, this.seasonManager);
         this.statisticsTracker = new StatisticsTracker(this.storage);
-        this.statisticsDisplay = new StatisticsDisplay(this.statisticsTracker);
+        this.statisticsDisplay = new StatisticsDisplay(this.statisticsTracker, this.settingsManager);
         this.shareManager = new ShareManager(this.storage, this.statisticsTracker, this.seasonManager);
         
         this.currentScreen = 'playerScreen';
@@ -2893,6 +2942,24 @@ class AppController {
         }
         this.renderEditablePlayerList();
         this.updateCurrentPlayersDisplay();
+    }
+
+    // Helper function to format player name with color
+    formatPlayerNameWithColor(playerName) {
+        const color = this.settingsManager.getPlayerColor(playerName);
+        const escapedName = this.escapeHtml(playerName);
+        if (color) {
+            return `<span class="player-name" style="color: ${color}; font-weight: 600;">${escapedName}</span>`;
+        }
+        return `<span class="player-name">${escapedName}</span>`;
+    }
+
+    // Helper function to format team with player colors
+    formatTeamWithColors(team) {
+        if (Array.isArray(team)) {
+            return team.map(p => this.formatPlayerNameWithColor(p)).join(' & ');
+        }
+        return this.formatPlayerNameWithColor(team);
     }
 
     escapeHtml(str = '') {
@@ -3283,11 +3350,11 @@ class AppController {
                         <div class="match-round-label">Round ${matchIndex + 1}</div>
                         <div class="team-display">
                             <div class="team-players">
-                                ${match.team1.map(p => `<span class="player-name">${p}</span>`).join('')}
+                                ${match.team1.map(p => this.formatPlayerNameWithColor(p)).join('')}
                             </div>
                             <span class="vs">VS</span>
                             <div class="team-players">
-                                ${match.team2.map(p => `<span class="player-name">${p}</span>`).join('')}
+                                ${match.team2.map(p => this.formatPlayerNameWithColor(p)).join('')}
                             </div>
                         </div>
                     </div>
@@ -3373,18 +3440,18 @@ class AppController {
         const container = document.getElementById('sequenceList');
         
         container.innerHTML = this.selectedStructure.matches.map((match, index) => {
-            const team1Name = this.teamGenerator.formatTeamName(match.team1);
-            const team2Name = this.teamGenerator.formatTeamName(match.team2);
+            const team1Display = this.formatTeamWithColors(match.team1);
+            const team2Display = this.formatTeamWithColors(match.team2);
             return `
                 <div class="sequence-item">
                     <div class="sequence-number">Round ${index + 1}</div>
                     <div class="team-display">
                         <div class="team-players">
-                            <span class="player-name">${team1Name}</span>
+                            ${team1Display}
                         </div>
                         <span class="vs">VS</span>
                         <div class="team-players">
-                            <span class="player-name">${team2Name}</span>
+                            ${team2Display}
                         </div>
                     </div>
                 </div>
@@ -3412,12 +3479,10 @@ class AppController {
         document.getElementById('currentGameNumber').textContent = this.currentGameIndex + 1;
         document.getElementById('totalGames').textContent = this.selectedStructure.matches.length;
         
-        const team1Name = this.teamGenerator.formatTeamName(match.team1);
-        const team2Name = this.teamGenerator.formatTeamName(match.team2);
-        document.getElementById('team1Display').innerHTML = 
-            `<span class="player-name">${team1Name}</span>`;
-        document.getElementById('team2Display').innerHTML = 
-            `<span class="player-name">${team2Name}</span>`;
+        const team1Display = this.formatTeamWithColors(match.team1);
+        const team2Display = this.formatTeamWithColors(match.team2);
+        document.getElementById('team1Display').innerHTML = team1Display;
+        document.getElementById('team2Display').innerHTML = team2Display;
         document.getElementById('team1ScoreLabel').textContent = `${team1Name} Score`;
         document.getElementById('team2ScoreLabel').textContent = `${team2Name} Score`;
         
@@ -3808,10 +3873,8 @@ class AppController {
         }
 
         container.innerHTML = allMatches.map(match => {
-            const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
-            const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
-            const team1Display = team1Players.join(' & ');
-            const team2Display = team2Players.join(' & ');
+            const team1Display = this.formatTeamWithColors(match.team1);
+            const team2Display = this.formatTeamWithColors(match.team2);
             
             const date = new Date(match.timestamp);
             const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -3861,8 +3924,8 @@ class AppController {
 
         const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
         const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
-        const team1Display = team1Players.join(' & ');
-        const team2Display = team2Players.join(' & ');
+        const team1Display = this.formatTeamWithColors(match.team1);
+        const team2Display = this.formatTeamWithColors(match.team2);
 
         document.getElementById('editMatchTeams').innerHTML = `
             <div class="team-display">
