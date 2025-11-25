@@ -3472,14 +3472,14 @@ class AppController {
 
         const currentSeason = this.seasonManager.getCurrentSeason();
         if (tab === 'season') {
-            this.renderCategoryTabs('season');
-            this.switchStatsCategory('season', 'all');
+            this.renderCategoryTabs('season', 'league');
+            this.switchStatsCategory('season', 'league');
         } else if (tab === 'overall') {
-            this.renderCategoryTabs('overall');
-            this.switchStatsCategory('overall', 'all');
+            this.renderCategoryTabs('overall', 'league');
+            this.switchStatsCategory('overall', 'league');
         } else if (tab === 'today') {
-            this.renderCategoryTabs('today');
-            this.switchStatsCategory('today', 'all');
+            this.renderCategoryTabs('today', 'league');
+            this.switchStatsCategory('today', 'league');
         }
     }
     
