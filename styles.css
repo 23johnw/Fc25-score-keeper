@@ -798,6 +798,28 @@ body.dark-mode .player-editable-item.active {
     border-bottom: none;
 }
 
+.chart-card {
+    padding: 1rem;
+    min-height: 300px;
+}
+
+.chart-card canvas {
+    max-height: 400px;
+    width: 100% !important;
+    height: auto !important;
+}
+
+@media (max-width: 480px) {
+    .chart-card {
+        padding: 0.75rem;
+        min-height: 250px;
+    }
+    
+    .chart-card canvas {
+        max-height: 300px;
+    }
+}
+
 .league-table {
     width: 100%;
     border-collapse: collapse;

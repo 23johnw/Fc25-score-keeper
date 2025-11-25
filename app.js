@@ -1738,6 +1738,377 @@ StatisticsCalculators.register({
 });
 
 // ============================================================================
+// Chart Calculators - Data Visualization
+// ============================================================================
+
+// Win Rate Over Time Chart
+StatisticsCalculators.register({
+    id: 'winRateChart',
+    name: 'Win Rate Over Time',
+    category: 'visualization',
+    subcategory: 'trends',
+    calculate: (matches, players) => {
+        // Group matches by date and calculate win rate for each player
+        const sortedMatches = [...matches].sort((a, b) => 
+            new Date(a.timestamp || 0) - new Date(b.timestamp || 0)
+        );
+        
+        const playerData = {};
+        players.forEach(player => {
+            playerData[player] = {
+                dates: [],
+                winRates: [],
+                cumulativeWins: 0,
+                cumulativeGames: 0
+            };
+        });
+
+        sortedMatches.forEach(match => {
+            const date = match.timestamp ? new Date(match.timestamp).toLocaleDateString() : 'Unknown';
+            const { team1, team2, result } = match;
+            const team1Players = Array.isArray(team1) ? team1 : [team1];
+            const team2Players = Array.isArray(team2) ? team2 : [team2];
+
+            players.forEach(player => {
+                const inTeam1 = team1Players.includes(player);
+                const inTeam2 = team2Players.includes(player);
+                if (!inTeam1 && !inTeam2) return;
+
+                const data = playerData[player];
+                data.cumulativeGames++;
+                
+                let won = false;
+                if (result === 'team1' && inTeam1) won = true;
+                if (result === 'team2' && inTeam2) won = true;
+                if (won) data.cumulativeWins++;
+
+                const winRate = data.cumulativeGames > 0 
+                    ? (data.cumulativeWins / data.cumulativeGames) * 100 
+                    : 0;
+
+                data.dates.push(date);
+                data.winRates.push(winRate);
+            });
+        });
+
+        return playerData;
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card chart-card';
+        
+        const canvas = document.createElement('canvas');
+        container.appendChild(canvas);
+
+        const players = Object.keys(data);
+        if (players.length === 0) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📊</div><h3>No Data</h3><p>Play some matches to see win rate trends!</p></div>';
+            return container;
+        }
+
+        // Get player colors from settings if available
+        const getPlayerColor = (playerName) => {
+            // Try to get from global settings manager if available
+            if (window.appController && window.appController.settingsManager) {
+                return window.appController.settingsManager.getPlayerColor(playerName) || null;
+            }
+            return null;
+        };
+
+        const colors = [
+            '#2196F3', '#4CAF50', '#FF9800', '#F44336',
+            '#9C27B0', '#00BCD4', '#FFC107', '#795548'
+        ];
+
+        const datasets = players.map((player, index) => {
+            const playerData = data[player];
+            const color = getPlayerColor(player) || colors[index % colors.length];
+            
+            return {
+                label: player,
+                data: playerData.winRates,
+                borderColor: color,
+                backgroundColor: color + '40',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.4
+            };
+        });
+
+        new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: data[players[0]]?.dates || [],
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Win Rate Over Time (%)',
+                        font: { size: 16, weight: 'bold' }
+                    },
+                    legend: {
+                        display: true,
+                        position: 'bottom'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Win Rate (%)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        },
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    }
+                }
+            }
+        });
+
+        return container;
+    }
+});
+
+// Goals Scored Chart
+StatisticsCalculators.register({
+    id: 'goalsChart',
+    name: 'Goals Scored',
+    category: 'visualization',
+    subcategory: 'goals',
+    calculate: (matches, players) => {
+        const goalsData = {};
+        players.forEach(player => {
+            goalsData[player] = {
+                goalsFor: 0,
+                goalsAgainst: 0,
+                totalGoals: 0
+            };
+        });
+
+        matches.forEach(match => {
+            const { team1, team2, team1Score, team2Score } = match;
+            const team1Players = Array.isArray(team1) ? team1 : [team1];
+            const team2Players = Array.isArray(team2) ? team2 : [team2];
+
+            team1Players.forEach(player => {
+                if (goalsData[player]) {
+                    goalsData[player].goalsFor += team1Score || 0;
+                    goalsData[player].goalsAgainst += team2Score || 0;
+                    goalsData[player].totalGoals += team1Score || 0;
+                }
+            });
+
+            team2Players.forEach(player => {
+                if (goalsData[player]) {
+                    goalsData[player].goalsFor += team2Score || 0;
+                    goalsData[player].goalsAgainst += team1Score || 0;
+                    goalsData[player].totalGoals += team2Score || 0;
+                }
+            });
+        });
+
+        return goalsData;
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card chart-card';
+        
+        const canvas = document.createElement('canvas');
+        container.appendChild(canvas);
+
+        const players = Object.keys(data);
+        if (players.length === 0) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📊</div><h3>No Data</h3><p>Play some matches to see goals scored!</p></div>';
+            return container;
+        }
+
+        const getPlayerColor = (playerName) => {
+            if (window.appController && window.appController.settingsManager) {
+                return window.appController.settingsManager.getPlayerColor(playerName) || null;
+            }
+            return null;
+        };
+
+        const colors = [
+            '#2196F3', '#4CAF50', '#FF9800', '#F44336',
+            '#9C27B0', '#00BCD4', '#FFC107', '#795548'
+        ];
+
+        const sortedPlayers = players.sort((a, b) => 
+            data[b].totalGoals - data[a].totalGoals
+        );
+
+        new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: sortedPlayers,
+                datasets: [{
+                    label: 'Goals For',
+                    data: sortedPlayers.map(p => data[p].goalsFor),
+                    backgroundColor: sortedPlayers.map((p, i) => {
+                        const color = getPlayerColor(p) || colors[i % colors.length];
+                        return color + 'CC';
+                    }),
+                    borderColor: sortedPlayers.map((p, i) => {
+                        const color = getPlayerColor(p) || colors[i % colors.length];
+                        return color;
+                    }),
+                    borderWidth: 2
+                }, {
+                    label: 'Goals Against',
+                    data: sortedPlayers.map(p => data[p].goalsAgainst),
+                    backgroundColor: '#F44336CC',
+                    borderColor: '#F44336',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Goals Scored & Conceded',
+                        font: { size: 16, weight: 'bold' }
+                    },
+                    legend: {
+                        display: true,
+                        position: 'bottom'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        },
+                        title: {
+                            display: true,
+                            text: 'Goals'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Player'
+                        }
+                    }
+                }
+            }
+        });
+
+        return container;
+    }
+});
+
+// Match Distribution Pie Chart
+StatisticsCalculators.register({
+    id: 'matchDistributionChart',
+    name: 'Match Distribution',
+    category: 'visualization',
+    subcategory: 'overview',
+    calculate: (matches, players) => {
+        let wins = 0, losses = 0, draws = 0;
+
+        matches.forEach(match => {
+            if (match.result === 'team1' || match.result === 'team2') {
+                wins++;
+            } else if (match.result === 'draw') {
+                draws++;
+            }
+        });
+
+        // For individual player perspective, we'd need to calculate per player
+        // For now, showing overall distribution
+        return {
+            wins,
+            losses,
+            draws,
+            total: matches.length
+        };
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card chart-card';
+        
+        const canvas = document.createElement('canvas');
+        container.appendChild(canvas);
+
+        if (data.total === 0) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📊</div><h3>No Data</h3><p>Play some matches to see distribution!</p></div>';
+            return container;
+        }
+
+        new Chart(canvas, {
+            type: 'pie',
+            data: {
+                labels: ['Wins', 'Draws', 'Losses'],
+                datasets: [{
+                    data: [data.wins, data.draws, data.losses],
+                    backgroundColor: [
+                        '#4CAF50',
+                        '#FF9800',
+                        '#F44336'
+                    ],
+                    borderColor: [
+                        '#388E3C',
+                        '#F57C00',
+                        '#D32F2F'
+                    ],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Match Result Distribution',
+                        font: { size: 16, weight: 'bold' }
+                    },
+                    legend: {
+                        display: true,
+                        position: 'bottom'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        return container;
+    }
+});
+
+// ============================================================================
 // StatisticsTracker - Core Statistics Framework
 // ============================================================================
 
@@ -3697,6 +4068,7 @@ class AppController {
             'league': 'League',
             'records': 'Records',
             'general': 'General',
+            'visualization': 'Charts',
             'all': 'All'
         };
         
@@ -3706,7 +4078,9 @@ class AppController {
             'win-rate': 'Win Rate',
             'streak': 'Streak',
             'form': 'Form',
-            'h2h': 'Head-to-Head'
+            'h2h': 'Head-to-Head',
+            'trends': 'Trends',
+            'overview': 'Overview'
         };
         
         let tabsHTML = '';
@@ -4539,7 +4913,7 @@ class AppController {
 
 // Initialize app when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    new AppController();
+    window.appController = new AppController();
 });
 
 // Register service worker for PWA with update checking
