@@ -2369,6 +2369,579 @@ StatisticsCalculators.register({
     }
 });
 
+// Trend Analysis Calculator
+StatisticsCalculators.register({
+    id: 'trendAnalysis',
+    name: 'Trend Analysis',
+    category: 'visualization',
+    subcategory: 'trends',
+    calculate: (matches, players) => {
+        if (matches.length < 5) return {}; // Need at least 5 matches for trends
+
+        const sortedMatches = [...matches].sort((a, b) => 
+            new Date(a.timestamp || 0) - new Date(b.timestamp || 0)
+        );
+
+        const trends = {};
+        
+        players.forEach(player => {
+            const playerMatches = sortedMatches.filter(match => {
+                const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
+                const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
+                return team1Players.includes(player) || team2Players.includes(player);
+            });
+
+            if (playerMatches.length < 5) {
+                trends[player] = { trend: 'insufficient_data', message: 'Need at least 5 matches for trend analysis' };
+                return;
+            }
+
+            // Split into thirds for trend analysis
+            const thirdSize = Math.floor(playerMatches.length / 3);
+            const firstThird = playerMatches.slice(0, thirdSize);
+            const middleThird = playerMatches.slice(thirdSize, thirdSize * 2);
+            const lastThird = playerMatches.slice(thirdSize * 2);
+
+            const calculateWinRate = (matchSet) => {
+                let wins = 0, games = 0;
+                matchSet.forEach(match => {
+                    const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
+                    const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
+                    const inTeam1 = team1Players.includes(player);
+                    const inTeam2 = team2Players.includes(player);
+                    if (!inTeam1 && !inTeam2) return;
+
+                    games++;
+                    if ((match.result === 'team1' && inTeam1) || (match.result === 'team2' && inTeam2)) {
+                        wins++;
+                    }
+                });
+                return games > 0 ? (wins / games) * 100 : 0;
+            };
+
+            const firstWinRate = calculateWinRate(firstThird);
+            const middleWinRate = calculateWinRate(middleThird);
+            const lastWinRate = calculateWinRate(lastThird);
+
+            // Determine trend
+            let trend = 'stable';
+            let trendStrength = 0;
+            let message = '';
+
+            const earlyAvg = (firstWinRate + middleWinRate) / 2;
+            const improvement = lastWinRate - earlyAvg;
+
+            if (improvement > 15) {
+                trend = 'improving_strong';
+                trendStrength = Math.min(100, (improvement / 50) * 100);
+                message = `Strong improvement! Win rate increased by ${improvement.toFixed(1)}%`;
+            } else if (improvement > 5) {
+                trend = 'improving';
+                trendStrength = Math.min(100, (improvement / 20) * 100);
+                message = `Improving! Win rate up by ${improvement.toFixed(1)}%`;
+            } else if (improvement < -15) {
+                trend = 'declining_strong';
+                trendStrength = Math.min(100, (Math.abs(improvement) / 50) * 100);
+                message = `Declining performance. Win rate down by ${Math.abs(improvement).toFixed(1)}%`;
+            } else if (improvement < -5) {
+                trend = 'declining';
+                trendStrength = Math.min(100, (Math.abs(improvement) / 20) * 100);
+                message = `Slight decline. Win rate down by ${Math.abs(improvement).toFixed(1)}%`;
+            } else {
+                trend = 'stable';
+                message = `Stable performance. Win rate around ${lastWinRate.toFixed(1)}%`;
+            }
+
+            trends[player] = {
+                trend,
+                trendStrength,
+                message,
+                firstPeriod: firstWinRate.toFixed(1),
+                middlePeriod: middleWinRate.toFixed(1),
+                lastPeriod: lastWinRate.toFixed(1),
+                overallChange: improvement.toFixed(1)
+            };
+        });
+
+        return trends;
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card trend-analysis-card';
+        
+        const escapeHtml = (str = '') => {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        };
+
+        const players = Object.keys(data);
+        if (players.length === 0) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📈</div><h3>No Trend Data</h3><p>Play at least 5 matches to see trend analysis!</p></div>';
+            return container;
+        }
+
+        const getTrendIcon = (trend) => {
+            switch(trend) {
+                case 'improving_strong': return '🚀';
+                case 'improving': return '📈';
+                case 'declining_strong': return '📉';
+                case 'declining': return '⚠️';
+                default: return '➡️';
+            }
+        };
+
+        const getTrendColor = (trend) => {
+            switch(trend) {
+                case 'improving_strong': return '#4CAF50';
+                case 'improving': return '#8BC34A';
+                case 'declining_strong': return '#F44336';
+                case 'declining': return '#FF9800';
+                default: return '#757575';
+            }
+        };
+
+        const html = players.map(player => {
+            const trendData = data[player];
+            
+            if (trendData.trend === 'insufficient_data') {
+                return `
+                    <div class="trend-player-section">
+                        <h4>${escapeHtml(player)}</h4>
+                        <p class="trend-message">${escapeHtml(trendData.message)}</p>
+                    </div>
+                `;
+            }
+
+            const color = window.appController && window.appController.settingsManager
+                ? window.appController.settingsManager.getPlayerColor(player)
+                : null;
+            const playerStyle = color ? `style="color: ${color}; font-weight: 600;"` : '';
+            const trendColor = getTrendColor(trendData.trend);
+            const trendIcon = getTrendIcon(trendData.trend);
+
+            return `
+                <div class="trend-player-section">
+                    <h4 ${playerStyle}>${escapeHtml(player)}</h4>
+                    <div class="trend-indicator" style="border-left-color: ${trendColor};">
+                        <div class="trend-header">
+                            <span class="trend-icon">${trendIcon}</span>
+                            <span class="trend-message" style="color: ${trendColor};">${escapeHtml(trendData.message)}</span>
+                        </div>
+                        <div class="trend-progress">
+                            <div class="trend-bar" style="width: ${trendData.trendStrength}%; background-color: ${trendColor};"></div>
+                        </div>
+                        <div class="trend-periods">
+                            <div class="trend-period">
+                                <span class="period-label">Early</span>
+                                <span class="period-value">${trendData.firstPeriod}%</span>
+                            </div>
+                            <div class="trend-period">
+                                <span class="period-label">Middle</span>
+                                <span class="period-value">${trendData.middlePeriod}%</span>
+                            </div>
+                            <div class="trend-period">
+                                <span class="period-label">Recent</span>
+                                <span class="period-value">${trendData.lastPeriod}%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = html;
+        return container;
+    }
+});
+
+// Comparative Stats - Compare Two Players
+StatisticsCalculators.register({
+    id: 'comparativeStats',
+    name: 'Player Comparison',
+    category: 'visualization',
+    subcategory: 'comparison',
+    calculate: (matches, players) => {
+        if (players.length < 2) return {};
+
+        // Calculate stats for all player pairs
+        const comparisons = {};
+        
+        for (let i = 0; i < players.length; i++) {
+            for (let j = i + 1; j < players.length; j++) {
+                const player1 = players[i];
+                const player2 = players[j];
+                const key = `${player1} vs ${player2}`;
+
+                let p1Stats = { wins: 0, losses: 0, draws: 0, games: 0, goalsFor: 0, goalsAgainst: 0 };
+                let p2Stats = { wins: 0, losses: 0, draws: 0, games: 0, goalsFor: 0, goalsAgainst: 0 };
+                let headToHead = { p1Wins: 0, p2Wins: 0, draws: 0, games: 0 };
+
+                matches.forEach(match => {
+                    const { team1, team2, result, team1Score, team2Score } = match;
+                    const team1Players = Array.isArray(team1) ? team1 : [team1];
+                    const team2Players = Array.isArray(team2) ? team2 : [team2];
+
+                    const p1InTeam1 = team1Players.includes(player1);
+                    const p1InTeam2 = team2Players.includes(player1);
+                    const p2InTeam1 = team1Players.includes(player2);
+                    const p2InTeam2 = team2Players.includes(player2);
+
+                    // Head-to-head (playing against each other)
+                    if ((p1InTeam1 && p2InTeam2) || (p1InTeam2 && p2InTeam1)) {
+                        headToHead.games++;
+                        if (result === 'team1' && p1InTeam1) headToHead.p1Wins++;
+                        else if (result === 'team2' && p1InTeam2) headToHead.p1Wins++;
+                        else if (result === 'team1' && p2InTeam1) headToHead.p2Wins++;
+                        else if (result === 'team2' && p2InTeam2) headToHead.p2Wins++;
+                        else if (result === 'draw') headToHead.draws++;
+                    }
+
+                    // Player 1 stats
+                    if (p1InTeam1 || p1InTeam2) {
+                        p1Stats.games++;
+                        if (p1InTeam1) {
+                            p1Stats.goalsFor += team1Score || 0;
+                            p1Stats.goalsAgainst += team2Score || 0;
+                            if (result === 'team1') p1Stats.wins++;
+                            else if (result === 'team2') p1Stats.losses++;
+                            else p1Stats.draws++;
+                        } else {
+                            p1Stats.goalsFor += team2Score || 0;
+                            p1Stats.goalsAgainst += team1Score || 0;
+                            if (result === 'team2') p1Stats.wins++;
+                            else if (result === 'team1') p1Stats.losses++;
+                            else p1Stats.draws++;
+                        }
+                    }
+
+                    // Player 2 stats
+                    if (p2InTeam1 || p2InTeam2) {
+                        p2Stats.games++;
+                        if (p2InTeam1) {
+                            p2Stats.goalsFor += team1Score || 0;
+                            p2Stats.goalsAgainst += team2Score || 0;
+                            if (result === 'team1') p2Stats.wins++;
+                            else if (result === 'team2') p2Stats.losses++;
+                            else p2Stats.draws++;
+                        } else {
+                            p2Stats.goalsFor += team2Score || 0;
+                            p2Stats.goalsAgainst += team1Score || 0;
+                            if (result === 'team2') p2Stats.wins++;
+                            else if (result === 'team1') p2Stats.losses++;
+                            else p2Stats.draws++;
+                        }
+                    }
+                });
+
+                const p1WinRate = p1Stats.games > 0 ? (p1Stats.wins / p1Stats.games) * 100 : 0;
+                const p2WinRate = p2Stats.games > 0 ? (p2Stats.wins / p2Stats.games) * 100 : 0;
+
+                comparisons[key] = {
+                    player1,
+                    player2,
+                    player1Stats: {
+                        ...p1Stats,
+                        winRate: p1WinRate.toFixed(1),
+                        goalDifference: p1Stats.goalsFor - p1Stats.goalsAgainst
+                    },
+                    player2Stats: {
+                        ...p2Stats,
+                        winRate: p2WinRate.toFixed(1),
+                        goalDifference: p2Stats.goalsFor - p2Stats.goalsAgainst
+                    },
+                    headToHead: {
+                        ...headToHead,
+                        p1WinRate: headToHead.games > 0 ? (headToHead.p1Wins / headToHead.games) * 100 : 0,
+                        p2WinRate: headToHead.games > 0 ? (headToHead.p2Wins / headToHead.games) * 100 : 0
+                    }
+                };
+            }
+        }
+
+        return comparisons;
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card comparative-card';
+        
+        const escapeHtml = (str = '') => {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        };
+
+        const comparisons = Object.keys(data);
+        if (comparisons.length === 0) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚖️</div><h3>No Comparisons</h3><p>Need at least 2 players to compare!</p></div>';
+            return container;
+        }
+
+        const getPlayerColor = (playerName) => {
+            if (window.appController && window.appController.settingsManager) {
+                return window.appController.settingsManager.getPlayerColor(playerName) || null;
+            }
+            return null;
+        };
+
+        const html = comparisons.map(key => {
+            const comp = data[key];
+            const p1Color = getPlayerColor(comp.player1) || '#2196F3';
+            const p2Color = getPlayerColor(comp.player2) || '#4CAF50';
+
+            return `
+                <div class="comparison-section">
+                    <h4 class="comparison-title">${escapeHtml(comp.player1)} <span class="vs">vs</span> ${escapeHtml(comp.player2)}</h4>
+                    
+                    <div class="comparison-stats-grid">
+                        <div class="comparison-player" style="border-color: ${p1Color};">
+                            <div class="comparison-player-header" style="background-color: ${p1Color}20;">
+                                <h5 style="color: ${p1Color};">${escapeHtml(comp.player1)}</h5>
+                            </div>
+                            <div class="comparison-stats">
+                                <div class="comparison-stat">
+                                    <span class="stat-label">Win Rate</span>
+                                    <span class="stat-value">${comp.player1Stats.winRate}%</span>
+                                </div>
+                                <div class="comparison-stat">
+                                    <span class="stat-label">Games</span>
+                                    <span class="stat-value">${comp.player1Stats.games}</span>
+                                </div>
+                                <div class="comparison-stat">
+                                    <span class="stat-label">W-D-L</span>
+                                    <span class="stat-value">${comp.player1Stats.wins}-${comp.player1Stats.draws}-${comp.player1Stats.losses}</span>
+                                </div>
+                                <div class="comparison-stat">
+                                    <span class="stat-label">Goals</span>
+                                    <span class="stat-value">${comp.player1Stats.goalsFor}:${comp.player1Stats.goalsAgainst}</span>
+                                </div>
+                                <div class="comparison-stat">
+                                    <span class="stat-label">Goal Diff</span>
+                                    <span class="stat-value ${comp.player1Stats.goalDifference >= 0 ? 'positive' : 'negative'}">${comp.player1Stats.goalDifference > 0 ? '+' : ''}${comp.player1Stats.goalDifference}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="comparison-player" style="border-color: ${p2Color};">
+                            <div class="comparison-player-header" style="background-color: ${p2Color}20;">
+                                <h5 style="color: ${p2Color};">${escapeHtml(comp.player2)}</h5>
+                            </div>
+                            <div class="comparison-stats">
+                                <div class="comparison-stat">
+                                    <span class="stat-label">Win Rate</span>
+                                    <span class="stat-value">${comp.player2Stats.winRate}%</span>
+                                </div>
+                                <div class="comparison-stat">
+                                    <span class="stat-label">Games</span>
+                                    <span class="stat-value">${comp.player2Stats.games}</span>
+                                </div>
+                                <div class="comparison-stat">
+                                    <span class="stat-label">W-D-L</span>
+                                    <span class="stat-value">${comp.player2Stats.wins}-${comp.player2Stats.draws}-${comp.player2Stats.losses}</span>
+                                </div>
+                                <div class="comparison-stat">
+                                    <span class="stat-label">Goals</span>
+                                    <span class="stat-value">${comp.player2Stats.goalsFor}:${comp.player2Stats.goalsAgainst}</span>
+                                </div>
+                                <div class="comparison-stat">
+                                    <span class="stat-label">Goal Diff</span>
+                                    <span class="stat-value ${comp.player2Stats.goalDifference >= 0 ? 'positive' : 'negative'}">${comp.player2Stats.goalDifference > 0 ? '+' : ''}${comp.player2Stats.goalDifference}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    ${comp.headToHead.games > 0 ? `
+                        <div class="head-to-head-section">
+                            <h5>Head-to-Head</h5>
+                            <div class="h2h-stats">
+                                <div class="h2h-stat">
+                                    <span class="h2h-label">${escapeHtml(comp.player1)}</span>
+                                    <span class="h2h-value" style="color: ${p1Color};">${comp.headToHead.p1Wins} wins (${comp.headToHead.p1WinRate.toFixed(1)}%)</span>
+                                </div>
+                                <div class="h2h-stat">
+                                    <span class="h2h-label">Draws</span>
+                                    <span class="h2h-value">${comp.headToHead.draws}</span>
+                                </div>
+                                <div class="h2h-stat">
+                                    <span class="h2h-label">${escapeHtml(comp.player2)}</span>
+                                    <span class="h2h-value" style="color: ${p2Color};">${comp.headToHead.p2Wins} wins (${comp.headToHead.p2WinRate.toFixed(1)}%)</span>
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = html;
+        return container;
+    }
+});
+
+// Performance Heatmap - Calendar View
+StatisticsCalculators.register({
+    id: 'performanceHeatmap',
+    name: 'Activity Heatmap',
+    category: 'visualization',
+    subcategory: 'overview',
+    calculate: (matches, players) => {
+        if (matches.length === 0) return {};
+
+        // Group matches by date
+        const dateMap = {};
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        matches.forEach(match => {
+            if (!match.timestamp) return;
+            const matchDate = new Date(match.timestamp);
+            matchDate.setHours(0, 0, 0, 0);
+            const dateKey = matchDate.toISOString().split('T')[0];
+            
+            if (!dateMap[dateKey]) {
+                dateMap[dateKey] = 0;
+            }
+            dateMap[dateKey]++;
+        });
+
+        // Get date range (last 365 days or from first match)
+        const allDates = Object.keys(dateMap).sort();
+        const startDate = allDates.length > 0 
+            ? new Date(allDates[0]) 
+            : new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000);
+        
+        const endDate = today;
+        const maxMatches = Math.max(...Object.values(dateMap), 1);
+
+        return {
+            dateMap,
+            startDate: startDate.toISOString().split('T')[0],
+            endDate: endDate.toISOString().split('T')[0],
+            maxMatches,
+            totalDays: Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))
+        };
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card heatmap-card';
+        
+        if (!data.dateMap || Object.keys(data.dateMap).length === 0) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📅</div><h3>No Activity</h3><p>Play some matches to see your activity heatmap!</p></div>';
+            return container;
+        }
+
+        const startDate = new Date(data.startDate);
+        const endDate = new Date(data.endDate);
+        const maxMatches = data.maxMatches;
+
+        // Generate calendar grid (weeks x days)
+        const weeks = [];
+        let currentDate = new Date(startDate);
+        currentDate.setDate(currentDate.getDate() - currentDate.getDay()); // Start from Sunday
+
+        while (currentDate <= endDate) {
+            const week = [];
+            for (let day = 0; day < 7; day++) {
+                const dateKey = currentDate.toISOString().split('T')[0];
+                const matchCount = data.dateMap[dateKey] || 0;
+                const intensity = maxMatches > 0 ? Math.min(1, matchCount / maxMatches) : 0;
+                
+                week.push({
+                    date: new Date(currentDate),
+                    dateKey,
+                    matchCount,
+                    intensity
+                });
+                
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+            weeks.push(week);
+        }
+
+        // Get month labels
+        const monthLabels = [];
+        let lastMonth = -1;
+        weeks.forEach((week, weekIndex) => {
+            const firstDay = week[0].date;
+            const month = firstDay.getMonth();
+            if (month !== lastMonth) {
+                monthLabels.push({ weekIndex, month: firstDay.toLocaleDateString('en-US', { month: 'short' }) });
+                lastMonth = month;
+            }
+        });
+
+        const getIntensityColor = (intensity) => {
+            if (intensity === 0) return '#EBEDF0';
+            if (intensity < 0.25) return '#C6E48B';
+            if (intensity < 0.5) return '#7BC96F';
+            if (intensity < 0.75) return '#239A3B';
+            return '#196127';
+        };
+
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+        const html = `
+            <div class="heatmap-container">
+                <h4>Match Activity Calendar</h4>
+                <div class="heatmap-legend">
+                    <span>Less</span>
+                    <div class="heatmap-legend-colors">
+                        <div class="legend-square" style="background-color: #EBEDF0;"></div>
+                        <div class="legend-square" style="background-color: #C6E48B;"></div>
+                        <div class="legend-square" style="background-color: #7BC96F;"></div>
+                        <div class="legend-square" style="background-color: #239A3B;"></div>
+                        <div class="legend-square" style="background-color: #196127;"></div>
+                    </div>
+                    <span>More</span>
+                </div>
+                <div class="heatmap-grid">
+                    <div class="heatmap-day-labels">
+                        ${dayNames.map(day => `<div class="day-label">${day}</div>`).join('')}
+                    </div>
+                    <div class="heatmap-content">
+                        <div class="heatmap-months">
+                            ${monthLabels.map(m => `<div class="month-label" style="grid-column: ${m.weekIndex + 2};">${m.month}</div>`).join('')}
+                        </div>
+                        <div class="heatmap-squares">
+                            ${weeks.map(week => 
+                                week.map(day => {
+                                    const color = getIntensityColor(day.intensity);
+                                    const tooltip = day.matchCount > 0 
+                                        ? `${day.matchCount} match${day.matchCount > 1 ? 'es' : ''} on ${day.date.toLocaleDateString()}`
+                                        : `No matches on ${day.date.toLocaleDateString()}`;
+                                    return `
+                                        <div 
+                                            class="heatmap-square ${day.intensity > 0 ? 'has-matches' : ''}" 
+                                            style="background-color: ${color};"
+                                            title="${tooltip}"
+                                            data-date="${day.dateKey}"
+                                            data-count="${day.matchCount}"
+                                        ></div>
+                                    `;
+                                }).join('')
+                            ).join('')}
+                        </div>
+                    </div>
+                </div>
+                <div class="heatmap-summary">
+                    <p>Total match days: <strong>${Object.keys(data.dateMap).length}</strong></p>
+                    <p>Total matches: <strong>${Object.values(data.dateMap).reduce((a, b) => a + b, 0)}</strong></p>
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = html;
+        return container;
+    }
+});
+
 // ============================================================================
 // StatisticsTracker - Core Statistics Framework
 // ============================================================================
@@ -4342,7 +4915,8 @@ class AppController {
             'h2h': 'Head-to-Head',
             'trends': 'Trends',
             'overview': 'Overview',
-            'insights': 'Insights'
+            'insights': 'Insights',
+            'comparison': 'Comparison'
         };
         
         let tabsHTML = '';
