@@ -148,19 +148,37 @@
             </div>
 
             <div id="todayStats" class="stats-content active">
-                <h3>Today's Statistics</h3>
+                <div class="stats-header-actions">
+                    <h3>Today's Statistics</h3>
+                    <div class="share-buttons-group">
+                        <button id="shareTodayStatsBtn" class="btn btn-share" title="Share as Image">📤 Share</button>
+                        <button id="exportTodayPDFBtn" class="btn btn-share" title="Export as PDF">📄 PDF</button>
+                    </div>
+                </div>
                 <div class="category-tabs" id="todayCategoryTabs"></div>
                 <div id="todayStatsDisplay" class="stats-display"></div>
             </div>
 
             <div id="seasonStats" class="stats-content">
-                <h3>Season Statistics</h3>
+                <div class="stats-header-actions">
+                    <h3>Season Statistics</h3>
+                    <div class="share-buttons-group">
+                        <button id="shareSeasonStatsBtn" class="btn btn-share" title="Share as Image">📤 Share</button>
+                        <button id="exportSeasonPDFBtn" class="btn btn-share" title="Export as PDF">📄 PDF</button>
+                    </div>
+                </div>
                 <div class="category-tabs" id="seasonCategoryTabs"></div>
                 <div id="seasonStatsDisplay" class="stats-display"></div>
             </div>
 
             <div id="overallStats" class="stats-content">
-                <h3>Overall Statistics</h3>
+                <div class="stats-header-actions">
+                    <h3>Overall Statistics</h3>
+                    <div class="share-buttons-group">
+                        <button id="shareOverallStatsBtn" class="btn btn-share" title="Share as Image">📤 Share</button>
+                        <button id="exportOverallPDFBtn" class="btn btn-share" title="Export as PDF">📄 PDF</button>
+                    </div>
+                </div>
                 <div class="category-tabs" id="overallCategoryTabs"></div>
                 <div id="overallStatsDisplay" class="stats-display"></div>
             </div>
@@ -246,6 +264,9 @@
     <!-- Hidden file input for import -->
     <input type="file" id="importFileInput" accept=".json" style="display: none;">
 
+    <!-- jsPDF library for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
     <script src="app.js"></script>
 </body>
 </html>
