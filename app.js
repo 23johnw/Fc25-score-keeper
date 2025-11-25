@@ -2675,9 +2675,11 @@ class AppController {
         this.playerEditorValues = [];
         this.hasUnsavedPlayerChanges = false;
         
+        // Initialize lock labels before anything else that might use them
+        this.updateLockLabels();
+        
         this.initializeEventListeners();
         this.initializeApp();
-        this.updateLockLabels();
     }
     
     updateLockLabels() {
@@ -2869,7 +2871,10 @@ class AppController {
             } else if (screenId === 'statsScreen') {
                 this.loadStatistics();
             } else if (screenId === 'playerScreen') {
-                this.updatePlayerNameHistory(); // Add this line
+                // Reload players to ensure UI is in sync
+                const players = this.playerManager.getPlayers();
+                this.loadPlayersIntoUI(players);
+                this.updatePlayerNameHistory();
             } else if (screenId === 'historyScreen') {
                 this.loadMatchHistory();
             } else if (screenId === 'settingsScreen') {
@@ -2922,7 +2927,11 @@ class AppController {
             const trimmed = value.trim();
             const isSavedPlayer = isFilled && globalPlayers.includes(trimmed);
             const isLockedPlayer = isSavedPlayer && lockActive && lockState.player === trimmed;
-            const labels = this.lockLabels;
+            const labels = this.lockLabels || {
+                home: 'Home',
+                away: 'Away',
+                neutral: 'Neutral'
+            };
             const canSelect = isSavedPlayer && !unsaved;
             let selectedValue = 'neutral';
             if (isLockedPlayer) {
