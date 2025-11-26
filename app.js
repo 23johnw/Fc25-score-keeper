@@ -4770,16 +4770,14 @@ class AppController {
 
         if (this.selectedStructureIndex === null || !this.selectedStructure) {
             console.log('No structure selected, showing warning');
-            this.toastManager.warning('Please select a team structure first', 'Selection Required');
+            this.toastManager.warning('Please select a round structure', 'Selection Required');
             return;
         }
 
-        console.log('Structure confirmed, starting games directly');
+        console.log('Structure confirmed, switching to sequence screen');
         // Haptic feedback
         this.vibrate([30, 50, 30]);
-        // Go directly to first match instead of sequence screen
-        this.currentGameIndex = 0;
-        this.showCurrentMatch();
+        this.showScreen('sequenceScreen');
     }
 
     // Game Sequence
