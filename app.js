@@ -4717,8 +4717,11 @@ class AppController {
         });
 
         // Add click listeners for select buttons
-        container.querySelectorAll('.select-structure-btn').forEach(btn => {
+        const selectButtons = container.querySelectorAll('.select-structure-btn');
+        console.log('Found select buttons:', selectButtons.length);
+        selectButtons.forEach(btn => {
             btn.addEventListener('click', (e) => {
+                console.log('Select button clicked');
                 e.stopPropagation(); // Prevent card click
                 this.confirmSequence();
             });
@@ -4740,24 +4743,41 @@ class AppController {
     }
 
     selectStructure(structureIndex) {
+        console.log('selectStructure called with index:', structureIndex);
+
         const players = this.playerManager.getPlayers();
+        console.log('Players:', players);
+
         const lockState = this.playerManager.getPlayerLock();
+        console.log('Lock state:', lockState);
+
         const structures = this.teamGenerator.generateRoundStructures(players, lockState);
-        
+        console.log('Generated structures:', structures.length);
+
         if (structureIndex >= 0 && structureIndex < structures.length) {
+            console.log('Setting selected structure:', structureIndex);
             this.selectedStructureIndex = structureIndex;
             this.selectedStructure = structures[structureIndex];
             this.loadTeamCombinations();
             document.getElementById('confirmSequenceBtn').disabled = false;
+            console.log('Structure selected successfully');
+        } else {
+            console.log('Invalid structure index:', structureIndex, 'max:', structures.length - 1);
         }
     }
 
     confirmSequence() {
+        console.log('confirmSequence called');
+        console.log('selectedStructureIndex:', this.selectedStructureIndex);
+        console.log('selectedStructure:', this.selectedStructure);
+
         if (this.selectedStructureIndex === null || !this.selectedStructure) {
+            console.log('No structure selected, showing warning');
             this.toastManager.warning('Please select a round structure', 'Selection Required');
             return;
         }
-        
+
+        console.log('Structure confirmed, switching to sequence screen');
         // Haptic feedback
         this.vibrate([30, 50, 30]);
         this.showScreen('sequenceScreen');
