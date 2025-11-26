@@ -4633,13 +4633,10 @@ class AppController {
                 this.updatePlayerNameHistory(); // Update the history display
                 this.resetSelectedStructure();
                 this.showScreen('teamScreen');
+                this.toastManager.success('Players saved successfully!');
             } else {
                 console.error('Failed to save players');
                 this.toastManager.error('Error saving players');
-            }
-            
-            if (success) {
-                this.toastManager.success('Players saved successfully!');
             }
         } catch (error) {
             console.error('Error in savePlayers:', error);
