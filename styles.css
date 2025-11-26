@@ -397,6 +397,13 @@ body.dark-mode .player-editable-item.active {
     flex: 1;
 }
 
+.all-selected-indicator {
+    font-size: 0.85rem;
+    color: var(--primary-color);
+    font-weight: 600;
+    margin-left: 0.5rem;
+}
+
 .select-structure-btn {
     padding: 0.5rem 1.25rem;
     background-color: var(--primary-color);
@@ -1841,6 +1848,42 @@ body.dark-mode .insight-stats span {
 
 .score-input:focus {
     outline: none;
+}
+
+/* Checkbox Label */
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.checkbox-input {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--primary-color);
+}
+
+.extra-time-section,
+.penalties-section {
+    padding: 0.75rem;
+    background-color: rgba(33, 150, 243, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(33, 150, 243, 0.2);
+}
+
+.extra-time-score,
+.penalties-score {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-left: 0.25rem;
+}
     border-color: var(--primary-color);
 }
 

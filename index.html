@@ -136,7 +136,48 @@
                         <input type="number" id="team2Score" min="0" max="99" value="0" class="score-input">
                     </div>
                 </div>
-                <button id="submitScoreBtn" class="btn btn-primary">Record Score</button>
+                
+                <!-- Extra Time Section -->
+                <div class="extra-time-section" id="extraTimeSection" style="display: none; margin-top: 1rem;">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="wentToExtraTime" class="checkbox-input">
+                        <span>Went to Extra Time</span>
+                    </label>
+                    <p class="score-hint" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0.5rem;">Enter the total score after extra time (full time + extra time goals)</p>
+                    <div class="score-input-container" id="extraTimeScores" style="display: none; margin-top: 0.75rem;">
+                        <div class="score-input-group">
+                            <label>Team 1 (Total)</label>
+                            <input type="number" id="team1ExtraTimeScore" min="0" max="99" value="0" class="score-input">
+                        </div>
+                        <span class="score-separator">-</span>
+                        <div class="score-input-group">
+                            <label>Team 2 (Total)</label>
+                            <input type="number" id="team2ExtraTimeScore" min="0" max="99" value="0" class="score-input">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Penalties Section -->
+                <div class="penalties-section" id="penaltiesSection" style="display: none; margin-top: 1rem;">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="wentToPenalties" class="checkbox-input">
+                        <span>Went to Penalties</span>
+                    </label>
+                    <p class="score-hint" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0.5rem;">Enter only the penalties scored (e.g., 5-4)</p>
+                    <div class="score-input-container" id="penaltiesScores" style="display: none; margin-top: 0.75rem;">
+                        <div class="score-input-group">
+                            <label>Team 1 (Pens)</label>
+                            <input type="number" id="team1PenaltiesScore" min="0" max="20" value="0" class="score-input">
+                        </div>
+                        <span class="score-separator">-</span>
+                        <div class="score-input-group">
+                            <label>Team 2 (Pens)</label>
+                            <input type="number" id="team2PenaltiesScore" min="0" max="20" value="0" class="score-input">
+                        </div>
+                    </div>
+                </div>
+                
+                <button id="submitScoreBtn" class="btn btn-primary" style="margin-top: 1rem;">Record Score</button>
             </div>
 
             <div class="button-group">
@@ -253,6 +294,47 @@
                     <input type="number" id="editTeam2Score" min="0" max="99" value="0" class="score-input">
                 </div>
             </div>
+            
+            <!-- Extra Time Section -->
+            <div class="extra-time-section" id="editExtraTimeSection" style="margin-top: 1rem;">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="editWentToExtraTime" class="checkbox-input">
+                    <span>Went to Extra Time</span>
+                </label>
+                <p class="score-hint" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0.5rem;">Enter the total score after extra time (full time + extra time goals)</p>
+                <div class="score-input-container" id="editExtraTimeScores" style="display: none; margin-top: 0.75rem;">
+                    <div class="score-input-group">
+                        <label>Team 1 (Total)</label>
+                        <input type="number" id="editTeam1ExtraTimeScore" min="0" max="99" value="0" class="score-input">
+                    </div>
+                    <span class="score-separator">-</span>
+                    <div class="score-input-group">
+                        <label>Team 2 (Total)</label>
+                        <input type="number" id="editTeam2ExtraTimeScore" min="0" max="99" value="0" class="score-input">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Penalties Section -->
+            <div class="penalties-section" id="editPenaltiesSection" style="margin-top: 1rem;">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="editWentToPenalties" class="checkbox-input">
+                    <span>Went to Penalties</span>
+                </label>
+                <p class="score-hint" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0.5rem;">Enter only the penalties scored (e.g., 5-4)</p>
+                <div class="score-input-container" id="editPenaltiesScores" style="display: none; margin-top: 0.75rem;">
+                    <div class="score-input-group">
+                        <label>Team 1 (Pens)</label>
+                        <input type="number" id="editTeam1PenaltiesScore" min="0" max="20" value="0" class="score-input">
+                    </div>
+                    <span class="score-separator">-</span>
+                    <div class="score-input-group">
+                        <label>Team 2 (Pens)</label>
+                        <input type="number" id="editTeam2PenaltiesScore" min="0" max="20" value="0" class="score-input">
+                    </div>
+                </div>
+            </div>
+            
             <div class="button-group">
                 <button id="saveEditMatchBtn" class="btn btn-primary">Save Changes</button>
                 <button id="cancelEditMatchBtn" class="btn btn-secondary">Cancel</button>

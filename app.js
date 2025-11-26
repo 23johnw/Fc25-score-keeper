@@ -766,7 +766,7 @@ StatisticsCalculators.register({
     }
 });
 
-// Total Goals Scored Calculator
+// Total Goals Scored Calculator (includes extra time goals)
 StatisticsCalculators.register({
     id: 'totalGoals',
     name: 'Total Goals Scored',
@@ -774,11 +774,15 @@ StatisticsCalculators.register({
     calculate: (matches, players) => {
         const stats = {};
         players.forEach(player => {
-            stats[player] = { goals: 0 };
+            stats[player] = { 
+                goals: 0,
+                fullTimeGoals: 0,
+                extraTimeGoals: 0
+            };
         });
 
         matches.forEach(match => {
-            const { team1, team2, team1Score, team2Score } = match;
+            const { team1, team2, team1Score, team2Score, team1ExtraTimeScore, team2ExtraTimeScore } = match;
             
             // Handle matches that might not have scores yet (backward compatibility)
             if (typeof team1Score === 'undefined' || typeof team2Score === 'undefined') {
@@ -787,18 +791,43 @@ StatisticsCalculators.register({
             
             const team1Players = Array.isArray(team1) ? team1 : [team1];
             const team2Players = Array.isArray(team2) ? team2 : [team2];
+            
+            // Determine if match went to extra time
+            const hasExtraTime = team1ExtraTimeScore !== undefined && team2ExtraTimeScore !== undefined;
+            
+            // Calculate goals (use extra time score if available, otherwise full time)
+            let team1Goals = team1Score;
+            let team2Goals = team2Score;
+            let team1ExtraGoals = 0;
+            let team2ExtraGoals = 0;
+            
+            if (hasExtraTime) {
+                // Extra time scores are cumulative, so calculate extra time goals only
+                team1ExtraGoals = team1ExtraTimeScore - team1Score;
+                team2ExtraGoals = team2ExtraTimeScore - team2Score;
+                team1Goals = team1ExtraTimeScore; // Total goals includes extra time
+                team2Goals = team2ExtraTimeScore;
+            }
 
-            // Team 1 players get team1Score added to their total
+            // Team 1 players
             team1Players.forEach(p => {
                 if (stats[p]) {
-                    stats[p].goals += team1Score;
+                    stats[p].goals += team1Goals;
+                    stats[p].fullTimeGoals += team1Score;
+                    if (hasExtraTime) {
+                        stats[p].extraTimeGoals += team1ExtraGoals;
+                    }
                 }
             });
 
-            // Team 2 players get team2Score added to their total
+            // Team 2 players
             team2Players.forEach(p => {
                 if (stats[p]) {
-                    stats[p].goals += team2Score;
+                    stats[p].goals += team2Goals;
+                    stats[p].fullTimeGoals += team2Score;
+                    if (hasExtraTime) {
+                        stats[p].extraTimeGoals += team2ExtraGoals;
+                    }
                 }
             });
         });
@@ -813,24 +842,37 @@ StatisticsCalculators.register({
         const sorted = Object.entries(data)
             .sort((a, b) => b[1].goals - a[1].goals);
         
+        // Check if any player has extra time goals
+        const hasExtraTimeGoals = sorted.some(([_, stats]) => stats.extraTimeGoals > 0);
+        
         const html = `
             <table class="league-table">
                 <thead>
                     <tr>
                         <th>Pos</th>
                         <th>Player</th>
-                        <th>Goals</th>
+                        <th>Total</th>
+                        ${hasExtraTimeGoals ? '<th>FT</th><th>ET</th>' : ''}
                     </tr>
                 </thead>
                 <tbody>
                     ${sorted.map(([player, stats], index) => {
                         const position = index + 1;
                         const positionSymbol = position === 1 ? '🥇' : position === 2 ? '🥈' : position === 3 ? '🥉' : '';
+                        const color = window.appController && window.appController.settingsManager
+                            ? window.appController.settingsManager.getPlayerColor(player)
+                            : null;
+                        const playerStyle = color ? `style="color: ${color}; font-weight: 600;"` : '';
+                        
                         return `
                             <tr ${position === 1 ? 'class="leader"' : ''}>
                                 <td class="position">${position}</td>
-                                <td class="player-name">${positionSymbol} ${player}</td>
-                                <td class="points">${stats.goals}</td>
+                                <td class="player-name" ${playerStyle}>${positionSymbol} ${escapeHtml(player)}</td>
+                                <td class="points"><strong>${stats.goals}</strong></td>
+                                ${hasExtraTimeGoals ? `
+                                    <td>${stats.fullTimeGoals}</td>
+                                    <td>${stats.extraTimeGoals > 0 ? `<span style="color: var(--primary-color); font-weight: 600;">${stats.extraTimeGoals}</span>` : '0'}</td>
+                                ` : ''}
                             </tr>
                         `;
                     }).join('')}
@@ -2785,6 +2827,176 @@ StatisticsCalculators.register({
     }
 });
 
+// Extra Time & Penalties Statistics Calculator
+StatisticsCalculators.register({
+    id: 'extraTimePenalties',
+    name: 'Extra Time & Penalties',
+    category: 'performance',
+    subcategory: 'match-types',
+    calculate: (matches, players) => {
+        const stats = {};
+        players.forEach(player => {
+            stats[player] = {
+                totalMatches: 0,
+                extraTimeMatches: 0,
+                extraTimeWins: 0,
+                extraTimeLosses: 0,
+                extraTimeDraws: 0,
+                penaltiesMatches: 0,
+                penaltiesWins: 0,
+                penaltiesLosses: 0,
+                penaltiesScored: 0,
+                penaltiesConceded: 0
+            };
+        });
+
+        matches.forEach(match => {
+            const { team1, team2, result, team1ExtraTimeScore, team2ExtraTimeScore, team1PenaltiesScore, team2PenaltiesScore } = match;
+            const team1Players = Array.isArray(team1) ? team1 : [team1];
+            const team2Players = Array.isArray(team2) ? team2 : [team2];
+            
+            const hasExtraTime = team1ExtraTimeScore !== undefined && team2ExtraTimeScore !== undefined;
+            const hasPenalties = team1PenaltiesScore !== undefined && team2PenaltiesScore !== undefined;
+
+            // Count all matches for each player
+            [...team1Players, ...team2Players].forEach(player => {
+                if (stats[player]) {
+                    stats[player].totalMatches++;
+                    
+                    const inTeam1 = team1Players.includes(player);
+                    const won = (result === 'team1' && inTeam1) || (result === 'team2' && !inTeam1);
+                    const lost = (result === 'team1' && !inTeam1) || (result === 'team2' && inTeam1);
+                    const drawn = result === 'draw';
+                    
+                    if (hasExtraTime) {
+                        stats[player].extraTimeMatches++;
+                        if (won) stats[player].extraTimeWins++;
+                        else if (lost) stats[player].extraTimeLosses++;
+                        else if (drawn) stats[player].extraTimeDraws++;
+                    }
+                    
+                    if (hasPenalties) {
+                        stats[player].penaltiesMatches++;
+                        if (won) stats[player].penaltiesWins++;
+                        else if (lost) stats[player].penaltiesLosses++;
+                        
+                        // Count penalties scored/conceded
+                        if (inTeam1) {
+                            stats[player].penaltiesScored += team1PenaltiesScore || 0;
+                            stats[player].penaltiesConceded += team2PenaltiesScore || 0;
+                        } else {
+                            stats[player].penaltiesScored += team2PenaltiesScore || 0;
+                            stats[player].penaltiesConceded += team1PenaltiesScore || 0;
+                        }
+                    }
+                }
+            });
+        });
+
+        return stats;
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card';
+        
+        const escapeHtml = (str = '') => {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        };
+        
+        const sorted = Object.entries(data)
+            .sort((a, b) => {
+                // Sort by total matches, then by extra time matches
+                if (b[1].totalMatches !== a[1].totalMatches) {
+                    return b[1].totalMatches - a[1].totalMatches;
+                }
+                return b[1].extraTimeMatches - a[1].extraTimeMatches;
+            });
+
+        if (sorted.length === 0 || sorted.every(([_, stats]) => stats.totalMatches === 0)) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⏱️</div><h3>No Extra Time Data</h3><p>Record matches that went to extra time or penalties to see statistics here!</p></div>';
+            return container;
+        }
+
+        const html = sorted.map(([player, stats]) => {
+            const extraTimeWinRate = stats.extraTimeMatches > 0 
+                ? ((stats.extraTimeWins / stats.extraTimeMatches) * 100).toFixed(1) 
+                : '0.0';
+            const penaltiesWinRate = stats.penaltiesMatches > 0 
+                ? ((stats.penaltiesWins / stats.penaltiesMatches) * 100).toFixed(1) 
+                : '0.0';
+            
+            const color = window.appController && window.appController.settingsManager
+                ? window.appController.settingsManager.getPlayerColor(player)
+                : null;
+            const playerStyle = color ? `style="color: ${color}; font-weight: 600;"` : '';
+
+            return `
+                <div style="margin-bottom: 1.5rem; padding: 1rem; background-color: var(--surface-color); border-radius: 8px; border: 1px solid var(--border-color);">
+                    <h4 ${playerStyle}>${escapeHtml(player)}</h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                        <div>
+                            <strong style="font-size: 0.9rem; color: var(--text-secondary);">Extra Time</strong>
+                            <table class="league-table" style="margin-top: 0.5rem; font-size: 0.9rem;">
+                                <tbody>
+                                    <tr>
+                                        <td>Matches</td>
+                                        <td><strong>${stats.extraTimeMatches}</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td>W-D-L</td>
+                                        <td><strong>${stats.extraTimeWins}-${stats.extraTimeDraws}-${stats.extraTimeLosses}</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Win Rate</td>
+                                        <td><strong>${extraTimeWinRate}%</strong></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div>
+                            <strong style="font-size: 0.9rem; color: var(--text-secondary);">Penalties</strong>
+                            <table class="league-table" style="margin-top: 0.5rem; font-size: 0.9rem;">
+                                <tbody>
+                                    <tr>
+                                        <td>Matches</td>
+                                        <td><strong>${stats.penaltiesMatches}</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td>W-L</td>
+                                        <td><strong>${stats.penaltiesWins}-${stats.penaltiesLosses}</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Win Rate</td>
+                                        <td><strong>${penaltiesWinRate}%</strong></td>
+                                    </tr>
+                                    ${stats.penaltiesMatches > 0 ? `
+                                    <tr>
+                                        <td>Pens Scored</td>
+                                        <td><strong>${stats.penaltiesScored}</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Pens Conceded</td>
+                                        <td><strong>${stats.penaltiesConceded}</strong></td>
+                                    </tr>
+                                    ` : ''}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = html;
+        return container;
+    }
+});
+
 // Performance Heatmap - Calendar View
 StatisticsCalculators.register({
     id: 'performanceHeatmap',
@@ -3213,14 +3425,57 @@ class StatisticsDisplay {
         } else {
             calculators = StatisticsCalculators.getAll();
         }
-            
+        
+        // When showing "All", ensure we show ALL calculators
+        const showAll = category === null;
+        
         calculators.forEach(calculator => {
-            const data = stats[calculator.id];
-            if (data && Object.keys(data).length > 0) {
-                const element = calculator.display(data);
-                // Apply player colors to the rendered element
-                this.applyPlayerColorsToElement(element);
-                container.appendChild(element);
+            try {
+                const data = stats[calculator.id];
+                // When showing "All", display all calculators (they handle empty states)
+                // When filtering by category, only show calculators with data
+                if (showAll) {
+                    // Show all calculators when "All" is selected - always display them
+                    // Use the data from stats, or empty object if not calculated
+                    const displayData = data !== undefined ? data : {};
+                    let element;
+                    try {
+                        element = calculator.display(displayData);
+                    } catch (displayError) {
+                        console.error(`Display error for calculator ${calculator.id}:`, displayError);
+                        element = null;
+                    }
+                    if (element && element.nodeType) {
+                        // Apply player colors to the rendered element
+                        this.applyPlayerColorsToElement(element);
+                        container.appendChild(element);
+                    } else {
+                        // If display returned null/undefined/falsy, create a placeholder
+                        const placeholderElement = document.createElement('div');
+                        placeholderElement.className = 'stat-card';
+                        placeholderElement.innerHTML = `<div class="empty-state"><h3>${calculator.name || calculator.id}</h3><p>No data available</p></div>`;
+                        container.appendChild(placeholderElement);
+                    }
+                } else {
+                    // For specific categories, only show calculators with data
+                    if (data && typeof data === 'object' && Object.keys(data).length > 0) {
+                        const element = calculator.display(data);
+                        if (element && element.nodeType) {
+                            // Apply player colors to the rendered element
+                            this.applyPlayerColorsToElement(element);
+                            container.appendChild(element);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error(`Error displaying calculator ${calculator.id}:`, error);
+                // Still try to display an error message for the calculator when showing All
+                if (showAll) {
+                    const errorElement = document.createElement('div');
+                    errorElement.className = 'stat-card';
+                    errorElement.innerHTML = `<div class="empty-state"><h3>${calculator.name || calculator.id}</h3><p>Error loading: ${error.message}</p></div>`;
+                    container.appendChild(errorElement);
+                }
             }
         });
     }
@@ -3260,12 +3515,25 @@ class MatchRecorder {
         this.seasonManager = seasonManager;
     }
 
-    recordMatch(team1, team2, team1Score, team2Score) {
-        // Determine result from scores
+    recordMatch(team1, team2, team1Score, team2Score, team1ExtraTimeScore = null, team2ExtraTimeScore = null, team1PenaltiesScore = null, team2PenaltiesScore = null) {
+        // Determine result from scores (use penalties if available, otherwise extra time, otherwise full time)
+        let finalTeam1Score = team1Score;
+        let finalTeam2Score = team2Score;
+        
+        if (team1PenaltiesScore !== null && team2PenaltiesScore !== null) {
+            // Use penalties score for result determination
+            finalTeam1Score = team1PenaltiesScore;
+            finalTeam2Score = team2PenaltiesScore;
+        } else if (team1ExtraTimeScore !== null && team2ExtraTimeScore !== null) {
+            // Use extra time score for result determination
+            finalTeam1Score = team1ExtraTimeScore;
+            finalTeam2Score = team2ExtraTimeScore;
+        }
+        
         let result;
-        if (team1Score > team2Score) {
+        if (finalTeam1Score > finalTeam2Score) {
             result = 'team1';
-        } else if (team2Score > team1Score) {
+        } else if (finalTeam2Score > finalTeam1Score) {
             result = 'team2';
         } else {
             result = 'draw';
@@ -3279,6 +3547,18 @@ class MatchRecorder {
             result: result, // Automatically determined from scores
             timestamp: new Date().toISOString()
         };
+
+        // Add extra time scores if provided
+        if (team1ExtraTimeScore !== null && team2ExtraTimeScore !== null) {
+            match.team1ExtraTimeScore = team1ExtraTimeScore;
+            match.team2ExtraTimeScore = team2ExtraTimeScore;
+        }
+
+        // Add penalties scores if provided
+        if (team1PenaltiesScore !== null && team2PenaltiesScore !== null) {
+            match.team1PenaltiesScore = team1PenaltiesScore;
+            match.team2PenaltiesScore = team2PenaltiesScore;
+        }
 
         const currentSeason = this.seasonManager.getCurrentSeason();
         return this.storage.updateData(data => {
@@ -3312,14 +3592,26 @@ class MatchRecorder {
     }
 
     // Update a match
-    updateMatch(timestamp, newTeam1Score, newTeam2Score) {
+    updateMatch(timestamp, newTeam1Score, newTeam2Score, newTeam1ExtraTimeScore = null, newTeam2ExtraTimeScore = null, newTeam1PenaltiesScore = null, newTeam2PenaltiesScore = null) {
         const matchInfo = this.findMatch(timestamp);
         if (!matchInfo) return false;
 
+        // Determine result from scores (use penalties if available, otherwise extra time, otherwise full time)
+        let finalTeam1Score = newTeam1Score;
+        let finalTeam2Score = newTeam2Score;
+        
+        if (newTeam1PenaltiesScore !== null && newTeam2PenaltiesScore !== null) {
+            finalTeam1Score = newTeam1PenaltiesScore;
+            finalTeam2Score = newTeam2PenaltiesScore;
+        } else if (newTeam1ExtraTimeScore !== null && newTeam2ExtraTimeScore !== null) {
+            finalTeam1Score = newTeam1ExtraTimeScore;
+            finalTeam2Score = newTeam2ExtraTimeScore;
+        }
+        
         let newResult;
-        if (newTeam1Score > newTeam2Score) {
+        if (finalTeam1Score > finalTeam2Score) {
             newResult = 'team1';
-        } else if (newTeam2Score > newTeam1Score) {
+        } else if (finalTeam2Score > finalTeam1Score) {
             newResult = 'team2';
         } else {
             newResult = 'draw';
@@ -3328,9 +3620,28 @@ class MatchRecorder {
         return this.storage.updateData(data => {
             const season = data.seasons[matchInfo.season];
             if (season && season.matches[matchInfo.index]) {
-                season.matches[matchInfo.index].team1Score = newTeam1Score;
-                season.matches[matchInfo.index].team2Score = newTeam2Score;
-                season.matches[matchInfo.index].result = newResult;
+                const match = season.matches[matchInfo.index];
+                match.team1Score = newTeam1Score;
+                match.team2Score = newTeam2Score;
+                match.result = newResult;
+                
+                // Update or remove extra time scores
+                if (newTeam1ExtraTimeScore !== null && newTeam2ExtraTimeScore !== null) {
+                    match.team1ExtraTimeScore = newTeam1ExtraTimeScore;
+                    match.team2ExtraTimeScore = newTeam2ExtraTimeScore;
+                } else {
+                    delete match.team1ExtraTimeScore;
+                    delete match.team2ExtraTimeScore;
+                }
+                
+                // Update or remove penalties scores
+                if (newTeam1PenaltiesScore !== null && newTeam2PenaltiesScore !== null) {
+                    match.team1PenaltiesScore = newTeam1PenaltiesScore;
+                    match.team2PenaltiesScore = newTeam2PenaltiesScore;
+                } else {
+                    delete match.team1PenaltiesScore;
+                    delete match.team2PenaltiesScore;
+                }
             }
         });
     }
@@ -4029,6 +4340,7 @@ class AppController {
         this.currentScreen = 'playerScreen';
         this.selectedStructureIndex = null;
         this.selectedStructure = null;
+        this.selectedAllStructures = false;
         this.currentGameIndex = 0;
         this.currentStatsState = {};
         this.editingMatchTimestamp = null;
@@ -4128,6 +4440,7 @@ class AppController {
 
         // Team screen
         document.getElementById('confirmSequenceBtn').addEventListener('click', () => this.confirmSequence());
+        document.getElementById('selectAllCombinationsBtn').addEventListener('click', () => this.selectAllStructures());
         document.getElementById('backToPlayersBtn').addEventListener('click', () => this.showScreen('playerScreen'));
 
         // Sequence screen
@@ -4137,6 +4450,26 @@ class AppController {
         // Match screen
         document.getElementById('submitScoreBtn').addEventListener('click', () => this.recordScore());
         document.getElementById('backToSequenceBtn').addEventListener('click', () => this.showScreen('sequenceScreen'));
+        
+        // Extra time and penalties checkboxes
+        const extraTimeCheckbox = document.getElementById('wentToExtraTime');
+        const penaltiesCheckbox = document.getElementById('wentToPenalties');
+        if (extraTimeCheckbox) {
+            extraTimeCheckbox.addEventListener('change', (e) => {
+                const extraTimeScores = document.getElementById('extraTimeScores');
+                if (extraTimeScores) {
+                    extraTimeScores.style.display = e.target.checked ? 'flex' : 'none';
+                }
+            });
+        }
+        if (penaltiesCheckbox) {
+            penaltiesCheckbox.addEventListener('change', (e) => {
+                const penaltiesScores = document.getElementById('penaltiesScores');
+                if (penaltiesScores) {
+                    penaltiesScores.style.display = e.target.checked ? 'flex' : 'none';
+                }
+            });
+        }
 
         // Stats screen
         document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -4188,6 +4521,26 @@ class AppController {
         document.getElementById('saveEditMatchBtn').addEventListener('click', () => this.saveEditMatch());
         document.getElementById('cancelEditMatchBtn').addEventListener('click', () => this.closeEditModal());
         document.getElementById('deleteMatchBtn').addEventListener('click', () => this.confirmDeleteMatch());
+        
+        // Edit modal extra time and penalties checkboxes
+        const editExtraTimeCheckbox = document.getElementById('editWentToExtraTime');
+        const editPenaltiesCheckbox = document.getElementById('editWentToPenalties');
+        if (editExtraTimeCheckbox) {
+            editExtraTimeCheckbox.addEventListener('change', (e) => {
+                const editExtraTimeScores = document.getElementById('editExtraTimeScores');
+                if (editExtraTimeScores) {
+                    editExtraTimeScores.style.display = e.target.checked ? 'flex' : 'none';
+                }
+            });
+        }
+        if (editPenaltiesCheckbox) {
+            editPenaltiesCheckbox.addEventListener('change', (e) => {
+                const editPenaltiesScores = document.getElementById('editPenaltiesScores');
+                if (editPenaltiesScores) {
+                    editPenaltiesScores.style.display = e.target.checked ? 'flex' : 'none';
+                }
+            });
+        }
         document.getElementById('importFileInput').addEventListener('change', (e) => this.handleFileImport(e));
 
         // Dark mode toggle
@@ -4584,6 +4937,7 @@ class AppController {
     resetSelectedStructure() {
         this.selectedStructureIndex = null;
         this.selectedStructure = null;
+        this.selectedAllStructures = false;
         this.currentGameIndex = 0;
         this.currentMatch = null;
 
@@ -4661,13 +5015,18 @@ class AppController {
         const structures = this.teamGenerator.generateRoundStructures(players, lockState);
         const container = document.getElementById('teamCombinations');
         
+        if (!container) {
+            console.error('teamCombinations container not found');
+            return;
+        }
+        
         if (structures.length === 0) {
             container.innerHTML = '<div class="empty-state"><p>Need at least 2 players to generate round structures.</p></div>';
             return;
         }
 
         container.innerHTML = structures.map((structure, structureIndex) => {
-            const isSelected = this.selectedStructureIndex === structureIndex;
+            const isSelected = this.selectedStructureIndex === structureIndex || this.selectedAllStructures;
             
             const matchesHTML = structure.matches.map((match, matchIndex) => {
                 const team1Name = this.teamGenerator.formatTeamName(match.team1);
@@ -4688,11 +5047,14 @@ class AppController {
                 `;
             }).join('');
             
+            const showSelectButton = this.selectedStructureIndex === structureIndex && !this.selectedAllStructures;
+            const allSelectedIndicator = this.selectedAllStructures ? '<span class="all-selected-indicator">✓ All Selected</span>' : '';
+            
             return `
                 <div class="round-structure-card ${isSelected ? 'selected' : ''}" data-index="${structureIndex}">
                     <div class="structure-header">
-                        <h3>Round Structure ${structureIndex + 1}</h3>
-                        ${isSelected ? `<button class="select-structure-btn" data-index="${structureIndex}">Select</button>` : ''}
+                        <h3>Round Structure ${structureIndex + 1} ${allSelectedIndicator}</h3>
+                        ${showSelectButton ? `<button class="select-structure-btn" data-index="${structureIndex}">Select</button>` : ''}
                     </div>
                     <div class="structure-matches">
                         ${matchesHTML}
@@ -4701,27 +5063,77 @@ class AppController {
             `;
         }).join('');
 
-        // Add click listeners for cards
-        container.querySelectorAll('.round-structure-card').forEach(card => {
-            card.addEventListener('click', (e) => {
-                // Don't select if clicking the button
-                if (e.target.classList.contains('select-structure-btn')) {
-                    return;
-                }
-                const index = parseInt(card.dataset.index);
-                this.selectStructure(index);
-            });
-        });
+        // Use event delegation on the container for more reliable event handling
+        // Remove any existing listeners first to avoid duplicates
+        const existingClickHandler = container._clickHandler;
+        const existingTouchHandler = container._touchHandler;
+        if (existingClickHandler) {
+            container.removeEventListener('click', existingClickHandler);
+        }
+        if (existingTouchHandler) {
+            container.removeEventListener('touchend', existingTouchHandler);
+        }
 
-        // Add click listeners for select buttons
-        const selectButtons = container.querySelectorAll('.select-structure-btn');
-        console.log('Found select buttons:', selectButtons.length);
-        selectButtons.forEach(btn => {
-            btn.addEventListener('click', (e) => {
+        // Create click handler
+        const clickHandler = (e) => {
+            // Check if click is on a round structure card
+            const card = e.target.closest('.round-structure-card');
+            if (!card) {
+                return;
+            }
+
+            // Check if click is on the select button
+            if (e.target.closest('.select-structure-btn')) {
+                e.stopPropagation();
                 console.log('Select button clicked');
-                e.stopPropagation(); // Prevent card click
                 this.confirmSequence();
-            });
+                return;
+            }
+
+            // Otherwise, select the structure
+            const index = parseInt(card.dataset.index);
+            if (!isNaN(index)) {
+                console.log('Round structure card clicked, index:', index);
+                this.selectStructure(index);
+            }
+        };
+
+        // Create touch handler for mobile
+        const touchHandler = (e) => {
+            const touch = e.changedTouches[0];
+            const target = document.elementFromPoint(touch.clientX, touch.clientY);
+            const card = target ? target.closest('.round-structure-card') : null;
+            
+            if (!card) {
+                return;
+            }
+
+            // Check if touch is on the select button
+            if (target && target.closest('.select-structure-btn')) {
+                e.stopPropagation();
+                console.log('Select button touched');
+                this.confirmSequence();
+                return;
+            }
+
+            // Otherwise, select the structure
+            const index = parseInt(card.dataset.index);
+            if (!isNaN(index)) {
+                console.log('Round structure card touched, index:', index);
+                this.selectStructure(index);
+            }
+        };
+
+        // Store handler references and attach
+        container._clickHandler = clickHandler;
+        container._touchHandler = touchHandler;
+        
+        // Use requestAnimationFrame to ensure DOM is ready
+        requestAnimationFrame(() => {
+            container.addEventListener('click', clickHandler, { passive: false });
+            container.addEventListener('touchend', touchHandler, { passive: false });
+            console.log('Event listeners attached to teamCombinations container');
+            console.log('Number of cards:', container.querySelectorAll('.round-structure-card').length);
         });
 
         const description = document.getElementById('teamScreenDescription');
@@ -4734,9 +5146,19 @@ class AppController {
             description.textContent = 'Ready to play 1v1!';
         }
 
-        // Hide "Select All" button since we're selecting one structure
-        document.getElementById('selectAllCombinationsBtn').style.display = 'none';
-        document.getElementById('confirmSequenceBtn').disabled = this.selectedStructureIndex === null;
+        // Show "Select All" button and update its state
+        const selectAllBtn = document.getElementById('selectAllCombinationsBtn');
+        selectAllBtn.style.display = 'block';
+        if (this.selectedAllStructures) {
+            selectAllBtn.textContent = 'All Selected ✓';
+            selectAllBtn.classList.add('btn-success');
+            selectAllBtn.classList.remove('btn-secondary');
+        } else {
+            selectAllBtn.textContent = 'Select All';
+            selectAllBtn.classList.remove('btn-success');
+            selectAllBtn.classList.add('btn-secondary');
+        }
+        document.getElementById('confirmSequenceBtn').disabled = this.selectedStructureIndex === null && !this.selectedAllStructures;
     }
 
     selectStructure(structureIndex) {
@@ -4755,6 +5177,7 @@ class AppController {
             console.log('Setting selected structure:', structureIndex);
             this.selectedStructureIndex = structureIndex;
             this.selectedStructure = structures[structureIndex];
+            this.selectedAllStructures = false; // Clear "select all" when selecting individual structure
             this.loadTeamCombinations();
             document.getElementById('confirmSequenceBtn').disabled = false;
             console.log('Structure selected successfully');
@@ -4763,14 +5186,51 @@ class AppController {
         }
     }
 
+    selectAllStructures() {
+        console.log('selectAllStructures called');
+        const players = this.playerManager.getPlayers();
+        const lockState = this.playerManager.getPlayerLock();
+        const structures = this.teamGenerator.generateRoundStructures(players, lockState);
+        
+        if (structures.length === 0) {
+            this.toastManager.warning('No round structures available', 'Selection Error');
+            return;
+        }
+
+        // Combine all matches from all structures into one sequence
+        const allMatches = [];
+        structures.forEach((structure, index) => {
+            structure.matches.forEach((match, matchIndex) => {
+                allMatches.push({
+                    ...match,
+                    structureIndex: index,
+                    matchIndex: matchIndex
+                });
+            });
+        });
+
+        // Create a combined structure
+        this.selectedStructure = {
+            matches: allMatches
+        };
+        this.selectedStructureIndex = null; // Clear individual selection
+        this.selectedAllStructures = true;
+        
+        this.loadTeamCombinations();
+        document.getElementById('confirmSequenceBtn').disabled = false;
+        this.toastManager.success(`Selected all ${allMatches.length} matches from ${structures.length} structures`, 'All Selected');
+        console.log('All structures selected, total matches:', allMatches.length);
+    }
+
     confirmSequence() {
         console.log('confirmSequence called');
         console.log('selectedStructureIndex:', this.selectedStructureIndex);
         console.log('selectedStructure:', this.selectedStructure);
+        console.log('selectedAllStructures:', this.selectedAllStructures);
 
-        if (this.selectedStructureIndex === null || !this.selectedStructure) {
+        if ((this.selectedStructureIndex === null && !this.selectedAllStructures) || !this.selectedStructure) {
             console.log('No structure selected, showing warning');
-            this.toastManager.warning('Please select a round structure', 'Selection Required');
+            this.toastManager.warning('Please select a round structure or click "Select All"', 'Selection Required');
             return;
         }
 
@@ -4836,12 +5296,50 @@ class AppController {
         const team2Display = this.formatTeamWithColors(match.team2);
         document.getElementById('team1Display').innerHTML = team1Display;
         document.getElementById('team2Display').innerHTML = team2Display;
-        document.getElementById('team1ScoreLabel').textContent = `${team1Name} Score`;
-        document.getElementById('team2ScoreLabel').textContent = `${team2Name} Score`;
+        document.getElementById('team1ScoreLabel').textContent = `${team1Name} Score (Full Time)`;
+        document.getElementById('team2ScoreLabel').textContent = `${team2Name} Score (Full Time)`;
         
         // Reset score inputs
         document.getElementById('team1Score').value = 0;
         document.getElementById('team2Score').value = 0;
+        
+        // Reset extra time and penalties
+        const extraTimeCheckbox = document.getElementById('wentToExtraTime');
+        const penaltiesCheckbox = document.getElementById('wentToPenalties');
+        if (extraTimeCheckbox) {
+            extraTimeCheckbox.checked = false;
+            document.getElementById('extraTimeScores').style.display = 'none';
+            document.getElementById('team1ExtraTimeScore').value = 0;
+            document.getElementById('team2ExtraTimeScore').value = 0;
+            
+            // Add event listener to auto-fill extra time with full time scores when checkbox is checked
+            // Remove old listener if exists and add new one
+            const newExtraTimeHandler = () => {
+                if (extraTimeCheckbox.checked) {
+                    // Auto-fill with current full time scores as starting point
+                    const currentTeam1Score = parseInt(document.getElementById('team1Score').value) || 0;
+                    const currentTeam2Score = parseInt(document.getElementById('team2Score').value) || 0;
+                    document.getElementById('team1ExtraTimeScore').value = currentTeam1Score;
+                    document.getElementById('team2ExtraTimeScore').value = currentTeam2Score;
+                }
+            };
+            
+            // Remove old listener if exists
+            extraTimeCheckbox.removeEventListener('change', this._extraTimeAutoFillHandler);
+            // Store reference and add new listener
+            this._extraTimeAutoFillHandler = newExtraTimeHandler;
+            extraTimeCheckbox.addEventListener('change', this._extraTimeAutoFillHandler);
+        }
+        if (penaltiesCheckbox) {
+            penaltiesCheckbox.checked = false;
+            document.getElementById('penaltiesScores').style.display = 'none';
+            document.getElementById('team1PenaltiesScore').value = 0;
+            document.getElementById('team2PenaltiesScore').value = 0;
+        }
+        
+        // Show extra time and penalties sections (they're hidden by default, shown when needed)
+        document.getElementById('extraTimeSection').style.display = 'block';
+        document.getElementById('penaltiesSection').style.display = 'block';
         
         this.currentMatch = match;
         this.showScreen('matchScreen');
@@ -4854,8 +5352,37 @@ class AppController {
 
         if (!this.currentMatch) return;
 
+        // Get extra time scores if applicable
+        // Extra time scores should be cumulative (full time + extra time goals)
+        const wentToExtraTime = document.getElementById('wentToExtraTime').checked;
+        let team1ExtraTimeScore = null;
+        let team2ExtraTimeScore = null;
+        if (wentToExtraTime) {
+            // User enters the total score after extra time (cumulative)
+            team1ExtraTimeScore = parseInt(document.getElementById('team1ExtraTimeScore').value) || 0;
+            team2ExtraTimeScore = parseInt(document.getElementById('team2ExtraTimeScore').value) || 0;
+        }
+
+        // Get penalties scores if applicable
+        const wentToPenalties = document.getElementById('wentToPenalties').checked;
+        let team1PenaltiesScore = null;
+        let team2PenaltiesScore = null;
+        if (wentToPenalties) {
+            team1PenaltiesScore = parseInt(document.getElementById('team1PenaltiesScore').value) || 0;
+            team2PenaltiesScore = parseInt(document.getElementById('team2PenaltiesScore').value) || 0;
+        }
+
         const { team1, team2 } = this.currentMatch;
-        if (this.matchRecorder.recordMatch(team1, team2, team1Score, team2Score)) {
+        if (this.matchRecorder.recordMatch(
+            team1, 
+            team2, 
+            team1Score, 
+            team2Score,
+            team1ExtraTimeScore,
+            team2ExtraTimeScore,
+            team1PenaltiesScore,
+            team2PenaltiesScore
+        )) {
             // Reset score inputs
             document.getElementById('team1Score').value = 0;
             document.getElementById('team2Score').value = 0;
@@ -4936,7 +5463,9 @@ class AppController {
             'trends': 'Trends',
             'overview': 'Overview',
             'insights': 'Insights',
-            'comparison': 'Comparison'
+            'comparison': 'Comparison',
+            'match-types': 'Match Types',
+            'goals': 'Goals'
         };
         
         let tabsHTML = '';
@@ -5277,7 +5806,13 @@ class AppController {
                 <div class="match-history-item">
                     <div class="match-history-info">
                         <div class="match-history-teams">${team1Display} vs ${team2Display}</div>
-                        <div class="match-history-score">${match.team1Score || 0} - ${match.team2Score || 0}</div>
+                        <div class="match-history-score">
+                            ${match.team1Score || 0} - ${match.team2Score || 0}
+                            ${match.team1ExtraTimeScore !== undefined && match.team2ExtraTimeScore !== undefined ? 
+                                ` <span class="extra-time-score">(${match.team1ExtraTimeScore}-${match.team2ExtraTimeScore} ET)</span>` : ''}
+                            ${match.team1PenaltiesScore !== undefined && match.team2PenaltiesScore !== undefined ? 
+                                ` <span class="penalties-score">(${match.team1PenaltiesScore}-${match.team2PenaltiesScore} Pens)</span>` : ''}
+                        </div>
                         <div class="match-history-date">${dateStr}</div>
                     </div>
                     <div class="match-history-actions">
@@ -5335,7 +5870,13 @@ class AppController {
                                 <span class="timeline-result-indicator ${resultIndicator}"></span>
                                 ${team1Display} vs ${team2Display}
                             </div>
-                            <div class="timeline-match-score">${match.team1Score || 0} - ${match.team2Score || 0}</div>
+                            <div class="timeline-match-score">
+                                ${match.team1Score || 0} - ${match.team2Score || 0}
+                                ${match.team1ExtraTimeScore !== undefined && match.team2ExtraTimeScore !== undefined ? 
+                                    ` <span class="extra-time-score">(${match.team1ExtraTimeScore}-${match.team2ExtraTimeScore} ET)</span>` : ''}
+                                ${match.team1PenaltiesScore !== undefined && match.team2PenaltiesScore !== undefined ? 
+                                    ` <span class="penalties-score">(${match.team1PenaltiesScore}-${match.team2PenaltiesScore} Pens)</span>` : ''}
+                            </div>
                         </div>
                         <div class="timeline-match-time">${timeStr}</div>
                         <div class="timeline-match-details">
@@ -5437,6 +5978,39 @@ class AppController {
         `;
         document.getElementById('editTeam1Score').value = match.team1Score || 0;
         document.getElementById('editTeam2Score').value = match.team2Score || 0;
+        
+        // Set extra time if exists
+        const hasExtraTime = match.team1ExtraTimeScore !== undefined && match.team2ExtraTimeScore !== undefined;
+        const editExtraTimeCheckbox = document.getElementById('editWentToExtraTime');
+        if (editExtraTimeCheckbox) {
+            editExtraTimeCheckbox.checked = hasExtraTime;
+            if (hasExtraTime) {
+                document.getElementById('editExtraTimeScores').style.display = 'flex';
+                document.getElementById('editTeam1ExtraTimeScore').value = match.team1ExtraTimeScore || 0;
+                document.getElementById('editTeam2ExtraTimeScore').value = match.team2ExtraTimeScore || 0;
+            } else {
+                document.getElementById('editExtraTimeScores').style.display = 'none';
+                document.getElementById('editTeam1ExtraTimeScore').value = 0;
+                document.getElementById('editTeam2ExtraTimeScore').value = 0;
+            }
+        }
+        
+        // Set penalties if exists
+        const hasPenalties = match.team1PenaltiesScore !== undefined && match.team2PenaltiesScore !== undefined;
+        const editPenaltiesCheckbox = document.getElementById('editWentToPenalties');
+        if (editPenaltiesCheckbox) {
+            editPenaltiesCheckbox.checked = hasPenalties;
+            if (hasPenalties) {
+                document.getElementById('editPenaltiesScores').style.display = 'flex';
+                document.getElementById('editTeam1PenaltiesScore').value = match.team1PenaltiesScore || 0;
+                document.getElementById('editTeam2PenaltiesScore').value = match.team2PenaltiesScore || 0;
+            } else {
+                document.getElementById('editPenaltiesScores').style.display = 'none';
+                document.getElementById('editTeam1PenaltiesScore').value = 0;
+                document.getElementById('editTeam2PenaltiesScore').value = 0;
+            }
+        }
+        
         document.getElementById('editMatchModal').style.display = 'flex';
     }
 
@@ -5446,7 +6020,33 @@ class AppController {
         const team1Score = parseInt(document.getElementById('editTeam1Score').value) || 0;
         const team2Score = parseInt(document.getElementById('editTeam2Score').value) || 0;
 
-        if (this.matchRecorder.updateMatch(this.editingMatchTimestamp, team1Score, team2Score)) {
+        // Get extra time scores if applicable
+        const wentToExtraTime = document.getElementById('editWentToExtraTime').checked;
+        let team1ExtraTimeScore = null;
+        let team2ExtraTimeScore = null;
+        if (wentToExtraTime) {
+            team1ExtraTimeScore = parseInt(document.getElementById('editTeam1ExtraTimeScore').value) || 0;
+            team2ExtraTimeScore = parseInt(document.getElementById('editTeam2ExtraTimeScore').value) || 0;
+        }
+
+        // Get penalties scores if applicable
+        const wentToPenalties = document.getElementById('editWentToPenalties').checked;
+        let team1PenaltiesScore = null;
+        let team2PenaltiesScore = null;
+        if (wentToPenalties) {
+            team1PenaltiesScore = parseInt(document.getElementById('editTeam1PenaltiesScore').value) || 0;
+            team2PenaltiesScore = parseInt(document.getElementById('editTeam2PenaltiesScore').value) || 0;
+        }
+
+        if (this.matchRecorder.updateMatch(
+            this.editingMatchTimestamp, 
+            team1Score, 
+            team2Score,
+            team1ExtraTimeScore,
+            team2ExtraTimeScore,
+            team1PenaltiesScore,
+            team2PenaltiesScore
+        )) {
             // Haptic feedback
             this.vibrate([50]);
             this.toastManager.success('Match updated successfully', 'Match Saved');
@@ -5762,6 +6362,17 @@ class AppController {
                 this.storage.clearAll();
                 this.settingsManager.resetAll();
                 location.reload();
+            }
+        }
+    }
+
+    // Haptic Feedback Helper
+    vibrate(pattern = [50]) {
+        if ('vibrate' in navigator) {
+            try {
+                navigator.vibrate(pattern);
+            } catch (e) {
+                // Vibration not supported or failed
             }
         }
     }
