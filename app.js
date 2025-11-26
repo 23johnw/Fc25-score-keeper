@@ -4812,6 +4812,9 @@ class AppController {
         document.getElementById('currentGameNumber').textContent = this.currentGameIndex + 1;
         document.getElementById('totalGames').textContent = this.selectedStructure.matches.length;
         
+        const team1Name = this.teamGenerator.formatTeamName(match.team1);
+        const team2Name = this.teamGenerator.formatTeamName(match.team2);
+
         const team1Display = this.formatTeamWithColors(match.team1);
         const team2Display = this.formatTeamWithColors(match.team2);
         document.getElementById('team1Display').innerHTML = team1Display;
