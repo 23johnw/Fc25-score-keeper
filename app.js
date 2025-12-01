@@ -4268,16 +4268,19 @@ class ShareManager {
         // Try mobile-friendly saving methods
         let saved = false;
         
-        // Try Web Share API for mobile devices
-        if (navigator.share && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        // Try Web Share API for mobile devices (if File constructor is supported)
+        if (navigator.share && typeof File !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
             try {
-                const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-                await navigator.share({
-                    title: fileName,
-                    files: [file]
-                });
-                saved = true;
-                return { blob: pdfBlob, blobUrl: URL.createObjectURL(pdfBlob), fileName, saved: true };
+                // Check if Web Share API supports files
+                if (navigator.canShare) {
+                    const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+                    const shareData = { files: [file] };
+                    if (navigator.canShare(shareData)) {
+                        await navigator.share(shareData);
+                        saved = true;
+                        return { blob: pdfBlob, blobUrl: URL.createObjectURL(pdfBlob), fileName, saved: true };
+                    }
+                }
             } catch (error) {
                 if (error.name !== 'AbortError') {
                     console.error('Error sharing PDF:', error);
@@ -4558,7 +4561,10 @@ class AppController {
         document.getElementById('exportTodayPDFBtn').addEventListener('click', () => this.exportPDF());
         document.getElementById('exportSeasonPDFBtn').addEventListener('click', () => this.exportPDF());
         document.getElementById('exportOverallPDFBtn').addEventListener('click', () => this.exportPDF());
-        document.getElementById('viewLastPDFBtn').addEventListener('click', () => this.viewLastPDF());
+        const viewPdfBtn = document.getElementById('viewLastPDFBtn');
+        if (viewPdfBtn) {
+            viewPdfBtn.addEventListener('click', () => this.viewLastPDF());
+        }
 
         // History screen
         document.getElementById('backFromHistoryBtn').addEventListener('click', () => this.showScreen('statsScreen'));
@@ -5803,17 +5809,35 @@ class AppController {
             
             // Store PDF blob URL for viewing
             if (result && result.blobUrl) {
-                // Clean up previous PDF blob URL
-                if (this.lastPDFBlobUrl) {
-                    URL.revokeObjectURL(this.lastPDFBlobUrl);
+                try {
+                    // Clean up previous PDF blob URL
+                    if (this.lastPDFBlobUrl) {
+                        try {
+                            URL.revokeObjectURL(this.lastPDFBlobUrl);
+                        } catch (e) {
+                            // Ignore errors revoking old URL
+                        }
+                    }
+                    this.lastPDFBlobUrl = result.blobUrl;
+                    
+                    // Show success notification
+                    if (this.toastManager) {
+                        this.toastManager.success(`PDF saved: ${result.fileName || 'PDF'}`, 'PDF Exported');
+                    }
+                    
+                    // Enable view PDF button if it exists
+                    this.updateViewPDFButton();
+                } catch (error) {
+                    console.error('Error handling PDF result:', error);
+                    if (this.toastManager) {
+                        this.toastManager.error('Error saving PDF. Please try again.');
+                    }
                 }
-                this.lastPDFBlobUrl = result.blobUrl;
-                
-                // Show success notification
-                this.toastManager.success(`PDF saved: ${result.fileName}`, 'PDF Exported');
-                
-                // Enable view PDF button if it exists
-                this.updateViewPDFButton();
+            } else if (result) {
+                // PDF was created but might not have blobUrl, still show success
+                if (this.toastManager) {
+                    this.toastManager.success('PDF exported successfully', 'PDF Exported');
+                }
             }
         } catch (error) {
             console.error('Error exporting PDF:', error);
@@ -5822,25 +5846,41 @@ class AppController {
     }
 
     updateViewPDFButton() {
-        const viewPdfBtn = document.getElementById('viewLastPDFBtn');
-        if (viewPdfBtn) {
-            if (this.lastPDFBlobUrl) {
-                viewPdfBtn.disabled = false;
-                viewPdfBtn.style.opacity = '1';
-                viewPdfBtn.style.cursor = 'pointer';
-            } else {
-                viewPdfBtn.disabled = true;
-                viewPdfBtn.style.opacity = '0.5';
-                viewPdfBtn.style.cursor = 'not-allowed';
+        try {
+            const viewPdfBtn = document.getElementById('viewLastPDFBtn');
+            if (viewPdfBtn) {
+                if (this.lastPDFBlobUrl) {
+                    viewPdfBtn.disabled = false;
+                    viewPdfBtn.style.opacity = '1';
+                    viewPdfBtn.style.cursor = 'pointer';
+                } else {
+                    viewPdfBtn.disabled = true;
+                    viewPdfBtn.style.opacity = '0.5';
+                    viewPdfBtn.style.cursor = 'not-allowed';
+                }
             }
+        } catch (error) {
+            console.error('Error updating view PDF button:', error);
+            // Silently fail - button might not be in DOM yet
         }
     }
 
     viewLastPDF() {
-        if (this.lastPDFBlobUrl) {
-            window.open(this.lastPDFBlobUrl, '_blank');
-        } else {
-            this.toastManager.error('No PDF available. Please export a PDF first.');
+        try {
+            if (this.lastPDFBlobUrl) {
+                window.open(this.lastPDFBlobUrl, '_blank');
+            } else {
+                if (this.toastManager) {
+                    this.toastManager.error('No PDF available. Please export a PDF first.');
+                } else {
+                    alert('No PDF available. Please export a PDF first.');
+                }
+            }
+        } catch (error) {
+            console.error('Error viewing PDF:', error);
+            if (this.toastManager) {
+                this.toastManager.error('Error opening PDF. Please try again.');
+            }
         }
     }
 
