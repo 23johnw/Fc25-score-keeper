@@ -4141,6 +4141,90 @@ class ShareManager {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF('p', 'mm', 'a4');
         
+        // ============================================================================
+        // PDF Design Constants and Helpers - Sports Theme
+        // ============================================================================
+        
+        // Color Palette (RGB values)
+        const COLORS = {
+            primary: [33, 150, 243],      // Blue - Performance stats
+            goals: [76, 175, 80],         // Green - Goals stats
+            league: [255, 152, 0],        // Orange/Gold - League table
+            records: [244, 67, 54],       // Red - Records
+            general: [156, 39, 176],      // Purple - General
+            success: [76, 175, 80],       // Green - Positive values
+            danger: [244, 67, 54],        // Red - Negative values
+            warning: [255, 152, 0],       // Orange - Warnings
+            text: [33, 33, 33],           // Dark text
+            textSecondary: [117, 117, 117], // Gray text
+            background: [245, 245, 245],   // Light gray for alternating rows
+            border: [224, 224, 224]       // Border gray
+        };
+        
+        // Section icons (text symbols that work in PDFs)
+        const ICONS = {
+            performance: '*',
+            goals: '*',
+            league: '*',
+            records: '*',
+            general: '*',
+            trend: '*',
+            h2h: '*',
+            form: '*'
+        };
+        
+        // Get section color based on calculator category
+        const getSectionColor = (calculator) => {
+            const category = calculator.category || 'performance';
+            switch(category) {
+                case 'performance': return COLORS.primary;
+                case 'goals': return COLORS.goals;
+                case 'league': return COLORS.league;
+                case 'records': return COLORS.records;
+                default: return COLORS.general;
+            }
+        };
+        
+        // Get section icon
+        const getSectionIcon = (calculator) => {
+            const id = calculator.id || '';
+            if (id.includes('league') || id.includes('Points')) return ICONS.league;
+            if (id.includes('goal') || id.includes('Goals')) return ICONS.goals;
+            if (id.includes('trend') || id.includes('Trend')) return ICONS.trend;
+            if (id.includes('headToHead') || id.includes('Head')) return ICONS.h2h;
+            if (id.includes('form') || id.includes('Form')) return ICONS.form;
+            if (id.includes('record') || id.includes('Record')) return ICONS.records;
+            return ICONS.performance;
+        };
+        
+        // Get player color from settings (if available)
+        const getPlayerColor = (playerName) => {
+            try {
+                if (window.appController && window.appController.settingsManager) {
+                    const color = window.appController.settingsManager.getPlayerColor(playerName);
+                    if (color) {
+                        // Convert hex to RGB array
+                        const hex = color.replace('#', '');
+                        return [
+                            parseInt(hex.substr(0, 2), 16),
+                            parseInt(hex.substr(2, 2), 16),
+                            parseInt(hex.substr(4, 2), 16)
+                        ];
+                    }
+                }
+            } catch (e) {
+                // Ignore errors
+            }
+            return null;
+        };
+        
+        // Format number with color coding
+        const formatNumber = (value, type = 'neutral') => {
+            if (type === 'positive') return { text: String(value), color: COLORS.success };
+            if (type === 'negative') return { text: String(value), color: COLORS.danger };
+            return { text: String(value), color: COLORS.text };
+        };
+        
         // Get statistics
         let stats;
         let title;
@@ -4155,16 +4239,22 @@ class ShareManager {
             title = 'Overall Statistics';
         }
         
-        // Helper function to draw a table
-        const drawTable = (headers, rows, startY, colWidths, headerColor = [33, 150, 243]) => {
+        // Enhanced helper function to draw a table with colors and styling
+        const drawTable = (headers, rows, startY, colWidths, headerColor = [33, 150, 243], options = {}) => {
             let currentY = startY;
             const pageWidth = 210;
             const margin = 15;
             const tableWidth = pageWidth - (margin * 2);
+            const rowHeight = 6; // Increased row height for better spacing
             
-            // Draw header background
+            // Draw header background with border
             doc.setFillColor(...headerColor);
-            doc.rect(margin, currentY - 5, tableWidth, 7, 'F');
+            doc.rect(margin, currentY - 6, tableWidth, rowHeight + 1, 'F');
+            
+            // Draw header border
+            doc.setDrawColor(...COLORS.border);
+            doc.setLineWidth(0.1);
+            doc.rect(margin, currentY - 6, tableWidth, rowHeight + 1);
             
             // Draw header text
             doc.setFontSize(9);
@@ -4176,11 +4266,10 @@ class ShareManager {
                 xPos += colWidths[i];
             });
             
-            currentY += 5;
+            currentY += rowHeight;
             
             // Draw rows
             doc.setFontSize(8);
-            doc.setTextColor(0, 0, 0);
             doc.setFont(undefined, 'normal');
             
             rows.forEach((row, rowIndex) => {
@@ -4190,7 +4279,9 @@ class ShareManager {
                     currentY = 20;
                     // Redraw header on new page
                     doc.setFillColor(...headerColor);
-                    doc.rect(margin, currentY - 5, tableWidth, 7, 'F');
+                    doc.rect(margin, currentY - 6, tableWidth, rowHeight + 1, 'F');
+                    doc.setDrawColor(...COLORS.border);
+                    doc.rect(margin, currentY - 6, tableWidth, rowHeight + 1);
                     doc.setFontSize(9);
                     doc.setTextColor(255, 255, 255);
                     doc.setFont(undefined, 'bold');
@@ -4199,48 +4290,158 @@ class ShareManager {
                         doc.text(header, xPos, currentY);
                         xPos += colWidths[i];
                     });
-                    currentY += 5;
+                    currentY += rowHeight;
                     doc.setFontSize(8);
-                    doc.setTextColor(0, 0, 0);
                     doc.setFont(undefined, 'normal');
                 }
                 
-                // Alternate row background
-                if (rowIndex % 2 === 0) {
-                    doc.setFillColor(245, 245, 245);
-                    doc.rect(margin, currentY - 4, tableWidth, 5, 'F');
+                // Position-based highlighting (top 3)
+                const position = rowIndex + 1;
+                let rowBgColor = null;
+                if (position === 1) {
+                    rowBgColor = [255, 248, 220]; // Light gold for 1st
+                } else if (position === 2) {
+                    rowBgColor = [245, 245, 245]; // Silver gray for 2nd
+                } else if (position === 3) {
+                    rowBgColor = [255, 235, 205]; // Light bronze for 3rd
+                } else if (rowIndex % 2 === 0) {
+                    rowBgColor = COLORS.background; // Alternating rows
                 }
                 
-                // Draw row text
+                // Draw row background
+                if (rowBgColor) {
+                    doc.setFillColor(...rowBgColor);
+                    doc.rect(margin, currentY - 5, tableWidth, rowHeight, 'F');
+                }
+                
+                // Draw row border
+                doc.setDrawColor(...COLORS.border);
+                doc.setLineWidth(0.05);
+                doc.rect(margin, currentY - 5, tableWidth, rowHeight);
+                
+                // Draw row text with smart formatting
                 xPos = margin + 2;
                 row.forEach((cell, i) => {
-                    const cellText = String(cell || '').substring(0, 25); // Limit text length
+                    let cellText = String(cell || '').substring(0, 25);
+                    let cellColor = COLORS.text;
+                    
+                    // Smart color coding based on cell content
+                    const headerName = headers[i] || '';
+                    
+                    if (cellText.startsWith('-') || cellText.startsWith('+')) {
+                        const num = parseFloat(cellText);
+                        if (!isNaN(num)) {
+                            cellColor = num >= 0 ? COLORS.success : COLORS.danger;
+                        }
+                    } else if (i === 0 && cellText.match(/^[1-3]$/)) {
+                        // Position numbers - bold for top 3
+                        doc.setFont(undefined, 'bold');
+                    } else if (headerName.includes('W') && !headerName.includes('Win %')) {
+                        // Win columns - green for wins
+                        const num = parseFloat(cellText);
+                        if (!isNaN(num) && num > 0) {
+                            cellColor = COLORS.success;
+                        }
+                    } else if (headerName.includes('L') && !headerName.includes('Loss')) {
+                        // Loss columns - red for losses
+                        const num = parseFloat(cellText);
+                        if (!isNaN(num) && num > 0) {
+                            cellColor = COLORS.danger;
+                        }
+                    } else if (cellText.includes('%')) {
+                        // Percentage values
+                        const num = parseFloat(cellText);
+                        if (!isNaN(num)) {
+                            if (num >= 70) cellColor = COLORS.success;
+                            else if (num >= 50) cellColor = COLORS.text;
+                            else if (num >= 30) cellColor = COLORS.warning;
+                            else cellColor = COLORS.danger;
+                        }
+                    } else if (headerName.includes('GF') || headerName.includes('Goals') || headerName.includes('Goals For')) {
+                        // Goals for - green
+                        const num = parseFloat(cellText);
+                        if (!isNaN(num) && num > 0) {
+                            cellColor = COLORS.success;
+                        }
+                    } else if (headerName.includes('GA') || headerName.includes('Goals Against')) {
+                        // Goals against - neutral/red for high values
+                        const num = parseFloat(cellText);
+                        if (!isNaN(num)) {
+                            cellColor = COLORS.text;
+                        }
+                    } else if (headerName.includes('Win') || headerName.includes('Wins')) {
+                        // Win-related columns
+                        const num = parseFloat(cellText);
+                        if (!isNaN(num) && num > 0) {
+                            cellColor = COLORS.success;
+                        }
+                    }
+                    
+                    // Apply player color and bold for player names
+                    if (i === 1 && headers[i] === 'Player') {
+                        // Always bold player names for readability
+                        doc.setFont(undefined, 'bold');
+                        
+                        // Use player color if available (especially for top 3)
+                        if (options.highlightPlayerNames && position <= 3) {
+                            const playerColor = getPlayerColor(cellText);
+                            if (playerColor) {
+                                cellColor = playerColor;
+                            }
+                        }
+                    }
+                    
+                    doc.setTextColor(...cellColor);
                     doc.text(cellText, xPos, currentY);
                     xPos += colWidths[i];
+                    
+                    // Reset font
+                    doc.setFont(undefined, 'normal');
                 });
                 
-                currentY += 5;
+                // Reset text color
+                doc.setTextColor(...COLORS.text);
+                
+                currentY += rowHeight;
             });
             
-            return currentY + 3;
+            return currentY + 5; // Extra spacing after table
         };
         
-        // Header
-        doc.setFontSize(20);
-        doc.setTextColor(33, 150, 243);
+        // Enhanced Header with gradient background effect
+        const headerHeight = 25;
+        const headerY = 10;
+        
+        // Draw header background (simulated gradient with rectangle)
+        doc.setFillColor(...COLORS.primary);
+        doc.rect(0, headerY, 210, headerHeight, 'F');
+        
+        // Draw a darker shade at the bottom for depth
+        doc.setFillColor(COLORS.primary[0] - 20, COLORS.primary[1] - 20, COLORS.primary[2] - 20);
+        doc.rect(0, headerY + headerHeight - 2, 210, 2, 'F');
+        
+        // Main title
+        doc.setFontSize(22);
+        doc.setTextColor(255, 255, 255);
         doc.setFont(undefined, 'bold');
-        doc.text('FC 25 Score Tracker', 105, 20, { align: 'center' });
+        doc.text('FC 25 Score Tracker', 105, headerY + 10, { align: 'center' });
         
-        doc.setFontSize(14);
-        doc.setTextColor(0, 0, 0);
-        doc.text(title, 105, 28, { align: 'center' });
-        
-        doc.setFontSize(9);
-        doc.setTextColor(117, 117, 117);
+        // Subtitle
+        doc.setFontSize(12);
+        doc.setTextColor(255, 255, 255);
         doc.setFont(undefined, 'normal');
-        doc.text(new Date().toLocaleDateString(), 105, 35, { align: 'center' });
+        doc.text(title, 105, headerY + 17, { align: 'center' });
         
-        let yPos = 42;
+        // Date below header
+        doc.setFontSize(9);
+        doc.setTextColor(...COLORS.textSecondary);
+        doc.text(new Date().toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        }), 105, headerY + headerHeight + 5, { align: 'center' });
+        
+        let yPos = headerY + headerHeight + 12;
         
         // Get calculators
         let calculators;
@@ -4260,18 +4461,29 @@ class ShareManager {
             
             const data = stats[calculator.id];
             if (data && Object.keys(data).length > 0) {
-                // Check if we need a new page
-                if (yPos > 250) {
+                // Check if we need a new page - add more space before new sections
+                if (yPos > 240) {
                     doc.addPage();
                     yPos = 20;
+                } else {
+                    // Add spacing before new section
+                    yPos += 3;
                 }
                 
-                // Category title
-                doc.setFontSize(12);
-                doc.setTextColor(33, 150, 243);
+                // Enhanced section title with color-coded header
+                const sectionColor = getSectionColor(calculator);
+                
+                // Draw section background bar
+                doc.setFillColor(...sectionColor);
+                doc.rect(15, yPos - 4, 180, 6, 'F');
+                
+                // Section title (bold, white on colored background)
+                doc.setFontSize(13);
+                doc.setTextColor(255, 255, 255);
                 doc.setFont(undefined, 'bold');
-                doc.text(calculator.name, 15, yPos);
-                yPos += 8;
+                doc.text(calculator.name, 18, yPos);
+                
+                yPos += 10;
                 
                 // Sort entries based on calculator type
                 let sortedEntries = Object.entries(data);
@@ -4299,11 +4511,23 @@ class ShareManager {
                     });
                 } else if (calculator.id === 'streak') {
                     sortedEntries = sortedEntries.sort((a, b) => (b[1].currentStreak || 0) - (a[1].currentStreak || 0));
-                } else if (calculator.id === 'form' || calculator.id === 'leaguePoints') {
+                } else if (calculator.id === 'form') {
+                    // Form: sort by points (wins × 3 + draws for form, as shown in description)
                     sortedEntries = sortedEntries.sort((a, b) => {
                         const pointsA = (b[1].wins || 0) * 3 + (b[1].draws || 0);
                         const pointsB = (a[1].wins || 0) * 3 + (a[1].draws || 0);
                         return pointsA - pointsB;
+                    });
+                } else if (calculator.id === 'leaguePoints') {
+                    // League: sort by points (1 point per win)
+                    sortedEntries = sortedEntries.sort((a, b) => {
+                        const pointsA = (b[1].points || 0);
+                        const pointsB = (a[1].points || 0);
+                        if (pointsA !== pointsB) return pointsA - pointsB;
+                        // Tie-breaker: goal difference
+                        const gdA = (b[1].goalDifference || 0);
+                        const gdB = (a[1].goalDifference || 0);
+                        return gdA - gdB;
                     });
                 } else if (calculator.id === 'comparativeStats') {
                     sortedEntries = sortedEntries.sort((a, b) => {
@@ -4322,9 +4546,18 @@ class ShareManager {
                     // League table format
                     headers = ['Pos', 'Player', 'Pts', 'W', 'D', 'L', 'GP'];
                     colWidths = [12, 60, 18, 15, 15, 15, 18];
+                    // Helper to format position with medal
+                    const formatPosition = (index) => {
+                        const pos = index + 1;
+                        if (pos === 1) return '1';
+                        if (pos === 2) return '2';
+                        if (pos === 3) return '3';
+                        return pos.toString();
+                    };
+                    
                     if (Array.isArray(data)) {
                         rows = data.slice(0, 20).map((row, index) => [
-                            (index + 1).toString(),
+                            formatPosition(index),
                             (row.player || row.name || 'Unknown').substring(0, 20),
                             (row.points || 0).toString(),
                             (row.wins || 0).toString(),
@@ -4334,7 +4567,7 @@ class ShareManager {
                         ]);
                     } else {
                         rows = sortedEntries.slice(0, 20).map(([player, stats], index) => [
-                            (index + 1).toString(),
+                            formatPosition(index),
                             player.substring(0, 20),
                             (stats.points || 0).toString(),
                             (stats.wins || 0).toString(),
@@ -4354,13 +4587,18 @@ class ShareManager {
                 } else if (calculator.id === 'goalDifference') {
                     headers = ['Pos', 'Player', 'GD', 'GF', 'GA'];
                     colWidths = [12, 80, 20, 20, 20];
-                    rows = sortedEntries.slice(0, 20).map(([player, stats], index) => [
-                        (index + 1).toString(),
-                        player.substring(0, 20),
-                        (stats.goalDifference || 0).toString(),
-                        (stats.goalsFor || 0).toString(),
-                        (stats.goalsAgainst || 0).toString()
-                    ]);
+                    rows = sortedEntries.slice(0, 20).map(([player, stats], index) => {
+                        const pos = index + 1;
+                        const gd = stats.goalDifference || 0;
+                        const gdText = gd > 0 ? `+${gd}` : gd.toString();
+                        return [
+                            pos.toString(),
+                            player.substring(0, 20),
+                            gdText,
+                            (stats.goalsFor || 0).toString(),
+                            (stats.goalsAgainst || 0).toString()
+                        ];
+                    });
                 } else if (calculator.id === 'avgGoalsPerGame') {
                     headers = ['Pos', 'Player', 'Avg', 'GF', 'GP'];
                     colWidths = [12, 80, 25, 25, 25];
@@ -4450,7 +4688,7 @@ class ShareManager {
                     // Skip chart calculators
                     return;
                 } else if (calculator.id === 'trendAnalysis') {
-                    // Format trend analysis better
+                    // Format trend analysis better - use plain text instead of Unicode arrows for PDF compatibility
                     headers = ['Player', 'Trend', 'Strength'];
                     colWidths = [80, 60, 40];
                     rows = sortedEntries.slice(0, 20).map(([player, stats]) => {
@@ -4458,10 +4696,11 @@ class ShareManager {
                         const strength = (stats.trendStrength !== undefined && stats.trendStrength !== null) 
                             ? `${Math.round(stats.trendStrength)}%` 
                             : '-';
-                        const trendText = trend === 'improving_strong' ? 'Strong ↑' :
-                                        trend === 'improving' ? 'Improving ↑' :
-                                        trend === 'declining_strong' ? 'Strong ↓' :
-                                        trend === 'declining' ? 'Declining ↓' : 'Stable →';
+                        // Use plain text instead of Unicode arrows for better PDF compatibility
+                        const trendText = trend === 'improving_strong' ? 'Strong Up' :
+                                        trend === 'improving' ? 'Improving' :
+                                        trend === 'declining_strong' ? 'Strong Down' :
+                                        trend === 'declining' ? 'Declining' : 'Stable';
                         return [
                             player.substring(0, 20),
                             trendText,
@@ -4541,7 +4780,8 @@ class ShareManager {
                 }
                 
                 if (rows.length > 0) {
-                    yPos = drawTable(headers, rows, yPos, colWidths);
+                    const sectionColor = getSectionColor(calculator);
+                    yPos = drawTable(headers, rows, yPos, colWidths, sectionColor, { highlightPlayerNames: true });
                     
                     // Add description below the table
                     const description = StatDescriptions.getPDFDescription(calculator.id);
@@ -4552,10 +4792,10 @@ class ShareManager {
                             yPos = 20;
                         }
                         
-                        yPos += 3; // Space after table
+                        yPos += 4; // Space after table
                         doc.setFontSize(8);
-                        doc.setTextColor(100, 100, 100); // Gray color
-                        doc.setFont(undefined, 'normal');
+                        doc.setTextColor(...COLORS.textSecondary);
+                        doc.setFont(undefined, 'italic');
                         
                         // Split description text to fit page width (180mm = page width minus margins)
                         const splitText = doc.splitTextToSize(description, 180);
@@ -4568,20 +4808,28 @@ class ShareManager {
                             doc.text(line, 15, yPos);
                             yPos += 4;
                         });
-                        yPos += 3; // Extra space before next table
+                        yPos += 5; // Extra space before next section
                     }
                 }
             }
         });
         
-        // Footer
+        // Enhanced Footer with page numbers
         const pageCount = doc.internal.pages.length - 1;
         for (let i = 1; i <= pageCount; i++) {
             doc.setPage(i);
+            
+            // Draw footer line
+            doc.setDrawColor(...COLORS.border);
+            doc.setLineWidth(0.2);
+            doc.line(15, 282, 195, 282);
+            
+            // Footer text
             doc.setFontSize(8);
-            doc.setTextColor(117, 117, 117);
-            doc.text('Generated by FC 25 Score Tracker', 105, 285, { align: 'center' });
-            doc.text(`Page ${i} of ${pageCount}`, 105, 290, { align: 'center' });
+            doc.setTextColor(...COLORS.textSecondary);
+            doc.setFont(undefined, 'normal');
+            doc.text('Generated by FC 25 Score Tracker', 105, 287, { align: 'center' });
+            doc.text(`Page ${i} of ${pageCount}`, 105, 292, { align: 'center' });
         }
         
         // Generate PDF blob
