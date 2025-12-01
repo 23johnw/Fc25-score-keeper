@@ -1,4 +1,11 @@
 // ============================================================================
+// App Version - Fallback constant if cache version cannot be detected
+// The displayed version is automatically extracted from service worker cache name
+// Update the cache version in service-worker.js (e.g., v19) to update the version
+// ============================================================================
+const APP_VERSION = '1.19.0';
+
+// ============================================================================
 // LocalStorageManager - Data Persistence
 // ============================================================================
 
@@ -6301,6 +6308,43 @@ class AppController {
         
         // Render player colors
         this.renderPlayerColors();
+        
+        // Display app version - extract from service worker cache or use constant
+        const versionDisplay = document.getElementById('appVersionDisplay');
+        if (versionDisplay) {
+            // Try to get version from service worker cache name (more accurate)
+            this.displayAppVersion(versionDisplay);
+        }
+    }
+
+    async displayAppVersion(versionDisplayElement) {
+        // First, try to get version from active cache name
+        if ('caches' in window) {
+            try {
+                const cacheNames = await caches.keys();
+                // Find the cache name that matches our pattern: fc25-score-tracker-vXX
+                const cacheName = cacheNames.find(name => name.startsWith('fc25-score-tracker-v'));
+                if (cacheName) {
+                    // Extract version number (e.g., "v19" -> "19")
+                    const versionMatch = cacheName.match(/v(\d+)/);
+                    if (versionMatch) {
+                        const cacheVersion = versionMatch[1];
+                        // Format as version number (e.g., "1.19.0")
+                        versionDisplayElement.textContent = `Version 1.${cacheVersion}.0`;
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.error('Error reading cache names:', error);
+            }
+        }
+        
+        // Fallback to constant version
+        if (typeof APP_VERSION !== 'undefined') {
+            versionDisplayElement.textContent = `Version ${APP_VERSION}`;
+        } else {
+            versionDisplayElement.textContent = 'Version unknown';
+        }
     }
 
     renderPlayerColors() {
