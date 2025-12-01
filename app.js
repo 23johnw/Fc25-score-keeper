@@ -3913,7 +3913,7 @@ class ShareManager {
     }
 
     // Export leaderboard as PDF
-    async exportLeaderboardPDF(statsType, category = null) {
+    async exportLeaderboardPDF(statsType, category = null, subcategory = null) {
         // Check if jsPDF is available
         if (typeof window.jspdf === 'undefined') {
             // Try to load jsPDF from CDN if not already loaded
@@ -4034,7 +4034,9 @@ class ShareManager {
         
         // Get calculators
         let calculators;
-        if (category) {
+        if (category && subcategory) {
+            calculators = StatisticsCalculators.getBySubcategory(category, subcategory);
+        } else if (category) {
             calculators = StatisticsCalculators.getByCategory(category);
         } else {
             calculators = StatisticsCalculators.getAll();
@@ -5671,8 +5673,9 @@ class AppController {
     // Export statistics as PDF
     async exportPDF(statsType) {
         try {
-            // Get current category from active tabs
+            // Get current category/subcategory from active tabs
             let category = null;
+            let subcategory = null;
             
             let categoryTabsId;
             if (statsType === 'today') {
@@ -5688,10 +5691,19 @@ class AppController {
                 const activeCategoryBtn = categoryTabs.querySelector('.category-btn.active');
                 if (activeCategoryBtn && activeCategoryBtn.dataset.category !== 'all') {
                     category = activeCategoryBtn.dataset.category;
+                    
+                    // Check for subcategory
+                    const subcategoryBtns = categoryTabs.querySelectorAll('.subcategory-btn');
+                    if (subcategoryBtns.length > 0) {
+                        const activeSubcategoryBtn = Array.from(subcategoryBtns).find(btn => btn.classList.contains('active'));
+                        if (activeSubcategoryBtn && activeSubcategoryBtn.dataset.subcategory !== 'all') {
+                            subcategory = activeSubcategoryBtn.dataset.subcategory;
+                        }
+                    }
                 }
             }
             
-            await this.shareManager.exportLeaderboardPDF(statsType, category);
+            await this.shareManager.exportLeaderboardPDF(statsType, category, subcategory);
         } catch (error) {
             console.error('Error exporting PDF:', error);
             this.toastManager.error('Error exporting PDF. Please try again.');
