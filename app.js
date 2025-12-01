@@ -538,15 +538,19 @@ class StatDescriptions {
             'winRate': 'Displays the win percentage for each player, calculated as (wins / games) × 100.',
             'streak': 'Shows the current consecutive win or loss streak for each player.',
             'totalGoals': 'Total goals scored by each player across all matches.',
-            'goalDifference': 'Goal difference (goals for minus goals against) for each player.',
-            'leaguePoints': 'League table with points calculated as wins × 3 + draws. Sorted by points.',
+            'goalDifference': 'Goal difference (goals for - goals against) for each player.',
+            'leaguePoints': 'League table with points calculated as 1 point per win. Sorted by points.',
             'worstLosses': 'Records showing best wins (most goals scored, biggest margin) and worst losses (most goals conceded, biggest deficit).',
             'avgGoalsPerGame': 'Average number of goals scored per game for each player.',
             'form': 'Last 5 games form showing recent match results (W/D/L) and points earned.',
             'headToHead': 'Statistics for player pairs: "Together" shows results when playing as teammates, "Against" shows head-to-head matchups.',
             'trendAnalysis': 'Compares early vs recent performance to show if players are improving, declining, or stable. Strength percentage indicates how significant the trend is.',
             'comparativeStats': 'Direct comparison between player pairs showing win rates when facing each other.',
-            'extraTimePenalties': 'Counts of matches that went to extra time or penalties for each player.'
+            'extraTimePenalties': 'Counts of matches that went to extra time or penalties for each player.',
+            'winRateChart': 'Visual chart showing how win rate changes over time for each player.',
+            'goalsChart': 'Visual chart displaying goals scored over time for each player.',
+            'matchDistributionChart': 'Visual chart showing the distribution of matches across different time periods.',
+            'performanceInsights': 'Text-based insights and analysis of player performance patterns and trends.'
         };
         return descriptions[calculatorId] || null;
     }
@@ -557,15 +561,19 @@ class StatDescriptions {
             'winRate': 'Win rate percentage indicates how successful each player has been. Calculated as (wins / total games) × 100. Higher percentages indicate better performance.',
             'streak': 'Current streak shows consecutive wins or losses. A positive streak indicates recent good form, while a negative streak suggests recent struggles.',
             'totalGoals': 'Total goals scored across all matches. This includes goals from both wins and losses, giving an overall picture of offensive performance.',
-            'goalDifference': 'Goal difference is calculated as goals for (GF) minus goals against (GA). Positive values indicate strong offensive and defensive play, while negative values suggest areas for improvement.',
-            'leaguePoints': 'League table sorted by points, where wins = 3 points and draws = 1 point. This format mirrors traditional league standings.',
+            'goalDifference': 'Goal difference is calculated as goals for (GF) - goals against (GA). Positive values indicate strong offensive and defensive play, while negative values suggest areas for improvement.',
+            'leaguePoints': 'League table sorted by points, where each win = 1 point. This simple scoring system rewards wins equally.',
             'worstLosses': 'Records table showing: Worst Loss - Most Goals Conceded (highest goals allowed in a single loss), Worst Loss - Biggest Deficit (largest goal difference in a loss), Best Win - Most Goals Scored (highest goals scored in a win), Best Win - Biggest Surplus (largest goal difference in a win).',
             'avgGoalsPerGame': 'Average goals per game is calculated as total goals divided by games played. This metric helps identify consistently high-scoring players regardless of total matches played.',
             'form': 'Form shows results from the last 5 matches (W = Win, D = Draw, L = Loss) and total points earned. Points are calculated as wins × 3 + draws. This indicates recent performance trends.',
             'headToHead': 'Head-to-head statistics for player pairs. "Together" shows results when two players are on the same team (wins-draws-losses). "Against" shows results when the two players face each other in opposing teams.',
             'trendAnalysis': 'Trend analysis compares performance across three periods (early, middle, late) to identify if players are improving, declining, or stable. The strength percentage (0-100%) indicates how significant the trend is. A value of 0% means stable performance with no significant change.',
             'comparativeStats': 'Player comparison shows win rates for each player when facing specific opponents. This helps identify matchups where certain players perform better or worse.',
-            'extraTimePenalties': 'Counts of matches that required extra time (beyond full time) or went to penalty shootouts. This indicates how often matches were closely contested.'
+            'extraTimePenalties': 'Counts of matches that required extra time (beyond full time) or went to penalty shootouts. This indicates how often matches were closely contested.',
+            'winRateChart': 'Visual chart showing how each player\'s win rate has changed over time. Useful for identifying performance trends and improvements.',
+            'goalsChart': 'Visual chart displaying the number of goals scored by each player over time. Helps visualize offensive performance patterns.',
+            'matchDistributionChart': 'Visual chart showing when matches were played, helping identify activity patterns and playing frequency.',
+            'performanceInsights': 'Text-based insights and analysis of player performance patterns, strengths, weaknesses, and notable trends. Provides contextual information about player statistics.'
         };
         return descriptions[calculatorId] || null;
     }
