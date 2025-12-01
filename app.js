@@ -527,6 +527,50 @@ class StatisticsCalculators {
     }
 }
 
+// ============================================================================
+// StatDescriptions - Provides descriptions for statistics tables
+// ============================================================================
+
+class StatDescriptions {
+    static getUIDescription(calculatorId) {
+        const descriptions = {
+            'winLossDraw': 'Shows wins, losses, draws, and total games played for each player.',
+            'winRate': 'Displays the win percentage for each player, calculated as (wins / games) × 100.',
+            'streak': 'Shows the current consecutive win or loss streak for each player.',
+            'totalGoals': 'Total goals scored by each player across all matches.',
+            'goalDifference': 'Goal difference (goals for minus goals against) for each player.',
+            'leaguePoints': 'League table with points calculated as wins × 3 + draws. Sorted by points.',
+            'worstLosses': 'Records showing best wins (most goals scored, biggest margin) and worst losses (most goals conceded, biggest deficit).',
+            'avgGoalsPerGame': 'Average number of goals scored per game for each player.',
+            'form': 'Last 5 games form showing recent match results (W/D/L) and points earned.',
+            'headToHead': 'Statistics for player pairs: "Together" shows results when playing as teammates, "Against" shows head-to-head matchups.',
+            'trendAnalysis': 'Compares early vs recent performance to show if players are improving, declining, or stable. Strength percentage indicates how significant the trend is.',
+            'comparativeStats': 'Direct comparison between player pairs showing win rates when facing each other.',
+            'extraTimePenalties': 'Counts of matches that went to extra time or penalties for each player.'
+        };
+        return descriptions[calculatorId] || null;
+    }
+
+    static getPDFDescription(calculatorId) {
+        const descriptions = {
+            'winLossDraw': 'This table shows the total number of wins, losses, draws, and games played (GP) for each player. Useful for understanding overall match participation and results.',
+            'winRate': 'Win rate percentage indicates how successful each player has been. Calculated as (wins / total games) × 100. Higher percentages indicate better performance.',
+            'streak': 'Current streak shows consecutive wins or losses. A positive streak indicates recent good form, while a negative streak suggests recent struggles.',
+            'totalGoals': 'Total goals scored across all matches. This includes goals from both wins and losses, giving an overall picture of offensive performance.',
+            'goalDifference': 'Goal difference is calculated as goals for (GF) minus goals against (GA). Positive values indicate strong offensive and defensive play, while negative values suggest areas for improvement.',
+            'leaguePoints': 'League table sorted by points, where wins = 3 points and draws = 1 point. This format mirrors traditional league standings.',
+            'worstLosses': 'Records table showing: Worst Loss - Most Goals Conceded (highest goals allowed in a single loss), Worst Loss - Biggest Deficit (largest goal difference in a loss), Best Win - Most Goals Scored (highest goals scored in a win), Best Win - Biggest Surplus (largest goal difference in a win).',
+            'avgGoalsPerGame': 'Average goals per game is calculated as total goals divided by games played. This metric helps identify consistently high-scoring players regardless of total matches played.',
+            'form': 'Form shows results from the last 5 matches (W = Win, D = Draw, L = Loss) and total points earned. Points are calculated as wins × 3 + draws. This indicates recent performance trends.',
+            'headToHead': 'Head-to-head statistics for player pairs. "Together" shows results when two players are on the same team (wins-draws-losses). "Against" shows results when the two players face each other in opposing teams.',
+            'trendAnalysis': 'Trend analysis compares performance across three periods (early, middle, late) to identify if players are improving, declining, or stable. The strength percentage (0-100%) indicates how significant the trend is. A value of 0% means stable performance with no significant change.',
+            'comparativeStats': 'Player comparison shows win rates for each player when facing specific opponents. This helps identify matchups where certain players perform better or worse.',
+            'extraTimePenalties': 'Counts of matches that required extra time (beyond full time) or went to penalty shootouts. This indicates how often matches were closely contested.'
+        };
+        return descriptions[calculatorId] || null;
+    }
+}
+
 // Default Statistics Calculators
 
 // Win/Loss/Draw Calculator
@@ -3455,12 +3499,16 @@ class StatisticsDisplay {
                     if (element && element.nodeType) {
                         // Apply player colors to the rendered element
                         this.applyPlayerColorsToElement(element);
+                        // Add title with help icon
+                        this.addStatCardTitleWithIcon(element, calculator);
                         container.appendChild(element);
                     } else {
                         // If display returned null/undefined/falsy, create a placeholder
                         const placeholderElement = document.createElement('div');
                         placeholderElement.className = 'stat-card';
                         placeholderElement.innerHTML = `<div class="empty-state"><h3>${calculator.name || calculator.id}</h3><p>No data available</p></div>`;
+                        // Add title with help icon to placeholder
+                        this.addStatCardTitleWithIcon(placeholderElement, calculator);
                         container.appendChild(placeholderElement);
                     }
                 } else {
@@ -3470,6 +3518,8 @@ class StatisticsDisplay {
                         if (element && element.nodeType) {
                             // Apply player colors to the rendered element
                             this.applyPlayerColorsToElement(element);
+                            // Add title with help icon
+                            this.addStatCardTitleWithIcon(element, calculator);
                             container.appendChild(element);
                         }
                     }
@@ -3481,6 +3531,8 @@ class StatisticsDisplay {
                     const errorElement = document.createElement('div');
                     errorElement.className = 'stat-card';
                     errorElement.innerHTML = `<div class="empty-state"><h3>${calculator.name || calculator.id}</h3><p>Error loading: ${error.message}</p></div>`;
+                    // Add title with help icon to error element
+                    this.addStatCardTitleWithIcon(errorElement, calculator);
                     container.appendChild(errorElement);
                 }
             }
@@ -3509,6 +3561,149 @@ class StatisticsDisplay {
                 }
             });
         });
+    }
+
+    // Add title and question mark icon to stat card
+    addStatCardTitleWithIcon(element, calculator) {
+        // For worstLosses (Records) which has multiple sub-tables, check if there are multiple h3 elements
+        const allH3s = element.querySelectorAll('h3');
+        
+        // If there are multiple h3s (like in worstLosses), add a main title at the top
+        // Otherwise, check if there's a single h3 to modify
+        if (allH3s.length > 1 || calculator.id === 'worstLosses') {
+            // Create new main title header with icon at the very beginning
+            const titleContainer = document.createElement('div');
+            titleContainer.className = 'stat-card-title-container';
+            
+            const title = document.createElement('h3');
+            title.className = 'stat-card-title';
+            title.textContent = calculator.name || calculator.id;
+            
+            titleContainer.appendChild(title);
+            titleContainer.appendChild(this.createHelpIcon(calculator.id, calculator.name));
+            
+            // Insert at the very beginning of the stat card
+            element.insertBefore(titleContainer, element.firstChild);
+        } else if (allH3s.length === 1) {
+            // Single h3 exists, add icon next to it
+            const existingTitle = allH3s[0];
+            const titleContainer = document.createElement('div');
+            titleContainer.className = 'stat-card-title-container';
+            
+            // Clone title and wrap it
+            const titleClone = existingTitle.cloneNode(true);
+            titleContainer.appendChild(titleClone);
+            
+            // Add question mark icon
+            titleContainer.appendChild(this.createHelpIcon(calculator.id, calculator.name));
+            
+            // Replace existing title with container
+            existingTitle.replaceWith(titleContainer);
+        } else {
+            // No h3 exists, create new title header with icon
+            const titleContainer = document.createElement('div');
+            titleContainer.className = 'stat-card-title-container';
+            
+            const title = document.createElement('h3');
+            title.className = 'stat-card-title';
+            title.textContent = calculator.name || calculator.id;
+            
+            titleContainer.appendChild(title);
+            titleContainer.appendChild(this.createHelpIcon(calculator.id, calculator.name));
+            
+            // Insert at the beginning of the stat card
+            element.insertBefore(titleContainer, element.firstChild);
+        }
+    }
+
+    // Create help icon button
+    createHelpIcon(calculatorId, calculatorName) {
+        const helpIcon = document.createElement('button');
+        helpIcon.className = 'stat-help-icon';
+        helpIcon.innerHTML = '?';
+        helpIcon.setAttribute('aria-label', `Show description for ${calculatorName}`);
+        helpIcon.setAttribute('title', 'What does this table show?');
+        helpIcon.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.showStatDescription(calculatorId, calculatorName);
+        });
+        return helpIcon;
+    }
+
+    // Show modal popup with stat description
+    showStatDescription(calculatorId, calculatorName) {
+        const description = StatDescriptions.getUIDescription(calculatorId);
+        if (!description) return;
+
+        // Remove existing modal if present
+        const existingModal = document.querySelector('.stat-description-modal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'stat-description-modal-overlay';
+        
+        // Create modal dialog
+        const modal = document.createElement('div');
+        modal.className = 'stat-description-modal';
+        
+        // Create header with title and close button
+        const header = document.createElement('div');
+        header.className = 'stat-description-modal-header';
+        
+        const title = document.createElement('h3');
+        title.className = 'stat-description-modal-title';
+        title.textContent = calculatorName;
+        
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'stat-description-modal-close';
+        closeBtn.innerHTML = '×';
+        closeBtn.setAttribute('aria-label', 'Close');
+        closeBtn.addEventListener('click', () => this.closeStatDescription());
+        
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+        
+        // Create content area
+        const content = document.createElement('div');
+        content.className = 'stat-description-modal-content';
+        content.textContent = description;
+        
+        modal.appendChild(header);
+        modal.appendChild(content);
+        overlay.appendChild(modal);
+        
+        // Add to document
+        document.body.appendChild(overlay);
+        
+        // Close on overlay click
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                this.closeStatDescription();
+            }
+        });
+        
+        // Close on Escape key
+        const escapeHandler = (e) => {
+            if (e.key === 'Escape') {
+                this.closeStatDescription();
+                document.removeEventListener('keydown', escapeHandler);
+            }
+        };
+        document.addEventListener('keydown', escapeHandler);
+        
+        // Focus close button for accessibility
+        setTimeout(() => closeBtn.focus(), 100);
+    }
+
+    // Close stat description modal
+    closeStatDescription() {
+        const modal = document.querySelector('.stat-description-modal-overlay');
+        if (modal) {
+            modal.remove();
+        }
     }
 }
 
@@ -4328,6 +4523,34 @@ class ShareManager {
                 
                 if (rows.length > 0) {
                     yPos = drawTable(headers, rows, yPos, colWidths);
+                    
+                    // Add description below the table
+                    const description = StatDescriptions.getPDFDescription(calculator.id);
+                    if (description) {
+                        // Check if we need a new page before description
+                        if (yPos > 265) {
+                            doc.addPage();
+                            yPos = 20;
+                        }
+                        
+                        yPos += 3; // Space after table
+                        doc.setFontSize(8);
+                        doc.setTextColor(100, 100, 100); // Gray color
+                        doc.setFont(undefined, 'normal');
+                        
+                        // Split description text to fit page width (180mm = page width minus margins)
+                        const splitText = doc.splitTextToSize(description, 180);
+                        splitText.forEach((line) => {
+                            // Check for new page within description
+                            if (yPos > 270) {
+                                doc.addPage();
+                                yPos = 20;
+                            }
+                            doc.text(line, 15, yPos);
+                            yPos += 4;
+                        });
+                        yPos += 3; // Extra space before next table
+                    }
                 }
             }
         });

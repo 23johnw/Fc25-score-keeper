@@ -805,6 +805,204 @@ body.dark-mode .player-editable-item.active {
     border-bottom: none;
 }
 
+/* Stat Card Title Container */
+.stat-card-title-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.stat-card-title-container h3 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+/* Stat Help Icon */
+.stat-help-icon {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    border-radius: 50%;
+    border: 1.5px solid var(--primary-color);
+    background-color: transparent;
+    color: var(--primary-color);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.stat-help-icon:hover {
+    background-color: var(--primary-color);
+    color: white;
+    transform: scale(1.1);
+}
+
+.stat-help-icon:active {
+    transform: scale(0.95);
+}
+
+.stat-help-icon:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+/* Stat Description Modal */
+.stat-description-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    padding: 1rem;
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.stat-description-modal {
+    background-color: var(--surface-color);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    max-width: 500px;
+    width: 100%;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.stat-description-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.stat-description-modal-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.stat-description-modal-close {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 50%;
+    border: none;
+    background-color: transparent;
+    color: var(--text-secondary);
+    font-size: 1.5rem;
+    font-weight: 300;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: all 0.2s;
+    line-height: 1;
+}
+
+.stat-description-modal-close:hover {
+    background-color: var(--border-color);
+    color: var(--text-primary);
+    transform: rotate(90deg);
+}
+
+.stat-description-modal-close:active {
+    transform: rotate(90deg) scale(0.9);
+}
+
+.stat-description-modal-close:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+.stat-description-modal-content {
+    padding: 1.5rem;
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 0.95rem;
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* Dark mode support for modal */
+body.dark-mode .stat-description-modal {
+    background-color: #1E1E1E;
+    color: #E0E0E0;
+}
+
+body.dark-mode .stat-description-modal-header {
+    border-bottom-color: #333;
+}
+
+body.dark-mode .stat-help-icon {
+    border-color: #64B5F6;
+    color: #64B5F6;
+}
+
+body.dark-mode .stat-help-icon:hover {
+    background-color: #64B5F6;
+    color: #1E1E1E;
+}
+
+/* Mobile responsive */
+@media (max-width: 480px) {
+    .stat-description-modal {
+        max-width: 100%;
+        max-height: 90vh;
+        margin: 0.5rem;
+    }
+
+    .stat-description-modal-header {
+        padding: 1rem;
+    }
+
+    .stat-description-modal-content {
+        padding: 1rem;
+        font-size: 0.9rem;
+    }
+
+    .stat-help-icon {
+        width: 24px;
+        height: 24px;
+        font-size: 0.9rem;
+    }
+}
+
 .chart-card {
     padding: 1rem;
     min-height: 300px;
