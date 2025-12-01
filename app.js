@@ -4261,9 +4261,69 @@ class ShareManager {
             doc.text(`Page ${i} of ${pageCount}`, 105, 290, { align: 'center' });
         }
         
-        // Save PDF
+        // Generate PDF blob
+        const pdfBlob = doc.output('blob');
         const fileName = `FC25_${statsType}_${new Date().toISOString().split('T')[0]}.pdf`;
-        doc.save(fileName);
+        
+        // Try mobile-friendly saving methods
+        let saved = false;
+        
+        // Try Web Share API for mobile devices
+        if (navigator.share && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+            try {
+                const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+                await navigator.share({
+                    title: fileName,
+                    files: [file]
+                });
+                saved = true;
+                return { blob: pdfBlob, blobUrl: URL.createObjectURL(pdfBlob), fileName, saved: true };
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    console.error('Error sharing PDF:', error);
+                }
+                // Fall through to other methods
+            }
+        }
+        
+        // Try File System Access API (mainly for desktop/Chrome)
+        if (!saved && 'showSaveFilePicker' in window) {
+            try {
+                const fileHandle = await window.showSaveFilePicker({
+                    suggestedName: fileName,
+                    types: [{
+                        description: 'PDF files',
+                        accept: { 'application/pdf': ['.pdf'] }
+                    }]
+                });
+                const writable = await fileHandle.createWritable();
+                await writable.write(pdfBlob);
+                await writable.close();
+                saved = true;
+                return { blob: pdfBlob, blobUrl: URL.createObjectURL(pdfBlob), fileName, saved: true };
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    console.error('Error saving PDF via File System API:', error);
+                }
+                // Fall through to fallback method
+            }
+        }
+        
+        // Fallback: Use traditional download (works on all browsers)
+        if (!saved) {
+            const blobUrl = URL.createObjectURL(pdfBlob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            // Don't revoke URL immediately - keep it for viewing
+            saved = true;
+            return { blob: pdfBlob, blobUrl, fileName, saved: true };
+        }
+        
+        return { blob: pdfBlob, blobUrl: URL.createObjectURL(pdfBlob), fileName, saved: false };
     }
 
     // Share image via Web Share API or download
@@ -4356,6 +4416,7 @@ class AppController {
         this.playerEditorValues = [];
         this.hasUnsavedPlayerChanges = false;
         this.currentHistoryView = 'list'; // 'list' or 'timeline'
+        this.lastPDFBlobUrl = null; // Store last exported PDF for viewing
         
         // Initialize lock labels before anything else that might use them
         this.updateLockLabels();
@@ -4494,9 +4555,10 @@ class AppController {
         document.getElementById('shareTodayStatsBtn').addEventListener('click', () => this.shareStats('today'));
         document.getElementById('shareSeasonStatsBtn').addEventListener('click', () => this.shareStats('season'));
         document.getElementById('shareOverallStatsBtn').addEventListener('click', () => this.shareStats('overall'));
-        document.getElementById('exportTodayPDFBtn').addEventListener('click', () => this.exportPDF('today'));
-        document.getElementById('exportSeasonPDFBtn').addEventListener('click', () => this.exportPDF('season'));
-        document.getElementById('exportOverallPDFBtn').addEventListener('click', () => this.exportPDF('overall'));
+        document.getElementById('exportTodayPDFBtn').addEventListener('click', () => this.exportPDF());
+        document.getElementById('exportSeasonPDFBtn').addEventListener('click', () => this.exportPDF());
+        document.getElementById('exportOverallPDFBtn').addEventListener('click', () => this.exportPDF());
+        document.getElementById('viewLastPDFBtn').addEventListener('click', () => this.viewLastPDF());
 
         // History screen
         document.getElementById('backFromHistoryBtn').addEventListener('click', () => this.showScreen('statsScreen'));
@@ -4598,6 +4660,7 @@ class AppController {
                 this.loadSequenceList();
             } else if (screenId === 'statsScreen') {
                 this.loadStatistics();
+                this.updateViewPDFButton();
             } else if (screenId === 'playerScreen') {
                 // Reload players to ensure UI is in sync
                 const players = this.playerManager.getPlayers();
@@ -5678,8 +5741,34 @@ class AppController {
     }
 
     // Export statistics as PDF
-    async exportPDF(statsType) {
+    async exportPDF(statsType = null) {
         try {
+            // Detect active stats tab if statsType not provided
+            if (!statsType) {
+                const activeTabElement = document.querySelector('.stats-content.active');
+                if (activeTabElement) {
+                    const tabId = activeTabElement.id;
+                    if (tabId === 'todayStats') {
+                        statsType = 'today';
+                    } else if (tabId === 'seasonStats') {
+                        statsType = 'season';
+                    } else if (tabId === 'overallStats') {
+                        statsType = 'overall';
+                    }
+                }
+                // Fallback: check active tab button
+                if (!statsType) {
+                    const activeTabBtn = document.querySelector('.tab-btn.active');
+                    if (activeTabBtn) {
+                        statsType = activeTabBtn.dataset.tab;
+                    }
+                }
+                // Final fallback
+                if (!statsType) {
+                    statsType = 'season';
+                }
+            }
+            
             // Get current category/subcategory from active tabs
             let category = null;
             let subcategory = null;
@@ -5710,10 +5799,48 @@ class AppController {
                 }
             }
             
-            await this.shareManager.exportLeaderboardPDF(statsType, category, subcategory);
+            const result = await this.shareManager.exportLeaderboardPDF(statsType, category, subcategory);
+            
+            // Store PDF blob URL for viewing
+            if (result && result.blobUrl) {
+                // Clean up previous PDF blob URL
+                if (this.lastPDFBlobUrl) {
+                    URL.revokeObjectURL(this.lastPDFBlobUrl);
+                }
+                this.lastPDFBlobUrl = result.blobUrl;
+                
+                // Show success notification
+                this.toastManager.success(`PDF saved: ${result.fileName}`, 'PDF Exported');
+                
+                // Enable view PDF button if it exists
+                this.updateViewPDFButton();
+            }
         } catch (error) {
             console.error('Error exporting PDF:', error);
             this.toastManager.error('Error exporting PDF. Please try again.');
+        }
+    }
+
+    updateViewPDFButton() {
+        const viewPdfBtn = document.getElementById('viewLastPDFBtn');
+        if (viewPdfBtn) {
+            if (this.lastPDFBlobUrl) {
+                viewPdfBtn.disabled = false;
+                viewPdfBtn.style.opacity = '1';
+                viewPdfBtn.style.cursor = 'pointer';
+            } else {
+                viewPdfBtn.disabled = true;
+                viewPdfBtn.style.opacity = '0.5';
+                viewPdfBtn.style.cursor = 'not-allowed';
+            }
+        }
+    }
+
+    viewLastPDF() {
+        if (this.lastPDFBlobUrl) {
+            window.open(this.lastPDFBlobUrl, '_blank');
+        } else {
+            this.toastManager.error('No PDF available. Please export a PDF first.');
         }
     }
 
