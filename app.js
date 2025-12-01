@@ -4050,6 +4050,11 @@ class ShareManager {
         }
         
         calculators.forEach(calculator => {
+            // Skip visualization calculators (charts) that don't work well in PDF
+            if (calculator.id === 'winRateChart' || calculator.id === 'goalsChart') {
+                return;
+            }
+            
             const data = stats[calculator.id];
             if (data && Object.keys(data).length > 0) {
                 // Check if we need a new page
@@ -4206,19 +4211,15 @@ class ShareManager {
                         ];
                     });
                 } else if (calculator.id === 'worstLosses') {
-                    headers = ['Player', 'Record'];
-                    colWidths = [50, 130];
+                    headers = ['Player', 'Best Win', 'Worst Loss'];
+                    colWidths = [50, 65, 65];
                     rows = sortedEntries.slice(0, 15).map(([player, stats]) => {
-                        const records = [];
-                        if (stats.bestByGoalsFor) {
-                            records.push(`Best GF: ${stats.bestByGoalsFor.score}`);
-                        }
-                        if (stats.worstByGoalsAgainst) {
-                            records.push(`Worst GA: ${stats.worstByGoalsAgainst.score}`);
-                        }
+                        const bestWin = stats.bestByGoalsFor ? stats.bestByGoalsFor.score : '-';
+                        const worstLoss = stats.worstByGoalsAgainst ? stats.worstByGoalsAgainst.score : '-';
                         return [
                             player.substring(0, 20),
-                            records.length > 0 ? records.join(', ') : 'No records'
+                            bestWin,
+                            worstLoss
                         ];
                     });
                 } else if (calculator.id === 'headToHead') {
@@ -4233,15 +4234,93 @@ class ShareManager {
                             `${against.wins || 0}-${against.draws || 0}-${against.losses || 0}`
                         ];
                     });
-                } else {
-                    // Generic table for other stats
-                    headers = ['Player', 'Value'];
-                    colWidths = [100, 80];
+                } else if (calculator.id === 'insights' || calculator.id === 'performanceInsights') {
+                    // Skip insights - they're text-based and don't format well in PDF tables
+                    return;
+                } else if (calculator.id === 'winRateChart' || calculator.id === 'goalsChart') {
+                    // Skip chart calculators
+                    return;
+                } else if (calculator.id === 'trendAnalysis') {
+                    // Format trend analysis better
+                    headers = ['Player', 'Trend', 'Strength'];
+                    colWidths = [80, 60, 40];
                     rows = sortedEntries.slice(0, 20).map(([player, stats]) => {
-                        const value = typeof stats === 'object' 
-                            ? Object.entries(stats).filter(([k, v]) => typeof v === 'number').map(([k, v]) => `${k}:${v}`).join(', ')
-                            : String(stats);
-                        return [player.substring(0, 25), value.substring(0, 30)];
+                        const trend = stats.trend || 'stable';
+                        const strength = stats.trendStrength ? `${Math.round(stats.trendStrength)}%` : '-';
+                        const trendText = trend === 'improving_strong' ? 'Strong ↑' :
+                                        trend === 'improving' ? 'Improving ↑' :
+                                        trend === 'declining_strong' ? 'Strong ↓' :
+                                        trend === 'declining' ? 'Declining ↓' : 'Stable →';
+                        return [
+                            player.substring(0, 20),
+                            trendText,
+                            strength
+                        ];
+                    });
+                } else if (calculator.id === 'comparativeStats') {
+                    // Format player comparison
+                    headers = ['Players', 'P1 Win %', 'P2 Win %', 'Games'];
+                    colWidths = [70, 30, 30, 30];
+                    rows = sortedEntries.slice(0, 15).map(([pair, stats]) => {
+                        const p1Rate = stats.player1WinRate ? `${stats.player1WinRate.toFixed(1)}%` : '-';
+                        const p2Rate = stats.player2WinRate ? `${stats.player2WinRate.toFixed(1)}%` : '-';
+                        const games = stats.totalGames || 0;
+                        return [
+                            pair.substring(0, 20),
+                            p1Rate,
+                            p2Rate,
+                            games.toString()
+                        ];
+                    });
+                } else if (calculator.id === 'activityHeatmap' || calculator.id === 'matchDistribution') {
+                    // Skip these - they're visualization/data structures
+                    return;
+                } else if (calculator.id === 'extraTimePenalties') {
+                    // Format extra time and penalties
+                    headers = ['Player', 'Matches', 'Extra Time', 'Penalties'];
+                    colWidths = [60, 30, 40, 40];
+                    rows = sortedEntries.slice(0, 20).map(([player, stats]) => {
+                        const matches = stats.totalMatches || 0;
+                        const extraTime = stats.extraTimeMatches || 0;
+                        const penalties = stats.penaltyMatches || 0;
+                        return [
+                            player.substring(0, 20),
+                            matches.toString(),
+                            extraTime.toString(),
+                            penalties.toString()
+                        ];
+                    });
+                } else {
+                    // Generic table for other stats - format better
+                    headers = ['Player', 'Details'];
+                    colWidths = [80, 100];
+                    rows = sortedEntries.slice(0, 20).map(([player, stats]) => {
+                        let value = '';
+                        if (typeof stats === 'object') {
+                            // Format common stat fields nicely
+                            if (stats.goalsFor !== undefined && stats.goalsAgainst !== undefined) {
+                                value = `GF: ${stats.goalsFor}, GA: ${stats.goalsAgainst}`;
+                            } else if (stats.cumulativeWins !== undefined && stats.cumulativeGames !== undefined) {
+                                const winRate = stats.cumulativeGames > 0 
+                                    ? ((stats.cumulativeWins / stats.cumulativeGames) * 100).toFixed(1) 
+                                    : '0.0';
+                                value = `Wins: ${stats.cumulativeWins}, Games: ${stats.cumulativeGames}, Win Rate: ${winRate}%`;
+                            } else {
+                                // Format other numeric fields
+                                const formatted = Object.entries(stats)
+                                    .filter(([k, v]) => typeof v === 'number' && !k.includes('Date') && !k.includes('date'))
+                                    .slice(0, 3)
+                                    .map(([k, v]) => {
+                                        const label = k.replace(/([A-Z])/g, ' $1').trim();
+                                        return `${label}: ${v}`;
+                                    })
+                                    .join(', ');
+                                value = formatted || 'No data';
+                            }
+                        } else {
+                            value = String(stats);
+                        }
+                        return [player.substring(0, 25), value.substring(0, 50)];
                     });
                 }
                 
