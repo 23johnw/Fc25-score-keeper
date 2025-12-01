@@ -4305,6 +4305,12 @@ class ShareManager {
                         const pointsB = (a[1].wins || 0) * 3 + (a[1].draws || 0);
                         return pointsA - pointsB;
                     });
+                } else if (calculator.id === 'comparativeStats') {
+                    sortedEntries = sortedEntries.sort((a, b) => {
+                        const gamesA = (a[1].headToHead && a[1].headToHead.games) || 0;
+                        const gamesB = (b[1].headToHead && b[1].headToHead.games) || 0;
+                        return gamesB - gamesA; // Sort by games descending
+                    });
                 }
                 
                 // Format data into table rows based on calculator type
@@ -4467,9 +4473,14 @@ class ShareManager {
                     headers = ['Players', 'P1 Win %', 'P2 Win %', 'Games'];
                     colWidths = [70, 30, 30, 30];
                     rows = sortedEntries.slice(0, 15).map(([pair, stats]) => {
-                        const p1Rate = stats.player1WinRate ? `${stats.player1WinRate.toFixed(1)}%` : '-';
-                        const p2Rate = stats.player2WinRate ? `${stats.player2WinRate.toFixed(1)}%` : '-';
-                        const games = stats.totalGames || 0;
+                        const headToHead = stats.headToHead || {};
+                        const p1Rate = headToHead.p1WinRate !== undefined && headToHead.games > 0 
+                            ? `${headToHead.p1WinRate.toFixed(1)}%` 
+                            : '-';
+                        const p2Rate = headToHead.p2WinRate !== undefined && headToHead.games > 0 
+                            ? `${headToHead.p2WinRate.toFixed(1)}%` 
+                            : '-';
+                        const games = headToHead.games || 0;
                         return [
                             pair.substring(0, 20),
                             p1Rate,
