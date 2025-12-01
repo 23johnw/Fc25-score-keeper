@@ -4246,7 +4246,9 @@ class ShareManager {
                     colWidths = [80, 60, 40];
                     rows = sortedEntries.slice(0, 20).map(([player, stats]) => {
                         const trend = stats.trend || 'stable';
-                        const strength = stats.trendStrength ? `${Math.round(stats.trendStrength)}%` : '-';
+                        const strength = (stats.trendStrength !== undefined && stats.trendStrength !== null) 
+                            ? `${Math.round(stats.trendStrength)}%` 
+                            : '-';
                         const trendText = trend === 'improving_strong' ? 'Strong ↑' :
                                         trend === 'improving' ? 'Improving ↑' :
                                         trend === 'declining_strong' ? 'Strong ↓' :
