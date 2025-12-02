@@ -5549,14 +5549,16 @@ class AppController {
     showScreen(screenId, direction = 'forward') {
         // Determine animation direction
         const screenOrder = ['homeScreen', 'playerScreen', 'teamScreen', 'sequenceScreen', 'gameScreen', 'statsScreen', 'historyScreen', 'settingsScreen'];
-        const currentIndex = screenOrder.indexOf(this.currentScreen);
+        const currentIndex = this.currentScreen ? screenOrder.indexOf(this.currentScreen) : -1;
         const targetIndex = screenOrder.indexOf(screenId);
         
         // Auto-detect direction if not specified
-        if (direction === 'forward' && targetIndex < currentIndex) {
-            direction = 'back';
-        } else if (direction === 'back' && targetIndex > currentIndex) {
-            direction = 'forward';
+        if (currentIndex >= 0 && targetIndex >= 0) {
+            if (direction === 'forward' && targetIndex < currentIndex) {
+                direction = 'back';
+            } else if (direction === 'back' && targetIndex > currentIndex) {
+                direction = 'forward';
+            }
         }
 
         // Get current and target screens
@@ -5579,42 +5581,41 @@ class AppController {
         targetScreen.classList.add('active', direction === 'forward' ? 'slide-in-right' : 'slide-in-left');
         this.currentScreen = screenId;
 
-            // Update navigation
-            document.querySelectorAll('.nav-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.screen === screenId);
-            });
+        // Update navigation
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.screen === screenId);
+        });
 
-            // Load screen-specific data
-            if (screenId === 'teamScreen') {
-                this.loadTeamCombinations();
-            } else if (screenId === 'sequenceScreen') {
-                this.loadSequenceList();
-            } else if (screenId === 'statsScreen') {
-                this.loadStatistics();
-                this.updateViewPDFButton();
-                // Initialize swipe gestures for stats tabs
-                setTimeout(() => {
-                    this.initializeStatsTabSwipes();
-                }, 100);
-            } else if (screenId === 'playerScreen') {
-                // Reload players to ensure UI is in sync
-                const players = this.playerManager.getPlayers();
-                this.loadPlayersIntoUI(players);
-                this.updatePlayerNameHistory();
-            } else if (screenId === 'historyScreen') {
-                // Initialize view toggle state
-                const listBtn = document.getElementById('historyListViewBtn');
-                const timelineBtn = document.getElementById('historyTimelineViewBtn');
-                if (listBtn && timelineBtn) {
-                    listBtn.classList.toggle('active', this.currentHistoryView === 'list');
-                    timelineBtn.classList.toggle('active', this.currentHistoryView === 'timeline');
-                    document.getElementById('matchHistoryList').style.display = this.currentHistoryView === 'list' ? 'flex' : 'none';
-                    document.getElementById('matchHistoryTimeline').style.display = this.currentHistoryView === 'timeline' ? 'block' : 'none';
-                }
-                this.loadMatchHistory();
-            } else if (screenId === 'settingsScreen') {
-                this.loadSettingsScreen();
+        // Load screen-specific data
+        if (screenId === 'teamScreen') {
+            this.loadTeamCombinations();
+        } else if (screenId === 'sequenceScreen') {
+            this.loadSequenceList();
+        } else if (screenId === 'statsScreen') {
+            this.loadStatistics();
+            this.updateViewPDFButton();
+            // Initialize swipe gestures for stats tabs
+            setTimeout(() => {
+                this.initializeStatsTabSwipes();
+            }, 100);
+        } else if (screenId === 'playerScreen') {
+            // Reload players to ensure UI is in sync
+            const players = this.playerManager.getPlayers();
+            this.loadPlayersIntoUI(players);
+            this.updatePlayerNameHistory();
+        } else if (screenId === 'historyScreen') {
+            // Initialize view toggle state
+            const listBtn = document.getElementById('historyListViewBtn');
+            const timelineBtn = document.getElementById('historyTimelineViewBtn');
+            if (listBtn && timelineBtn) {
+                listBtn.classList.toggle('active', this.currentHistoryView === 'list');
+                timelineBtn.classList.toggle('active', this.currentHistoryView === 'timeline');
+                document.getElementById('matchHistoryList').style.display = this.currentHistoryView === 'list' ? 'flex' : 'none';
+                document.getElementById('matchHistoryTimeline').style.display = this.currentHistoryView === 'timeline' ? 'block' : 'none';
             }
+            this.loadMatchHistory();
+        } else if (screenId === 'settingsScreen') {
+            this.loadSettingsScreen();
         }
     }
 
@@ -5659,13 +5660,19 @@ class AppController {
 
     highlightSearchTerm(text, searchTerm) {
         if (!searchTerm || !text) return text;
+        if (typeof text !== 'string') return text; // Safety check
         
-        // Escape regex special characters in search term
-        const escapedTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`(${escapedTerm})`, 'gi');
-        
-        // Simple highlight: wrap matches in mark tag
-        return text.replace(regex, '<mark class="search-highlight">$1</mark>');
+        try {
+            // Escape regex special characters in search term
+            const escapedTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(`(${escapedTerm})`, 'gi');
+            
+            // Simple highlight: wrap matches in mark tag
+            return text.replace(regex, '<mark class="search-highlight">$1</mark>');
+        } catch (e) {
+            console.error('Error highlighting search term:', e);
+            return text; // Return original text on error
+        }
     }
 
     escapeRegex(str) {
@@ -7005,7 +7012,9 @@ class AppController {
         }
 
         // Calculate quick stats for filtered matches
+        if (!this.playerManager) return; // Safety check
         const players = this.playerManager.getPlayers();
+        if (!players || players.length === 0) return; // Safety check
         const playerStats = {};
         let totalGoals = 0;
         
@@ -7044,11 +7053,15 @@ class AppController {
         // Create or update filter stats display
         let statsContainer = document.getElementById('historyFilterStats');
         if (!statsContainer) {
+            const historyScreen = document.getElementById('historyScreen');
+            if (!historyScreen) return; // Safety check
+            
+            const controls = historyScreen.querySelector('.history-controls');
+            if (!controls) return; // Safety check
+            
             statsContainer = document.createElement('div');
             statsContainer.id = 'historyFilterStats';
             statsContainer.className = 'history-filter-stats';
-            const historyScreen = document.getElementById('historyScreen');
-            const controls = historyScreen.querySelector('.history-controls');
             controls.insertAdjacentElement('afterend', statsContainer);
         }
 
@@ -7083,7 +7096,7 @@ class AppController {
             ${sortedPlayers.length > 0 ? `
                 <div class="filter-stats-content">
                     ${sortedPlayers.slice(0, 4).map(([player, stats]) => {
-                        const playerColor = this.settingsManager.getPlayerColor(player) || '#2196F3';
+                        const playerColor = (this.settingsManager && this.settingsManager.getPlayerColor) ? (this.settingsManager.getPlayerColor(player) || '#2196F3') : '#2196F3';
                         return `
                             <div class="filter-stat-item">
                                 <span class="filter-stat-name" style="color: ${playerColor}; font-weight: 600;">${this.escapeHtml(player)}</span>
@@ -7172,7 +7185,15 @@ class AppController {
         });
 
         // Get all players for chart calculations
+        if (!this.playerManager) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📅</div><h3>No Players</h3><p>Add players to see timeline charts.</p></div>';
+            return;
+        }
         const players = this.playerManager.getPlayers();
+        if (!players || players.length === 0) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📅</div><h3>No Players</h3><p>Add players to see timeline charts.</p></div>';
+            return;
+        }
 
         container.innerHTML = sortedDateEntries.map(([dateKey, dateMatches], dateIndex) => {
             // Calculate cumulative stats up to this date
@@ -7219,7 +7240,7 @@ class AppController {
                             <div class="timeline-win-rate-bars">
                                 ${players.map(player => {
                                     const winRate = parseFloat(playerWinRates[player] || 0);
-                                    const playerColor = this.settingsManager.getPlayerColor(player) || '#2196F3';
+                                    const playerColor = (this.settingsManager && this.settingsManager.getPlayerColor) ? (this.settingsManager.getPlayerColor(player) || '#2196F3') : '#2196F3';
                                     return `
                                         <div class="timeline-player-stat">
                                             <div class="timeline-player-stat-header">
@@ -7239,7 +7260,7 @@ class AppController {
                             <div class="timeline-goals-display">
                                 ${players.map(player => {
                                     const goals = playerGoals[player] || 0;
-                                    const playerColor = this.settingsManager.getPlayerColor(player) || '#2196F3';
+                                    const playerColor = (this.settingsManager && this.settingsManager.getPlayerColor) ? (this.settingsManager.getPlayerColor(player) || '#2196F3') : '#2196F3';
                                     return `
                                         <div class="timeline-goal-item">
                                             <span class="timeline-goal-dot" style="background: ${playerColor};"></span>
