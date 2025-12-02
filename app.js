@@ -5147,8 +5147,10 @@ class TouchSwipeHandler {
         let currentY = 0;
         let isPullActive = false;
         let pullDistance = 0;
-        const pullThreshold = 80; // Distance to pull before triggering refresh
-        const maxPullDistance = 120; // Maximum pull distance
+        const minPullDistance = 40; // Minimum distance before showing indicator
+        const pullThreshold = 120; // Increased threshold - distance to pull before triggering refresh
+        const maxPullDistance = 150; // Maximum pull distance
+        let lastScrollTop = 0;
 
         // Create refresh indicator
         const refreshIndicator = document.createElement('div');
@@ -5184,52 +5186,88 @@ class TouchSwipeHandler {
             element.style.transform = '';
             refreshIndicator.style.transform = 'translateY(-100%)';
             refreshIndicator.innerHTML = '<span>⬇️ Pull to refresh</span>';
+            refreshIndicator.style.backgroundColor = 'var(--primary-color, #2196F3)';
             pullDistance = 0;
             isPullActive = false;
+            startY = 0;
+            currentY = 0;
         };
 
         element.addEventListener('touchstart', (e) => {
-            // Only allow pull-to-refresh if at the top of the scroll
-            if (element.scrollTop === 0) {
+            // Store the scroll position to check later
+            lastScrollTop = element.scrollTop || 0;
+            // Only allow pull-to-refresh if at the very top (within 5px tolerance)
+            if (lastScrollTop <= 5) {
                 startY = e.touches[0].clientY;
-                isPullActive = true;
+                isPullActive = false; // Don't activate until minimum pull distance
+            } else {
+                isPullActive = false;
             }
         }, { passive: true });
 
         element.addEventListener('touchmove', (e) => {
-            if (!isPullActive) return;
+            // Check if we're still at the top
+            const currentScrollTop = element.scrollTop || 0;
+            
+            // If scrolled down, cancel pull
+            if (currentScrollTop > 5) {
+                resetPull();
+                return;
+            }
+
+            if (!startY) return; // No touch start recorded
 
             currentY = e.touches[0].clientY;
             const deltaY = currentY - startY;
 
-            // Only allow pulling down (positive deltaY)
-            if (deltaY > 0 && element.scrollTop === 0) {
-                pullDistance = Math.min(deltaY, maxPullDistance);
-                
-                // Apply pull effect
-                const pullRatio = pullDistance / pullThreshold;
-                element.style.transform = `translateY(${pullDistance}px)`;
-                refreshIndicator.style.transform = `translateY(${-60 + pullDistance}px)`;
-
-                // Update indicator text
-                if (pullDistance >= pullThreshold) {
-                    refreshIndicator.innerHTML = '<span>⬆️ Release to refresh</span>';
-                    refreshIndicator.style.backgroundColor = 'var(--success-color, #4CAF50)';
-                } else {
-                    refreshIndicator.innerHTML = '<span>⬇️ Pull to refresh</span>';
-                    refreshIndicator.style.backgroundColor = 'var(--primary-color, #2196F3)';
+            // Only allow pulling down (positive deltaY) and only if at the top
+            if (deltaY > 0 && currentScrollTop <= 5) {
+                // Require minimum pull before activating
+                if (deltaY < minPullDistance) {
+                    return; // Don't show anything until minimum pull
                 }
 
-                // Prevent default scrolling while pulling
-                if (pullDistance > 0) {
+                // Activate pull mode once minimum distance reached
+                if (!isPullActive && deltaY >= minPullDistance) {
+                    isPullActive = true;
+                }
+
+                if (isPullActive) {
+                    // Apply resistance - make it harder to pull (elastic effect)
+                    const resistance = 0.6; // Resistance factor
+                    pullDistance = Math.min(deltaY * resistance, maxPullDistance);
+                    
+                    // Apply pull effect
+                    element.style.transform = `translateY(${pullDistance}px)`;
+                    refreshIndicator.style.transform = `translateY(${-60 + pullDistance}px)`;
+
+                    // Update indicator text
+                    if (pullDistance >= pullThreshold) {
+                        refreshIndicator.innerHTML = '<span>⬆️ Release to refresh</span>';
+                        refreshIndicator.style.backgroundColor = 'var(--success-color, #4CAF50)';
+                    } else {
+                        refreshIndicator.innerHTML = '<span>⬇️ Pull to refresh</span>';
+                        refreshIndicator.style.backgroundColor = 'var(--primary-color, #2196F3)';
+                    }
+
+                    // Prevent default scrolling while pulling past minimum
                     e.preventDefault();
                 }
+            } else if (deltaY < 0 && isPullActive) {
+                // User is scrolling back up - cancel pull
+                resetPull();
             }
         }, { passive: false });
 
         element.addEventListener('touchend', () => {
-            if (!isPullActive) return;
+            if (!isPullActive) {
+                // Reset if we didn't activate
+                startY = 0;
+                currentY = 0;
+                return;
+            }
 
+            // Only trigger if we exceeded threshold
             if (pullDistance >= pullThreshold) {
                 // Trigger refresh
                 refreshIndicator.innerHTML = '<span>🔄 Refreshing...</span>';
@@ -5247,6 +5285,8 @@ class TouchSwipeHandler {
             }
 
             isPullActive = false;
+            startY = 0;
+            currentY = 0;
         }, { passive: true });
     }
 }
@@ -5530,7 +5570,6 @@ class AppController {
                 // Initialize swipe gestures for stats tabs
                 setTimeout(() => {
                     this.initializeStatsTabSwipes();
-                    this.initializePullToRefresh();
                 }, 100);
             } else if (screenId === 'playerScreen') {
                 // Reload players to ensure UI is in sync
@@ -6406,25 +6445,13 @@ class AppController {
     }
 
     initializePullToRefresh() {
+        // Disable pull-to-refresh for stats screen as it's not needed
+        // Stats refresh automatically when switching tabs and don't need manual refresh
+        // This prevents accidental triggers when scrolling
         const statsScreen = document.getElementById('statsScreen');
-        if (!statsScreen || statsScreen.pullRefreshInitialized) return;
-
-        // Get the active stats content container
-        const activeContent = statsScreen.querySelector('.stats-content.active') || 
-                             statsScreen.querySelector('.stats-display').closest('.stats-content');
-        
-        if (activeContent) {
-            this.touchSwipeHandler.attachPullToRefresh(activeContent, (doneCallback) => {
-                // Reload statistics
-                this.loadStatistics();
-                if (this.toastManager) {
-                    this.toastManager.success('Statistics refreshed');
-                }
-                doneCallback();
-            });
+        if (statsScreen) {
+            statsScreen.pullRefreshInitialized = true;
         }
-
-        statsScreen.pullRefreshInitialized = true;
     }
 
     initializeHistoryPullToRefresh() {
