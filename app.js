@@ -5537,22 +5537,47 @@ class AppController {
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const screen = e.target.closest('.nav-btn').dataset.screen;
-                this.showScreen(screen);
+                const screenOrder = ['homeScreen', 'playerScreen', 'teamScreen', 'sequenceScreen', 'gameScreen', 'statsScreen', 'historyScreen', 'settingsScreen'];
+                const currentIndex = screenOrder.indexOf(this.currentScreen);
+                const targetIndex = screenOrder.indexOf(screen);
+                const direction = targetIndex > currentIndex ? 'forward' : 'back';
+                this.showScreen(screen, direction);
             });
         });
     }
 
-    showScreen(screenId) {
-        // Hide all screens
+    showScreen(screenId, direction = 'forward') {
+        // Determine animation direction
+        const screenOrder = ['homeScreen', 'playerScreen', 'teamScreen', 'sequenceScreen', 'gameScreen', 'statsScreen', 'historyScreen', 'settingsScreen'];
+        const currentIndex = screenOrder.indexOf(this.currentScreen);
+        const targetIndex = screenOrder.indexOf(screenId);
+        
+        // Auto-detect direction if not specified
+        if (direction === 'forward' && targetIndex < currentIndex) {
+            direction = 'back';
+        } else if (direction === 'back' && targetIndex > currentIndex) {
+            direction = 'forward';
+        }
+
+        // Get current and target screens
+        const currentScreen = this.currentScreen ? document.getElementById(this.currentScreen) : null;
+        const targetScreen = document.getElementById(screenId);
+        
+        if (!targetScreen) return;
+
+        // Hide all screens first
         document.querySelectorAll('.screen').forEach(screen => {
-            screen.classList.remove('active');
+            screen.classList.remove('active', 'slide-out-left', 'slide-out-right', 'slide-in-left', 'slide-in-right');
         });
 
-        // Show target screen
-        const targetScreen = document.getElementById(screenId);
-        if (targetScreen) {
-            targetScreen.classList.add('active');
-            this.currentScreen = screenId;
+        // Add exit animation to current screen if it exists
+        if (currentScreen && currentScreen !== targetScreen) {
+            currentScreen.classList.add(direction === 'forward' ? 'slide-out-left' : 'slide-out-right');
+        }
+
+        // Show target screen with enter animation
+        targetScreen.classList.add('active', direction === 'forward' ? 'slide-in-right' : 'slide-in-left');
+        this.currentScreen = screenId;
 
             // Update navigation
             document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -5630,6 +5655,21 @@ class AppController {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+    }
+
+    highlightSearchTerm(text, searchTerm) {
+        if (!searchTerm || !text) return text;
+        
+        // Escape regex special characters in search term
+        const escapedTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(${escapedTerm})`, 'gi');
+        
+        // Simple highlight: wrap matches in mark tag
+        return text.replace(regex, '<mark class="search-highlight">$1</mark>');
+    }
+
+    escapeRegex(str) {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
     getEditorPlayersTrimmed() {
@@ -6935,6 +6975,9 @@ class AppController {
             allMatches.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
         }
 
+        // Show quick stats if filters are active
+        this.renderFilterStats(allMatches, filter, search, dateFrom, dateTo);
+
         if (allMatches.length === 0) {
             const emptyMessage = '<div class="empty-state"><div class="empty-state-icon">📅</div><h3>No Matches Found</h3><p>Try adjusting your filters or start recording matches!</p></div>';
             listContainer.innerHTML = emptyMessage;
@@ -6943,16 +6986,132 @@ class AppController {
         }
 
         if (this.currentHistoryView === 'timeline') {
-            this.renderTimelineView(allMatches, timelineContainer);
+            this.renderTimelineView(allMatches, timelineContainer, search);
         } else {
-            this.renderListView(allMatches, listContainer);
+            this.renderListView(allMatches, listContainer, search);
         }
     }
 
-    renderListView(matches, container) {
+    renderFilterStats(matches, filter, search, dateFrom, dateTo) {
+        // Check if any filters are active
+        const hasFilters = filter !== 'all' || search || dateFrom || dateTo;
+        if (!hasFilters || matches.length === 0) {
+            // Remove existing filter stats if any
+            const existingStats = document.getElementById('historyFilterStats');
+            if (existingStats) {
+                existingStats.remove();
+            }
+            return;
+        }
+
+        // Calculate quick stats for filtered matches
+        const players = this.playerManager.getPlayers();
+        const playerStats = {};
+        let totalGoals = 0;
+        
+        players.forEach(player => {
+            let wins = 0, losses = 0, draws = 0, goals = 0;
+            matches.forEach(match => {
+                const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
+                const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
+                const inTeam1 = team1Players.includes(player);
+                const inTeam2 = team2Players.includes(player);
+                
+                if (inTeam1 || inTeam2) {
+                    if (inTeam1) goals += (match.team1Score || 0);
+                    if (inTeam2) goals += (match.team2Score || 0);
+                    totalGoals += (match.team1Score || 0) + (match.team2Score || 0);
+                    
+                    if (match.result === 'draw') {
+                        draws++;
+                    } else if ((match.result === 'team1' && inTeam1) || (match.result === 'team2' && inTeam2)) {
+                        wins++;
+                    } else {
+                        losses++;
+                    }
+                }
+            });
+            
+            if (wins + losses + draws > 0) {
+                playerStats[player] = {
+                    wins, losses, draws, goals,
+                    games: wins + losses + draws,
+                    winRate: ((wins / (wins + losses + draws)) * 100).toFixed(1)
+                };
+            }
+        });
+
+        // Create or update filter stats display
+        let statsContainer = document.getElementById('historyFilterStats');
+        if (!statsContainer) {
+            statsContainer = document.createElement('div');
+            statsContainer.id = 'historyFilterStats';
+            statsContainer.className = 'history-filter-stats';
+            const historyScreen = document.getElementById('historyScreen');
+            const controls = historyScreen.querySelector('.history-controls');
+            controls.insertAdjacentElement('afterend', statsContainer);
+        }
+
+        // Build active filters display
+        const activeFilters = [];
+        if (filter !== 'all') {
+            activeFilters.push(`Season: ${filter === 'today' ? 'Today' : 'Current'}`);
+        }
+        if (dateFrom) {
+            activeFilters.push(`From: ${new Date(dateFrom).toLocaleDateString()}`);
+        }
+        if (dateTo) {
+            activeFilters.push(`To: ${new Date(dateTo).toLocaleDateString()}`);
+        }
+        if (search) {
+            activeFilters.push(`Search: "${search}"`);
+        }
+
+        const sortedPlayers = Object.entries(playerStats).sort((a, b) => {
+            return parseFloat(b[1].winRate) - parseFloat(a[1].winRate);
+        });
+
+        statsContainer.innerHTML = `
+            <div class="filter-stats-header">
+                <span class="filter-stats-title">📊 Quick Stats (${matches.length} match${matches.length !== 1 ? 'es' : ''})</span>
+                ${activeFilters.length > 0 ? `
+                    <div class="active-filters">
+                        ${activeFilters.map(f => `<span class="filter-badge">${this.escapeHtml(f)}</span>`).join('')}
+                    </div>
+                ` : ''}
+            </div>
+            ${sortedPlayers.length > 0 ? `
+                <div class="filter-stats-content">
+                    ${sortedPlayers.slice(0, 4).map(([player, stats]) => {
+                        const playerColor = this.settingsManager.getPlayerColor(player) || '#2196F3';
+                        return `
+                            <div class="filter-stat-item">
+                                <span class="filter-stat-name" style="color: ${playerColor}; font-weight: 600;">${this.escapeHtml(player)}</span>
+                                <span class="filter-stat-values">
+                                    <span class="filter-stat-value">${stats.winRate}%</span>
+                                    <span class="filter-stat-separator">•</span>
+                                    <span class="filter-stat-value">${stats.wins}W</span>
+                                    <span class="filter-stat-separator">•</span>
+                                    <span class="filter-stat-value">${stats.goals}G</span>
+                                </span>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            ` : ''}
+        `;
+    }
+
+    renderListView(matches, container, searchTerm = '') {
         container.innerHTML = matches.map(match => {
-            const team1Display = this.formatTeamWithColors(match.team1);
-            const team2Display = this.formatTeamWithColors(match.team2);
+            let team1Display = this.formatTeamWithColors(match.team1);
+            let team2Display = this.formatTeamWithColors(match.team2);
+            
+            // Highlight search terms if present
+            if (searchTerm) {
+                team1Display = this.highlightSearchTerm(team1Display, searchTerm);
+                team2Display = this.highlightSearchTerm(team2Display, searchTerm);
+            }
             
             const date = new Date(match.timestamp);
             const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -6993,7 +7152,7 @@ class AppController {
         });
     }
 
-    renderTimelineView(matches, container) {
+    renderTimelineView(matches, container, searchTerm = '') {
         // Group matches by date
         const matchesByDate = {};
         matches.forEach(match => {
@@ -7005,18 +7164,105 @@ class AppController {
             matchesByDate[dateKey].push(match);
         });
 
-        container.innerHTML = Object.entries(matchesByDate).map(([dateKey, dateMatches]) => {
+        // Sort date entries chronologically for cumulative calculations
+        const sortedDateEntries = Object.entries(matchesByDate).sort((a, b) => {
+            const dateA = new Date(a[0]);
+            const dateB = new Date(b[0]);
+            return dateA - dateB;
+        });
+
+        // Get all players for chart calculations
+        const players = this.playerManager.getPlayers();
+
+        container.innerHTML = sortedDateEntries.map(([dateKey, dateMatches], dateIndex) => {
+            // Calculate cumulative stats up to this date
+            const allMatchesUpToThisDate = [];
+            for (let i = 0; i <= dateIndex; i++) {
+                allMatchesUpToThisDate.push(...sortedDateEntries[i][1]);
+            }
+            
+            // Calculate win rates and goals for each player up to this date
+            const playerWinRates = {};
+            const playerGoals = {};
+            players.forEach(player => {
+                let wins = 0, games = 0, goals = 0;
+                allMatchesUpToThisDate.forEach(match => {
+                    const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
+                    const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
+                    const inTeam1 = team1Players.includes(player);
+                    const inTeam2 = team2Players.includes(player);
+                    
+                    if (inTeam1 || inTeam2) {
+                        games++;
+                        if ((match.result === 'team1' && inTeam1) || (match.result === 'team2' && inTeam2)) {
+                            wins++;
+                        }
+                        // Count goals
+                        if (inTeam1) goals += (match.team1Score || 0);
+                        if (inTeam2) goals += (match.team2Score || 0);
+                    }
+                });
+                playerWinRates[player] = games > 0 ? (wins / games * 100).toFixed(1) : 0;
+                playerGoals[player] = goals;
+            });
+
             const dateHeader = `
                 <div class="timeline-date-group">
                     <div class="timeline-date-header">
                         <div class="timeline-date-title">${dateKey}</div>
                         <div class="timeline-date-count">${dateMatches.length} match${dateMatches.length !== 1 ? 'es' : ''}</div>
                     </div>
+                    ${players.length > 0 ? `
+                    <div class="timeline-mini-stats">
+                        <div class="timeline-stats-section">
+                            <div class="timeline-stats-label">Win Rates (Cumulative)</div>
+                            <div class="timeline-win-rate-bars">
+                                ${players.map(player => {
+                                    const winRate = parseFloat(playerWinRates[player] || 0);
+                                    const playerColor = this.settingsManager.getPlayerColor(player) || '#2196F3';
+                                    return `
+                                        <div class="timeline-player-stat">
+                                            <div class="timeline-player-stat-header">
+                                                <span class="timeline-player-name">${this.escapeHtml(player)}</span>
+                                                <span class="timeline-player-value">${winRate}%</span>
+                                            </div>
+                                            <div class="timeline-progress-bar">
+                                                <div class="timeline-progress-fill" style="width: ${winRate}%; background: ${playerColor};"></div>
+                                            </div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                        <div class="timeline-stats-section">
+                            <div class="timeline-stats-label">Goals Scored</div>
+                            <div class="timeline-goals-display">
+                                ${players.map(player => {
+                                    const goals = playerGoals[player] || 0;
+                                    const playerColor = this.settingsManager.getPlayerColor(player) || '#2196F3';
+                                    return `
+                                        <div class="timeline-goal-item">
+                                            <span class="timeline-goal-dot" style="background: ${playerColor};"></span>
+                                            <span class="timeline-goal-name">${this.escapeHtml(player)}:</span>
+                                            <span class="timeline-goal-value">${goals}</span>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
             `;
 
             const matchesHTML = dateMatches.map(match => {
-                const team1Display = this.formatTeamWithColors(match.team1);
-                const team2Display = this.formatTeamWithColors(match.team2);
+                let team1Display = this.formatTeamWithColors(match.team1);
+                let team2Display = this.formatTeamWithColors(match.team2);
+                
+                // Highlight search terms if present
+                if (searchTerm) {
+                    team1Display = this.highlightSearchTerm(team1Display, searchTerm);
+                    team2Display = this.highlightSearchTerm(team2Display, searchTerm);
+                }
                 
                 const date = new Date(match.timestamp);
                 const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

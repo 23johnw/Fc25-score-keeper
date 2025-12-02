@@ -57,22 +57,74 @@ body {
     display: none;
     min-height: calc(100vh - 140px);
     padding: 1rem;
-    animation: screenFadeIn 0.3s ease-out;
+    opacity: 0;
+    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
 }
 
 .screen.active {
     display: block;
+    opacity: 1;
 }
 
-@keyframes screenFadeIn {
+/* Screen Transition Animations */
+@keyframes slideInRight {
     from {
         opacity: 0;
-        transform: translateY(10px);
+        transform: translateX(100%);
     }
     to {
         opacity: 1;
-        transform: translateY(0);
+        transform: translateX(0);
     }
+}
+
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes slideOutLeft {
+    from {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(-100%);
+    }
+}
+
+@keyframes slideOutRight {
+    from {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+}
+
+.screen.slide-in-right {
+    animation: slideInRight 0.3s ease-out forwards;
+}
+
+.screen.slide-in-left {
+    animation: slideInLeft 0.3s ease-out forwards;
+}
+
+.screen.slide-out-left {
+    animation: slideOutLeft 0.3s ease-out forwards;
+}
+
+.screen.slide-out-right {
+    animation: slideOutRight 0.3s ease-out forwards;
 }
 
 .screen-content {
@@ -305,6 +357,12 @@ body.dark-mode .player-editable-item.active {
     background: rgba(255, 255, 255, 0.3);
     transform: translate(-50%, -50%);
     transition: width 0.6s, height 0.6s;
+}
+
+.btn:active {
+    transform: scale(0.95);
+    transition: transform 0.1s ease-out;
+}
 }
 
 .btn:active::before {
@@ -712,8 +770,14 @@ body.dark-mode .player-editable-item.active {
     cursor: pointer;
     font-size: 0.85rem;
     font-weight: 500;
-    transition: all 0.3s;
+    transition: all 0.3s ease-out;
     white-space: nowrap;
+}
+
+.category-btn:active,
+.tab-btn:active {
+    transform: scale(0.95);
+    transition: transform 0.1s ease-out;
 }
 
 .category-btn:hover {
@@ -784,10 +848,24 @@ body.dark-mode .player-editable-item.active {
 
 .stats-content {
     display: none;
+    opacity: 0;
+    animation: fadeIn 0.3s ease-out;
 }
 
 .stats-content.active {
     display: block;
+    opacity: 1;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .stats-content h3 {
@@ -2620,6 +2698,230 @@ body.dark-mode .league-table td {
     background-color: #FF9800;
 }
 
+/* Timeline Mini Stats Charts */
+.timeline-mini-stats {
+    margin-top: 0.75rem;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: rgba(33, 150, 243, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(33, 150, 243, 0.1);
+}
+
+.timeline-stats-section {
+    margin-bottom: 1rem;
+}
+
+.timeline-stats-section:last-child {
+    margin-bottom: 0;
+}
+
+.timeline-stats-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.timeline-win-rate-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.timeline-player-stat {
+    margin-bottom: 0.5rem;
+}
+
+.timeline-player-stat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.3rem;
+}
+
+.timeline-player-name {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.timeline-player-value {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.timeline-progress-bar {
+    height: 8px;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+
+.timeline-progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease-out;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.timeline-goals-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.timeline-goal-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    padding: 0.3rem 0.6rem;
+    background: var(--surface-color);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+}
+
+.timeline-goal-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.timeline-goal-name {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.timeline-goal-value {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+body.dark-mode .timeline-mini-stats {
+    background: rgba(33, 150, 243, 0.1);
+    border-color: rgba(33, 150, 243, 0.2);
+}
+
+body.dark-mode .timeline-goal-item {
+    background-color: #2C2C2C;
+    border-color: #424242;
+}
+
+/* History Filter Stats */
+.history-filter-stats {
+    background-color: var(--surface-color);
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    box-shadow: var(--shadow);
+    border: 2px solid var(--primary-color);
+}
+
+.filter-stats-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.filter-stats-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.active-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.filter-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background-color: var(--primary-color);
+    color: white;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.filter-stats-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.filter-stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    background: rgba(0,0,0,0.02);
+    border-radius: 6px;
+}
+
+.filter-stat-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.filter-stat-values {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.filter-stat-value {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.filter-stat-separator {
+    color: var(--text-secondary);
+}
+
+/* Search Highlighting */
+.search-highlight {
+    background-color: #FFEB3B;
+    color: #212121;
+    padding: 0.1rem 0.2rem;
+    border-radius: 3px;
+    font-weight: 600;
+}
+
+body.dark-mode .search-highlight {
+    background-color: #FFC107;
+    color: #000000;
+}
+
+body.dark-mode .history-filter-stats {
+    background-color: #1E1E1E;
+    border-color: var(--primary-color);
+}
+
+body.dark-mode .filter-stat-item {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* Visual Filter Indicators */
+.filter-select:not([value="all"]),
+.date-input:not([value=""]),
+.search-input:not([value=""]) {
+    border-color: var(--primary-color);
+    background-color: rgba(33, 150, 243, 0.05);
+}
+
 .match-history-item {
     background-color: var(--surface-color);
     padding: 1.25rem; /* Increased padding for better touch area */
@@ -2711,6 +3013,9 @@ body.dark-mode .league-table td {
     left: 0;
     width: 100%;
     height: 100%;
+    opacity: 0;
+    transition: opacity 0.3s ease-out;
+    animation: modalFadeIn 0.3s ease-out forwards;
     background-color: rgba(0, 0, 0, 0.5);
     display: flex;
     align-items: center;
@@ -2728,6 +3033,27 @@ body.dark-mode .league-table td {
     max-height: 90vh;
     overflow-y: auto;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .modal-content h3 {
