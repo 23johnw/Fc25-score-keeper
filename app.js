@@ -4964,6 +4964,294 @@ class ShareManager {
 }
 
 // ============================================================================
+// TouchSwipeHandler - Mobile Swipe Gesture Detection
+// ============================================================================
+
+class TouchSwipeHandler {
+    constructor() {
+        this.touchStartX = 0;
+        this.touchStartY = 0;
+        this.touchEndX = 0;
+        this.touchEndY = 0;
+        this.minSwipeDistance = 50; // Minimum distance for a swipe
+        this.maxVerticalDistance = 100; // Maximum vertical movement for horizontal swipe
+        this.swipeThreshold = 30; // Minimum horizontal movement to trigger swipe
+    }
+
+    /**
+     * Initialize swipe detection on an element
+     * @param {HTMLElement} element - Element to attach swipe detection to
+     * @param {Object} callbacks - Object with onSwipeLeft, onSwipeRight, onSwipeUp, onSwipeDown callbacks
+     */
+    attach(element, callbacks = {}) {
+        if (!element) return;
+
+        element.addEventListener('touchstart', (e) => {
+            this.touchStartX = e.changedTouches[0].screenX;
+            this.touchStartY = e.changedTouches[0].screenY;
+        }, { passive: true });
+
+        element.addEventListener('touchend', (e) => {
+            this.touchEndX = e.changedTouches[0].screenX;
+            this.touchEndY = e.changedTouches[0].screenY;
+            this.handleSwipe(callbacks);
+        }, { passive: true });
+    }
+
+    handleSwipe(callbacks) {
+        const deltaX = this.touchEndX - this.touchStartX;
+        const deltaY = this.touchEndY - this.touchStartY;
+        const absDeltaX = Math.abs(deltaX);
+        const absDeltaY = Math.abs(deltaY);
+
+        // Check if it's a valid swipe (horizontal movement is dominant)
+        if (absDeltaX < this.minSwipeDistance || absDeltaY > this.maxVerticalDistance) {
+            return;
+        }
+
+        // Determine swipe direction
+        if (absDeltaX > absDeltaY) {
+            // Horizontal swipe
+            if (deltaX > this.swipeThreshold && callbacks.onSwipeRight) {
+                callbacks.onSwipeRight();
+            } else if (deltaX < -this.swipeThreshold && callbacks.onSwipeLeft) {
+                callbacks.onSwipeLeft();
+            }
+        } else {
+            // Vertical swipe
+            if (deltaY > this.swipeThreshold && callbacks.onSwipeDown) {
+                callbacks.onSwipeDown();
+            } else if (deltaY < -this.swipeThreshold && callbacks.onSwipeUp) {
+                callbacks.onSwipeUp();
+            }
+        }
+    }
+
+    /**
+     * Attach swipe-to-delete functionality to match history items
+     * @param {HTMLElement} item - Match history item element
+     * @param {Function} deleteCallback - Function to call when delete is confirmed
+     */
+    attachSwipeToDelete(item, deleteCallback) {
+        if (!item || !deleteCallback) return;
+
+        let startX = 0;
+        let currentX = 0;
+        let isSwipeActive = false;
+        const deleteThreshold = 100; // Distance to swipe before showing delete option
+
+        item.style.position = 'relative';
+        item.style.transition = 'transform 0.3s ease-out';
+        item.style.overflow = 'hidden';
+
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'swipe-delete-btn';
+        deleteButton.textContent = 'Delete';
+        deleteButton.style.cssText = `
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            background-color: #f44336;
+            color: white;
+            border: none;
+            padding: 0 1.5rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 100px;
+            min-height: 44px;
+            opacity: 0;
+            transform: translateX(100%);
+            transition: opacity 0.3s, transform 0.3s;
+            z-index: 10;
+        `;
+
+        deleteButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (confirm('Delete this match? This cannot be undone.')) {
+                deleteCallback();
+            }
+            resetPosition();
+        });
+
+        item.appendChild(deleteButton);
+
+        const resetPosition = () => {
+            item.style.transform = 'translateX(0)';
+            deleteButton.style.opacity = '0';
+            deleteButton.style.transform = 'translateX(100%)';
+            isSwipeActive = false;
+            startX = 0;
+            currentX = 0;
+        };
+
+        item.addEventListener('touchstart', (e) => {
+            startX = e.touches[0].clientX;
+            isSwipeActive = true;
+        }, { passive: true });
+
+        item.addEventListener('touchmove', (e) => {
+            if (!isSwipeActive) return;
+            currentX = e.touches[0].clientX;
+            const deltaX = currentX - startX;
+
+            // Only allow swiping left (negative deltaX)
+            if (deltaX < 0) {
+                const swipeDistance = Math.abs(deltaX);
+                item.style.transform = `translateX(${deltaX}px)`;
+                
+                if (swipeDistance >= deleteThreshold) {
+                    deleteButton.style.opacity = '1';
+                    deleteButton.style.transform = 'translateX(0)';
+                } else {
+                    deleteButton.style.opacity = '0';
+                    deleteButton.style.transform = 'translateX(100%)';
+                }
+            }
+        }, { passive: true });
+
+        item.addEventListener('touchend', () => {
+            if (!isSwipeActive) return;
+            const deltaX = Math.abs(currentX - startX);
+
+            if (deltaX < deleteThreshold) {
+                resetPosition();
+            } else {
+                // Lock in the delete button position
+                item.style.transform = `translateX(-${deleteThreshold}px)`;
+                deleteButton.style.opacity = '1';
+                deleteButton.style.transform = 'translateX(0)';
+            }
+            isSwipeActive = false;
+        }, { passive: true });
+
+        // Reset on click outside
+        document.addEventListener('click', (e) => {
+            if (!item.contains(e.target) && !deleteButton.contains(e.target)) {
+                resetPosition();
+            }
+        });
+    }
+
+    /**
+     * Attach pull-to-refresh functionality to an element
+     * @param {HTMLElement} element - Element to attach pull-to-refresh to
+     * @param {Function} refreshCallback - Function to call when refresh is triggered
+     */
+    attachPullToRefresh(element, refreshCallback) {
+        if (!element || !refreshCallback) return;
+
+        let startY = 0;
+        let currentY = 0;
+        let isPullActive = false;
+        let pullDistance = 0;
+        const pullThreshold = 80; // Distance to pull before triggering refresh
+        const maxPullDistance = 120; // Maximum pull distance
+
+        // Create refresh indicator
+        const refreshIndicator = document.createElement('div');
+        refreshIndicator.className = 'pull-to-refresh-indicator';
+        refreshIndicator.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--primary-color, #2196F3);
+            color: white;
+            font-size: 0.9rem;
+            transform: translateY(-100%);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+            pointer-events: none;
+        `;
+        refreshIndicator.innerHTML = '<span>⬇️ Pull to refresh</span>';
+
+        // Ensure element has relative positioning
+        const originalPosition = window.getComputedStyle(element).position;
+        if (originalPosition === 'static') {
+            element.style.position = 'relative';
+        }
+
+        element.insertBefore(refreshIndicator, element.firstChild);
+
+        const resetPull = () => {
+            element.style.transform = '';
+            refreshIndicator.style.transform = 'translateY(-100%)';
+            refreshIndicator.innerHTML = '<span>⬇️ Pull to refresh</span>';
+            pullDistance = 0;
+            isPullActive = false;
+        };
+
+        element.addEventListener('touchstart', (e) => {
+            // Only allow pull-to-refresh if at the top of the scroll
+            if (element.scrollTop === 0) {
+                startY = e.touches[0].clientY;
+                isPullActive = true;
+            }
+        }, { passive: true });
+
+        element.addEventListener('touchmove', (e) => {
+            if (!isPullActive) return;
+
+            currentY = e.touches[0].clientY;
+            const deltaY = currentY - startY;
+
+            // Only allow pulling down (positive deltaY)
+            if (deltaY > 0 && element.scrollTop === 0) {
+                pullDistance = Math.min(deltaY, maxPullDistance);
+                
+                // Apply pull effect
+                const pullRatio = pullDistance / pullThreshold;
+                element.style.transform = `translateY(${pullDistance}px)`;
+                refreshIndicator.style.transform = `translateY(${-60 + pullDistance}px)`;
+
+                // Update indicator text
+                if (pullDistance >= pullThreshold) {
+                    refreshIndicator.innerHTML = '<span>⬆️ Release to refresh</span>';
+                    refreshIndicator.style.backgroundColor = 'var(--success-color, #4CAF50)';
+                } else {
+                    refreshIndicator.innerHTML = '<span>⬇️ Pull to refresh</span>';
+                    refreshIndicator.style.backgroundColor = 'var(--primary-color, #2196F3)';
+                }
+
+                // Prevent default scrolling while pulling
+                if (pullDistance > 0) {
+                    e.preventDefault();
+                }
+            }
+        }, { passive: false });
+
+        element.addEventListener('touchend', () => {
+            if (!isPullActive) return;
+
+            if (pullDistance >= pullThreshold) {
+                // Trigger refresh
+                refreshIndicator.innerHTML = '<span>🔄 Refreshing...</span>';
+                refreshIndicator.style.backgroundColor = 'var(--primary-color, #2196F3)';
+                
+                // Call refresh callback
+                refreshCallback(() => {
+                    // Callback when refresh is done
+                    setTimeout(() => {
+                        resetPull();
+                    }, 300);
+                });
+            } else {
+                resetPull();
+            }
+
+            isPullActive = false;
+        }, { passive: true });
+    }
+}
+
+// ============================================================================
 // Main Application Controller
 // ============================================================================
 
@@ -4987,6 +5275,7 @@ class AppController {
         this.currentGameIndex = 0;
         this.currentStatsState = {};
         this.editingMatchTimestamp = null;
+        this.touchSwipeHandler = new TouchSwipeHandler(); // Initialize swipe gesture handler
         this.playerEditorValues = [];
         this.hasUnsavedPlayerChanges = false;
         this.currentHistoryView = 'list'; // 'list' or 'timeline'
@@ -5238,6 +5527,11 @@ class AppController {
             } else if (screenId === 'statsScreen') {
                 this.loadStatistics();
                 this.updateViewPDFButton();
+                // Initialize swipe gestures for stats tabs
+                setTimeout(() => {
+                    this.initializeStatsTabSwipes();
+                    this.initializePullToRefresh();
+                }, 100);
             } else if (screenId === 'playerScreen') {
                 // Reload players to ensure UI is in sync
                 const players = this.playerManager.getPlayers();
@@ -6063,6 +6357,9 @@ class AppController {
         document.getElementById('seasonStats').classList.toggle('active', tab === 'season');
         document.getElementById('overallStats').classList.toggle('active', tab === 'overall');
         document.getElementById('todayStats').classList.toggle('active', tab === 'today');
+        
+        // Initialize swipe gestures for stats tabs if not already done
+        this.initializeStatsTabSwipes();
 
         const currentSeason = this.seasonManager.getCurrentSeason();
         if (tab === 'season') {
@@ -6075,6 +6372,80 @@ class AppController {
             this.renderCategoryTabs('today', 'league');
             this.switchStatsCategory('today', 'league');
         }
+    }
+
+    initializeStatsTabSwipes() {
+        // Add swipe gestures to stats screen for tab navigation
+        const statsScreen = document.getElementById('statsScreen');
+        if (!statsScreen || statsScreen.swipeInitialized) return;
+
+        const tabs = ['today', 'season', 'overall'];
+        
+        this.touchSwipeHandler.attach(statsScreen, {
+            onSwipeLeft: () => {
+                const activeTab = document.querySelector('.tab-btn.active');
+                if (activeTab) {
+                    const currentIndex = tabs.indexOf(activeTab.dataset.tab);
+                    if (currentIndex < tabs.length - 1) {
+                        this.switchStatsTab(tabs[currentIndex + 1]);
+                    }
+                }
+            },
+            onSwipeRight: () => {
+                const activeTab = document.querySelector('.tab-btn.active');
+                if (activeTab) {
+                    const currentIndex = tabs.indexOf(activeTab.dataset.tab);
+                    if (currentIndex > 0) {
+                        this.switchStatsTab(tabs[currentIndex - 1]);
+                    }
+                }
+            }
+        });
+
+        statsScreen.swipeInitialized = true;
+    }
+
+    initializePullToRefresh() {
+        const statsScreen = document.getElementById('statsScreen');
+        if (!statsScreen || statsScreen.pullRefreshInitialized) return;
+
+        // Get the active stats content container
+        const activeContent = statsScreen.querySelector('.stats-content.active') || 
+                             statsScreen.querySelector('.stats-display').closest('.stats-content');
+        
+        if (activeContent) {
+            this.touchSwipeHandler.attachPullToRefresh(activeContent, (doneCallback) => {
+                // Reload statistics
+                this.loadStatistics();
+                if (this.toastManager) {
+                    this.toastManager.success('Statistics refreshed');
+                }
+                doneCallback();
+            });
+        }
+
+        statsScreen.pullRefreshInitialized = true;
+    }
+
+    initializeHistoryPullToRefresh() {
+        const historyScreen = document.getElementById('historyScreen');
+        if (!historyScreen || historyScreen.pullRefreshInitialized) return;
+
+        const historyContainer = historyScreen.querySelector('.match-history-list') || 
+                                historyScreen.querySelector('.match-history-timeline');
+        
+        if (historyContainer) {
+            this.touchSwipeHandler.attachPullToRefresh(historyContainer, (doneCallback) => {
+                // Reload match history
+                this.loadMatchHistory();
+                if (this.toastManager) {
+                    this.toastManager.success('History refreshed');
+                }
+                doneCallback();
+            });
+        }
+
+        historyScreen.pullRefreshInitialized = true;
     }
     
     renderCategoryTabs(type, selectedCategory = 'all') {
@@ -6582,6 +6953,17 @@ class AppController {
         }).join('');
 
         this.attachHistoryEventListeners(container);
+        
+        // Add swipe-to-delete functionality to list items
+        container.querySelectorAll('.match-history-item').forEach(item => {
+            const deleteBtn = item.querySelector('.match-history-btn.delete');
+            if (deleteBtn) {
+                const timestamp = deleteBtn.dataset.timestamp;
+                this.touchSwipeHandler.attachSwipeToDelete(item, () => {
+                    this.deleteMatch(timestamp);
+                });
+            }
+        });
     }
 
     renderTimelineView(matches, container) {
@@ -6628,7 +7010,13 @@ class AppController {
                                 ${team1Display} vs ${team2Display}
                             </div>
                             <div class="timeline-match-score">
-                                ${match.team1Score || 0} - ${match.team2Score || 0}
+                                ${match.result === 'team1' ? 
+                                    `<span class="winning-score">${match.team1Score || 0}</span>` : 
+                                    `<span>${match.team1Score || 0}</span>`
+                                } - ${match.result === 'team2' ? 
+                                    `<span class="winning-score">${match.team2Score || 0}</span>` : 
+                                    `<span>${match.team2Score || 0}</span>`
+                                }
                                 ${match.team1ExtraTimeScore !== undefined && match.team2ExtraTimeScore !== undefined ? 
                                     ` <span class="extra-time-score">(${match.team1ExtraTimeScore}-${match.team2ExtraTimeScore} ET)</span>` : ''}
                                 ${match.team1PenaltiesScore !== undefined && match.team2PenaltiesScore !== undefined ? 
@@ -6661,6 +7049,15 @@ class AppController {
                 }
                 item.classList.toggle('expanded');
             });
+            
+            // Add swipe-to-delete functionality to timeline items
+            const deleteBtn = item.querySelector('.match-history-btn.delete');
+            if (deleteBtn) {
+                const timestamp = deleteBtn.dataset.timestamp;
+                this.touchSwipeHandler.attachSwipeToDelete(item, () => {
+                    this.deleteMatch(timestamp);
+                });
+            }
         });
     }
 
