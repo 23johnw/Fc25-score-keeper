@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fc25-score-tracker-v32';
+const CACHE_NAME = 'fc25-score-tracker-v33';
 const BASE_PATH = '/Fc25-score-keeper';
 const urlsToCache = [
   `${BASE_PATH}/`,

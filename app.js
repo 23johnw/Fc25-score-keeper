@@ -5443,6 +5443,7 @@ class AppController {
         // Team screen
         document.getElementById('confirmSequenceBtn').addEventListener('click', () => this.confirmSequence());
         document.getElementById('selectAllCombinationsBtn').addEventListener('click', () => this.selectAllStructures());
+        document.getElementById('randomCombinationBtn').addEventListener('click', () => this.randomSelectStructure());
         document.getElementById('backToPlayersBtn').addEventListener('click', () => this.showScreen('playerScreen'));
 
         // Sequence screen
@@ -6069,6 +6070,11 @@ class AppController {
             return;
         }
 
+        if (!players || players.length < 2) {
+            this.toastManager.warning('Add at least 2 players to randomize teams', 'Not Enough Players');
+            return;
+        }
+
         const lockState = this.playerManager.getPlayerLock();
         const structures = this.teamGenerator.generateRoundStructures(players, lockState);
         const container = document.getElementById('teamCombinations');
@@ -6242,6 +6248,33 @@ class AppController {
         } else {
             console.log('Invalid structure index:', structureIndex, 'max:', structures.length - 1);
         }
+    }
+
+    randomSelectStructure() {
+        console.log('randomSelectStructure called');
+        const players = this.playerManager.getPlayers();
+        const lockState = this.playerManager.getPlayerLock();
+        const structures = this.teamGenerator.generateRoundStructures(players, lockState);
+
+        if (!structures || structures.length === 0) {
+            this.toastManager.warning('No round structures available to randomize', 'Randomize Failed');
+            return;
+        }
+
+        const randomIndex = Math.floor(Math.random() * structures.length);
+        console.log('Randomly selected structure:', randomIndex);
+
+        this.selectedStructureIndex = randomIndex;
+        this.selectedStructure = structures[randomIndex];
+        this.selectedAllStructures = false;
+        this.currentGameIndex = 0;
+
+        const confirmBtn = document.getElementById('confirmSequenceBtn');
+        if (confirmBtn) confirmBtn.disabled = false;
+
+        this.loadTeamCombinations();
+        this.toastManager.success(`Randomized order selected: Structure ${randomIndex + 1}`, 'Random Pick');
+        this.confirmSequence();
     }
 
     selectAllStructures() {
