@@ -832,6 +832,24 @@ StatisticsCalculators.register({
     category: 'goals',
     calculate: (matches, players) => {
         const stats = {};
+        const unknownPlayers = new Set();
+
+        const toArray = (value) => Array.isArray(value) ? value.filter(Boolean) : [value].filter(Boolean);
+        const toNumber = (value) => {
+            if (typeof value === 'number') return value;
+            if (typeof value === 'string' && value.trim() !== '') {
+                const parsed = Number(value);
+                return Number.isFinite(parsed) ? parsed : NaN;
+            }
+            return NaN;
+        };
+        const warnUnknownPlayer = (player, match) => {
+            if (!unknownPlayers.has(player)) {
+                unknownPlayers.add(player);
+                console.warn('Unknown player in match data (ignored):', player, match);
+            }
+        };
+
         players.forEach(player => {
             stats[player] = { 
                 goals: 0,
@@ -842,40 +860,49 @@ StatisticsCalculators.register({
 
         matches.forEach(match => {
             const { team1, team2, team1Score, team2Score, team1ExtraTimeScore, team2ExtraTimeScore } = match;
-            
-            // Handle matches that might not have scores yet (backward compatibility)
-            if (typeof team1Score === 'undefined' || typeof team2Score === 'undefined') {
-                return; // Skip matches without scores
+
+            const baseScore1 = toNumber(team1Score);
+            const baseScore2 = toNumber(team2Score);
+
+            // Skip matches without valid numeric scores
+            if (!Number.isFinite(baseScore1) || !Number.isFinite(baseScore2)) {
+                console.warn('Skipping match with invalid or missing scores:', match);
+                return;
             }
-            
-            const team1Players = Array.isArray(team1) ? team1 : [team1];
-            const team2Players = Array.isArray(team2) ? team2 : [team2];
-            
-            // Determine if match went to extra time
-            const hasExtraTime = team1ExtraTimeScore !== undefined && team2ExtraTimeScore !== undefined;
-            
-            // Calculate goals (use extra time score if available, otherwise full time)
-            let team1Goals = team1Score;
-            let team2Goals = team2Score;
-            let team1ExtraGoals = 0;
-            let team2ExtraGoals = 0;
-            
-            if (hasExtraTime) {
-                // Extra time scores are cumulative, so calculate extra time goals only
-                team1ExtraGoals = team1ExtraTimeScore - team1Score;
-                team2ExtraGoals = team2ExtraTimeScore - team2Score;
-                team1Goals = team1ExtraTimeScore; // Total goals includes extra time
-                team2Goals = team2ExtraTimeScore;
+
+            const team1Players = toArray(team1);
+            const team2Players = toArray(team2);
+
+            const extraProvided = team1ExtraTimeScore !== undefined || team2ExtraTimeScore !== undefined;
+            const extraScoresPresent = team1ExtraTimeScore !== undefined && team2ExtraTimeScore !== undefined;
+            const extraScore1 = extraScoresPresent ? toNumber(team1ExtraTimeScore) : NaN;
+            const extraScore2 = extraScoresPresent ? toNumber(team2ExtraTimeScore) : NaN;
+
+            let hasExtraTime = extraScoresPresent && Number.isFinite(extraScore1) && Number.isFinite(extraScore2);
+            if (hasExtraTime && (extraScore1 < baseScore1 || extraScore2 < baseScore2)) {
+                console.warn('Extra time scores lower than full-time scores; ignoring extra time for match:', match);
+                hasExtraTime = false;
             }
+            if (extraProvided && !hasExtraTime && extraScoresPresent) {
+                console.warn('Ignoring invalid extra time scores for match:', match);
+            }
+
+            // Calculate goals (use extra time score if valid, otherwise full time)
+            const team1Goals = hasExtraTime ? extraScore1 : baseScore1;
+            const team2Goals = hasExtraTime ? extraScore2 : baseScore2;
+            const team1ExtraGoals = hasExtraTime ? Math.max(0, extraScore1 - baseScore1) : 0;
+            const team2ExtraGoals = hasExtraTime ? Math.max(0, extraScore2 - baseScore2) : 0;
 
             // Team 1 players
             team1Players.forEach(p => {
                 if (stats[p]) {
                     stats[p].goals += team1Goals;
-                    stats[p].fullTimeGoals += team1Score;
+                    stats[p].fullTimeGoals += baseScore1;
                     if (hasExtraTime) {
                         stats[p].extraTimeGoals += team1ExtraGoals;
                     }
+                } else {
+                    warnUnknownPlayer(p, match);
                 }
             });
 
@@ -883,10 +910,12 @@ StatisticsCalculators.register({
             team2Players.forEach(p => {
                 if (stats[p]) {
                     stats[p].goals += team2Goals;
-                    stats[p].fullTimeGoals += team2Score;
+                    stats[p].fullTimeGoals += baseScore2;
                     if (hasExtraTime) {
                         stats[p].extraTimeGoals += team2ExtraGoals;
                     }
+                } else {
+                    warnUnknownPlayer(p, match);
                 }
             });
         });
