@@ -7746,8 +7746,14 @@ class AppController {
             }).join('');
 
             return dateHeader + matchesHTML + '</div>';
-        }).join('');
+        });
 
+        // Apply chosen display order
+        if (timelineOrder === 'desc') {
+            timelineEntries.reverse();
+        }
+
+        container.innerHTML = timelineEntries.join('');
         this.attachHistoryEventListeners(container);
         
         // Add click handlers to expand/collapse match details
