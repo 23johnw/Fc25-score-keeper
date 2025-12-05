@@ -261,8 +261,10 @@
                 <button id="historyListViewBtn" class="view-toggle-btn active" data-view="list">📋 List</button>
                 <button id="historyTimelineViewBtn" class="view-toggle-btn" data-view="timeline">📅 Timeline</button>
             </div>
-            
-            <div class="history-controls">
+
+            <button id="historyFiltersToggle" class="filters-toggle" aria-expanded="true">Filters ▾</button>
+
+            <div id="historyControlsWrapper" class="history-controls">
                 <select id="historyFilter" class="filter-select">
                     <option value="all">All Seasons</option>
                     <option value="current">Current Season</option>

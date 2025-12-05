@@ -5959,6 +5959,16 @@ class AppController {
         document.getElementById('clearHistoryFiltersBtn').addEventListener('click', () => this.clearHistoryFilters());
         document.getElementById('historyListViewBtn').addEventListener('click', () => this.switchHistoryView('list'));
         document.getElementById('historyTimelineViewBtn').addEventListener('click', () => this.switchHistoryView('timeline'));
+        const historyFiltersToggle = document.getElementById('historyFiltersToggle');
+        const historyControlsWrapper = document.getElementById('historyControlsWrapper');
+        if (historyFiltersToggle && historyControlsWrapper) {
+            historyFiltersToggle.addEventListener('click', () => {
+                const isCollapsed = historyControlsWrapper.classList.toggle('collapsed');
+                historyControlsWrapper.style.display = isCollapsed ? 'none' : 'grid';
+                historyFiltersToggle.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+                historyFiltersToggle.textContent = isCollapsed ? 'Filters ▸' : 'Filters ▾';
+            });
+        }
 
         // Settings screen
         document.querySelectorAll('.settings-tab-btn').forEach(btn => {
