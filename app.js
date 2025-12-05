@@ -7374,9 +7374,13 @@ class AppController {
         if (todayStats) todayStats.style.display = 'none';
         if (seasonStats) seasonStats.style.display = 'none';
         if (overallStats) overallStats.style.display = 'none';
+        if (todayStats) todayStats.classList.remove('active');
+        if (seasonStats) seasonStats.classList.remove('active');
+        if (overallStats) overallStats.classList.remove('active');
 
         // Show filtered stats
         section.style.display = 'block';
+        section.classList.add('active');
         const defaultGroup = this.currentStatsState.custom?.category || STAT_GROUPS[0]?.key || 'overview';
         this.renderCategoryTabs('custom', defaultGroup);
         this.switchStatsCategory('custom', defaultGroup);
@@ -7388,6 +7392,7 @@ class AppController {
         const customStats = document.getElementById('customStats');
         if (customStats) {
             customStats.style.display = 'none';
+            customStats.classList.remove('active');
         }
         const todayStats = document.getElementById('todayStats');
         const seasonStats = document.getElementById('seasonStats');
@@ -7395,6 +7400,9 @@ class AppController {
         if (todayStats) todayStats.style.display = '';
         if (seasonStats) seasonStats.style.display = '';
         if (overallStats) overallStats.style.display = '';
+        if (todayStats) todayStats.classList.remove('active');
+        if (seasonStats) seasonStats.classList.remove('active');
+        if (overallStats) overallStats.classList.remove('active');
 
         const targetTab = this.lastStatsTab || 'today';
         this.setByDateButtonActive(false);
