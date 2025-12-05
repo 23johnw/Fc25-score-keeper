@@ -3608,3 +3608,45 @@ body.dark-mode .toast-close:hover {
     }
 }
 
+/* By Date overlay and modal */
+.by-date-panel {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(0, 0, 0, 0.65);
+    padding: 1.5rem 0.75rem;
+    align-items: center;
+    justify-content: center;
+    overflow-y: auto;
+}
+
+.by-date-modal {
+    background: var(--card-bg, #fff);
+    padding: 1rem;
+    border-radius: 12px;
+    width: min(420px, 92vw);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.by-date-range {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.5rem;
+}
+
+.by-date-list {
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.by-date-active,
+.by-date-active:hover {
+    background-color: var(--primary-color) !important;
+    color: #fff !important;
+    border-color: var(--primary-color) !important;
+}
+

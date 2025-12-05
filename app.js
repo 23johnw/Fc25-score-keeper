@@ -52,17 +52,7 @@ class LocalStorageManager {
     toggleByDatePanel(show = false) {
         const panel = document.getElementById('byDatePanel');
         if (!panel) return;
-        if (show) {
-            panel.style.display = 'flex';
-            panel.style.position = 'fixed';
-            panel.style.inset = '0';
-            panel.style.justifyContent = 'center';
-            panel.style.alignItems = 'center';
-            panel.style.background = 'rgba(0,0,0,0.6)';
-            panel.style.zIndex = '2000';
-        } else {
-            panel.style.display = 'none';
-        }
+        panel.style.display = show ? 'flex' : 'none';
         if (show) {
             const listContainer = document.getElementById('byDateList');
             if (listContainer) {
@@ -5986,6 +5976,8 @@ class AppController {
         this.selectedAllStructures = false;
         this.currentGameIndex = 0;
         this.currentStatsState = {};
+        this.lastStatsTab = 'today';
+        this.customFilterActive = false;
         this.editingMatchTimestamp = null;
         this.touchSwipeHandler = new TouchSwipeHandler(); // Initialize swipe gesture handler
         this.playerEditorValues = [];
@@ -7285,7 +7277,9 @@ class AppController {
         const listContainer = document.getElementById('byDateList');
         if (listContainer) this.renderByDateList(listContainer);
         this.updateCustomFilterSummary([]);
-        this.renderCustomStatsSection();
+        this.customFilterActive = false;
+        this.setByDateButtonActive(false);
+        this.showNormalStatsTabs();
     }
 
     applyByDateFilter() {
@@ -7302,7 +7296,8 @@ class AppController {
         }
 
         this.currentByDateFilter = { selectedDate: selectedDate || null, from: rangeFrom, to: rangeTo };
-        this.renderCustomStatsSection();
+        const matches = this.getCustomMatches();
+        this.renderCustomStatsSection(matches);
         this.toggleByDatePanel(false);
     }
 
@@ -7336,29 +7331,84 @@ class AppController {
         summary.textContent = `${label} • ${count} match${count === 1 ? '' : 'es'}`;
     }
 
-    renderCustomStatsSection() {
+    getActiveStatsTab() {
+        const activeTabBtn = document.querySelector('.tab-btn.active');
+        return activeTabBtn ? activeTabBtn.dataset.tab : 'today';
+    }
+
+    setByDateButtonActive(active = false) {
+        const btn = document.getElementById('byDateStatsBtn');
+        if (!btn) return;
+        btn.classList.toggle('by-date-active', active);
+        if (active) {
+            btn.classList.remove('btn-secondary');
+            btn.classList.add('btn-primary');
+        } else {
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-secondary');
+        }
+    }
+
+    renderCustomStatsSection(matchesOverride = null) {
         const section = document.getElementById('customStats');
         if (!section) return;
-        const matches = this.getCustomMatches();
+        const matches = matchesOverride || this.getCustomMatches();
         this.updateCustomFilterSummary(matches);
+
         if (!matches || matches.length === 0) {
+            this.customFilterActive = false;
             section.style.display = 'none';
+            this.setByDateButtonActive(false);
             return;
         }
+
+        this.customFilterActive = true;
+        this.lastStatsTab = this.getActiveStatsTab();
+        // Clear tab button active states so only By Date indicates active filter
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+
+        // Hide normal stats panels while filter is active
+        const todayStats = document.getElementById('todayStats');
+        const seasonStats = document.getElementById('seasonStats');
+        const overallStats = document.getElementById('overallStats');
+        if (todayStats) todayStats.style.display = 'none';
+        if (seasonStats) seasonStats.style.display = 'none';
+        if (overallStats) overallStats.style.display = 'none';
+
+        // Show filtered stats
         section.style.display = 'block';
         const defaultGroup = this.currentStatsState.custom?.category || STAT_GROUPS[0]?.key || 'overview';
         this.renderCategoryTabs('custom', defaultGroup);
         this.switchStatsCategory('custom', defaultGroup);
+        this.setByDateButtonActive(true);
+    }
+
+    showNormalStatsTabs() {
+        this.customFilterActive = false;
+        const customStats = document.getElementById('customStats');
+        if (customStats) {
+            customStats.style.display = 'none';
+        }
+        const targetTab = this.lastStatsTab || 'today';
+        this.setByDateButtonActive(false);
+        this.switchStatsTab(targetTab);
     }
 
     // Statistics
     loadStatistics() {
+        if (this.customFilterActive) {
+            this.renderCustomStatsSection();
+            return;
+        }
         const activeBtn = document.querySelector('.tab-btn.active');
         const targetTab = activeBtn ? activeBtn.dataset.tab : 'today';
         this.switchStatsTab(targetTab || 'today');
     }
 
     switchStatsTab(tab) {
+        if (this.customFilterActive && tab !== 'custom') {
+            return;
+        }
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.tab === tab);
         });
@@ -7366,6 +7416,14 @@ class AppController {
         document.getElementById('seasonStats').classList.toggle('active', tab === 'season');
         document.getElementById('overallStats').classList.toggle('active', tab === 'overall');
         document.getElementById('todayStats').classList.toggle('active', tab === 'today');
+        const customStats = document.getElementById('customStats');
+        if (customStats && tab !== 'custom') {
+            customStats.style.display = 'none';
+        }
+        if (tab !== 'custom') {
+            this.setByDateButtonActive(false);
+            this.customFilterActive = false;
+        }
         
         // Initialize swipe gestures for stats tabs if not already done
         this.initializeStatsTabSwipes();
@@ -7380,6 +7438,9 @@ class AppController {
         } else if (tab === 'today') {
             this.renderCategoryTabs('today', defaultGroup);
             this.switchStatsCategory('today', defaultGroup);
+        }
+        if (tab !== 'custom') {
+            this.lastStatsTab = tab;
         }
     }
 
