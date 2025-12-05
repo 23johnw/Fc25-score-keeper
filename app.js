@@ -3806,6 +3806,7 @@ StatisticsCalculators.register({
 class StatisticsTracker {
     constructor(storageManager) {
         this.storage = storageManager;
+        this.statsMode = 'raw'; // raw | perGame | projected
     }
 
     getSeasonMatches(seasonNumber) {
@@ -3835,13 +3836,93 @@ class StatisticsTracker {
 
         const stats = {};
         const calculators = StatisticsCalculators.getAll();
+        const gamesPlayedMap = this.getGamesPlayed(matches);
+        const maxGamesPlayed = Math.max(...Object.values(gamesPlayedMap || { 0: 0 }), 0);
 
         calculators.forEach(calculator => {
             const calculated = calculator.calculate(matches, players);
-            stats[calculator.id] = calculated;
+            stats[calculator.id] = this.applyModeToStats(calculated, calculator.id, gamesPlayedMap, maxGamesPlayed);
         });
 
         return stats;
+    }
+
+    getGamesPlayed(matches = []) {
+        const games = {};
+        matches.forEach(match => {
+            const team1 = Array.isArray(match.team1) ? match.team1 : [match.team1];
+            const team2 = Array.isArray(match.team2) ? match.team2 : [match.team2];
+            [...team1, ...team2].forEach(player => {
+                games[player] = (games[player] || 0) + 1;
+            });
+        });
+        return games;
+    }
+
+    setStatsMode(mode) {
+        if (['raw', 'perGame', 'projected'].includes(mode)) {
+            this.statsMode = mode;
+        }
+        return this.statsMode;
+    }
+
+    getStatsMode() {
+        return this.statsMode || 'raw';
+    }
+
+    applyModeToStats(calculated, calculatorId, gamesPlayedMap, maxGamesPlayed) {
+        const mode = this.getStatsMode();
+        if (mode === 'raw') return calculated;
+
+        const transformValue = (player, value) => {
+            const gp = gamesPlayedMap[player] || 0;
+            if (gp === 0) return mode === 'projected' ? 0 : 0;
+            if (mode === 'perGame') {
+                return typeof value === 'number' ? value / gp : value;
+            }
+            if (mode === 'projected') {
+                if (typeof value === 'number') {
+                    const perGame = value / gp;
+                    return perGame * (maxGamesPlayed || gp);
+                }
+            }
+            return value;
+        };
+
+        // Handle common shapes: arrays of rows with player field, or objects keyed by player
+        if (Array.isArray(calculated)) {
+            return calculated.map(row => {
+                if (row && row.player) {
+                    const newRow = { ...row };
+                    Object.keys(newRow).forEach(key => {
+                        if (key === 'player') return;
+                        newRow[key] = transformValue(newRow.player, newRow[key]);
+                    });
+                    return newRow;
+                }
+                return row;
+            });
+        }
+
+        if (calculated && typeof calculated === 'object') {
+            const result = {};
+            Object.entries(calculated).forEach(([player, value]) => {
+                if (typeof value === 'number') {
+                    result[player] = transformValue(player, value);
+                } else if (value && typeof value === 'object') {
+                    const inner = {};
+                    Object.entries(value).forEach(([k, v]) => {
+                        inner[k] = transformValue(player, v);
+                    });
+                    result[player] = inner;
+                } else {
+                    result[player] = value;
+                }
+            });
+            return result;
+        }
+
+        return calculated;
     }
 
     getSeasonStats(seasonNumber) {
@@ -6121,6 +6202,9 @@ class AppController {
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', (e) => this.switchStatsTab(e.target.dataset.tab));
         });
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.switchStatsMode(e.target.dataset.mode));
+        });
         document.getElementById('newSeasonBtn').addEventListener('click', () => this.startNewSeason());
         document.getElementById('exportDataBtn').addEventListener('click', () => this.exportData());
         document.getElementById('importDataBtn').addEventListener('click', () => this.importData());
@@ -7462,6 +7546,24 @@ class AppController {
         }
         if (tab !== 'custom') {
             this.lastStatsTab = tab;
+        }
+    }
+
+    switchStatsMode(mode) {
+        if (!['raw', 'perGame', 'projected'].includes(mode)) {
+            return;
+        }
+        this.statisticsTracker.setStatsMode(mode);
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === mode);
+        });
+
+        // Re-render current visible stats section
+        if (this.customFilterActive) {
+            this.renderCustomStatsSection();
+        } else {
+            const activeTab = this.getActiveStatsTab();
+            this.switchStatsTab(activeTab || 'today');
         }
     }
 
