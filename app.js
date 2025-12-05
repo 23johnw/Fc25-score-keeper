@@ -527,6 +527,63 @@ class StatisticsCalculators {
     }
 }
 
+// Friendly groupings for the stats UI
+const STAT_GROUPS = [
+    {
+        key: 'overview',
+        label: 'Overview',
+        calculatorIds: [
+            'winLossDraw',
+            'winRate',
+            'streak',
+            'form',
+            'leaguePoints',
+            'avgGoalsPerGame',
+            'totalGoals',
+            'goalDifference',
+            'extraTimePenalties'
+        ]
+    },
+    {
+        key: 'trends',
+        label: 'Trends',
+        calculatorIds: [
+            'winRateChart',
+            'rollingWinRateChart',
+            'trendAnalysis',
+            'performanceInsights'
+        ]
+    },
+    {
+        key: 'goals',
+        label: 'Goals',
+        calculatorIds: [
+            'goalsChart',
+            'totalGoals',
+            'goalDifference',
+            'avgGoalsPerGame'
+        ]
+    },
+    {
+        key: 'comparisons',
+        label: 'Comparisons',
+        calculatorIds: [
+            'headToHead',
+            'comparativeStats',
+            'comparisonBarChart'
+        ]
+    },
+    {
+        key: 'timeline',
+        label: 'Timeline',
+        calculatorIds: [
+            'dailyMatchesChart',
+            'dayOfWeekChart',
+            'matchDistributionChart'
+        ]
+    }
+];
+
 // ============================================================================
 // StatDescriptions - Provides descriptions for statistics tables
 // ============================================================================
@@ -550,7 +607,11 @@ class StatDescriptions {
             'winRateChart': 'Visual chart showing how win rate changes over time for each player.',
             'goalsChart': 'Visual chart displaying goals scored over time for each player.',
             'matchDistributionChart': 'Visual chart showing the distribution of matches across different time periods.',
-            'performanceInsights': 'Text-based insights and analysis of player performance patterns and trends.'
+            'performanceInsights': 'Text-based insights and analysis of player performance patterns and trends.',
+            'dailyMatchesChart': 'Line chart showing how many matches were played on each date.',
+            'dayOfWeekChart': 'Bar chart showing which days of the week you play most often.',
+            'rollingWinRateChart': 'Rolling (last 5 games) win rate trend per player to spot short-term form.',
+            'comparisonBarChart': 'Side-by-side comparison of win rate and games played for each player.'
         };
         return descriptions[calculatorId] || null;
     }
@@ -573,7 +634,11 @@ class StatDescriptions {
             'winRateChart': 'Visual chart showing how each player\'s win rate has changed over time. Useful for identifying performance trends and improvements.',
             'goalsChart': 'Visual chart displaying the number of goals scored by each player over time. Helps visualize offensive performance patterns.',
             'matchDistributionChart': 'Visual chart showing when matches were played, helping identify activity patterns and playing frequency.',
-            'performanceInsights': 'Text-based insights and analysis of player performance patterns, strengths, weaknesses, and notable trends. Provides contextual information about player statistics.'
+            'performanceInsights': 'Text-based insights and analysis of player performance patterns, strengths, weaknesses, and notable trends. Provides contextual information about player statistics.',
+            'dailyMatchesChart': 'Shows how many matches were played each day, highlighting active and quiet periods.',
+            'dayOfWeekChart': 'Shows how often matches occur on each day of the week to reveal preferred play days.',
+            'rollingWinRateChart': 'Rolling (last 5 games) win rate for each player, useful for spotting recent form swings.',
+            'comparisonBarChart': 'Compares win rate and games played per player in one view.'
         };
         return descriptions[calculatorId] || null;
     }
@@ -2238,6 +2303,370 @@ StatisticsCalculators.register({
     }
 });
 
+// Daily Matches Chart (timeline view)
+StatisticsCalculators.register({
+    id: 'dailyMatchesChart',
+    name: 'Matches per Day',
+    category: 'visualization',
+    subcategory: 'timeline',
+    calculate: (matches) => {
+        if (!matches || matches.length === 0) return { labels: [], counts: [] };
+        const dateMap = {};
+        matches.forEach(match => {
+            if (!match.timestamp) return;
+            const dateKey = new Date(match.timestamp).toISOString().split('T')[0];
+            dateMap[dateKey] = (dateMap[dateKey] || 0) + 1;
+        });
+        const labels = Object.keys(dateMap).sort();
+        return {
+            labels,
+            counts: labels.map(label => dateMap[label])
+        };
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card chart-card';
+
+        const canvas = document.createElement('canvas');
+        container.appendChild(canvas);
+
+        if (!data.labels || data.labels.length === 0) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📆</div><h3>No Data</h3><p>Play matches to see daily activity.</p></div>';
+            return container;
+        }
+
+        new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: data.labels,
+                datasets: [{
+                    label: 'Matches',
+                    data: data.counts,
+                    borderColor: '#2196F3',
+                    backgroundColor: '#2196F340',
+                    fill: true,
+                    tension: 0.3,
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Matches Played per Day',
+                        font: { size: 16, weight: 'bold' }
+                    },
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1 },
+                        title: { display: true, text: 'Matches' }
+                    },
+                    x: {
+                        title: { display: true, text: 'Date' },
+                        ticks: { maxRotation: 45, minRotation: 45 }
+                    }
+                }
+            }
+        });
+
+        return container;
+    }
+});
+
+// Day-of-Week Activity
+StatisticsCalculators.register({
+    id: 'dayOfWeekChart',
+    name: 'Day-of-Week Activity',
+    category: 'visualization',
+    subcategory: 'timeline',
+    calculate: (matches) => {
+        const counts = [0,0,0,0,0,0,0]; // Sun-Sat
+        matches.forEach(match => {
+            if (!match.timestamp) return;
+            const day = new Date(match.timestamp).getDay();
+            counts[day] += 1;
+        });
+        const labels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        return { labels, counts };
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card chart-card';
+        const canvas = document.createElement('canvas');
+        container.appendChild(canvas);
+
+        if (!data || !data.labels || data.labels.every((_, idx) => (data.counts?.[idx] || 0) === 0)) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📅</div><h3>No Data</h3><p>Play matches to see day-of-week patterns.</p></div>';
+            return container;
+        }
+
+        new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: data.labels,
+                datasets: [{
+                    label: 'Matches',
+                    data: data.counts,
+                    backgroundColor: '#4CAF50AA',
+                    borderColor: '#388E3C',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Matches by Day of Week',
+                        font: { size: 16, weight: 'bold' }
+                    },
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1 },
+                        title: { display: true, text: 'Matches' }
+                    }
+                }
+            }
+        });
+
+        return container;
+    }
+});
+
+// Rolling Win Rate (per-player)
+StatisticsCalculators.register({
+    id: 'rollingWinRateChart',
+    name: 'Rolling Win Rate',
+    category: 'visualization',
+    subcategory: 'trends',
+    calculate: (matches, players) => {
+        const windowSize = 5;
+        const playerSeries = {};
+
+        players.forEach(player => {
+            const playerMatches = matches
+                .filter(m => {
+                    const team1 = Array.isArray(m.team1) ? m.team1 : [m.team1];
+                    const team2 = Array.isArray(m.team2) ? m.team2 : [m.team2];
+                    return team1.includes(player) || team2.includes(player);
+                })
+                .sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+
+            const values = [];
+            const labels = [];
+            const results = [];
+
+            playerMatches.forEach((m, idx) => {
+                const team1 = Array.isArray(m.team1) ? m.team1 : [m.team1];
+                const team2 = Array.isArray(m.team2) ? m.team2 : [m.team2];
+                const inTeam1 = team1.includes(player);
+                const inTeam2 = team2.includes(player);
+                const win = (m.result === 'team1' && inTeam1) || (m.result === 'team2' && inTeam2);
+                const draw = m.result === 'draw';
+                results.push({ win, draw });
+
+                const start = Math.max(0, results.length - windowSize);
+                const slice = results.slice(start);
+                const games = slice.length;
+                const wins = slice.filter(r => r.win).length;
+                const draws = slice.filter(r => r.draw).length;
+                const winRate = games > 0 ? (wins / games) * 100 : 0;
+                values.push(Number(winRate.toFixed(1)));
+                labels.push(`${idx + 1}`);
+            });
+
+            playerSeries[player] = { labels, values };
+        });
+
+        const maxPoints = Math.max(0, ...Object.values(playerSeries).map(s => s.labels.length));
+        const chartLabels = Array.from({ length: maxPoints }, (_, i) => `Game ${i + 1}`);
+
+        const datasets = Object.keys(playerSeries).map((player, idx) => {
+            const series = playerSeries[player];
+            const colorPalette = ['#2196F3','#4CAF50','#FF9800','#F44336','#9C27B0','#00BCD4','#795548','#FFC107'];
+            const color = colorPalette[idx % colorPalette.length];
+            const data = chartLabels.map((_, i) => series.values[i] !== undefined ? series.values[i] : null);
+            return {
+                label: player,
+                data,
+                borderColor: color,
+                backgroundColor: color + '40',
+                borderWidth: 2,
+                spanGaps: true,
+                tension: 0.35
+            };
+        });
+
+        return { labels: chartLabels, datasets };
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card chart-card';
+        const canvas = document.createElement('canvas');
+        container.appendChild(canvas);
+
+        if (!data || !data.labels || data.labels.length === 0 || !data.datasets || data.datasets.length === 0) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📈</div><h3>No Data</h3><p>Play matches to see rolling win rates.</p></div>';
+            return container;
+        }
+
+        new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: data.labels,
+                datasets: data.datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Rolling Win Rate (last 5 games)',
+                        font: { size: 16, weight: 'bold' }
+                    },
+                    legend: { display: true, position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y ?? 0}%`
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            callback: v => `${v}%`
+                        },
+                        title: { display: true, text: 'Win Rate (%)' }
+                    },
+                    x: {
+                        title: { display: true, text: 'Games Played' }
+                    }
+                }
+            }
+        });
+
+        return container;
+    }
+});
+
+// Player Comparison Bar (win rate)
+StatisticsCalculators.register({
+    id: 'comparisonBarChart',
+    name: 'Player Win Rate Comparison',
+    category: 'visualization',
+    subcategory: 'comparison',
+    calculate: (matches, players) => {
+        const stats = {};
+        players.forEach(p => stats[p] = { wins: 0, games: 0 });
+
+        matches.forEach(match => {
+            const team1 = Array.isArray(match.team1) ? match.team1 : [match.team1];
+            const team2 = Array.isArray(match.team2) ? match.team2 : [match.team2];
+            players.forEach(player => {
+                const inTeam1 = team1.includes(player);
+                const inTeam2 = team2.includes(player);
+                if (!inTeam1 && !inTeam2) return;
+                stats[player].games += 1;
+                if ((match.result === 'team1' && inTeam1) || (match.result === 'team2' && inTeam2)) {
+                    stats[player].wins += 1;
+                }
+            });
+        });
+
+        const labels = players;
+        const winRates = labels.map(p => {
+            const s = stats[p];
+            return s.games > 0 ? Number(((s.wins / s.games) * 100).toFixed(1)) : 0;
+        });
+        const games = labels.map(p => stats[p].games);
+        return { labels, winRates, games };
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card chart-card';
+        const canvas = document.createElement('canvas');
+        container.appendChild(canvas);
+
+        if (!data || !data.labels || data.labels.length === 0) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🤝</div><h3>No Data</h3><p>Add players and play matches to compare.</p></div>';
+            return container;
+        }
+
+        new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: data.labels,
+                datasets: [
+                    {
+                        label: 'Win Rate (%)',
+                        data: data.winRates,
+                        backgroundColor: '#2196F3AA',
+                        borderColor: '#1976D2',
+                        borderWidth: 2,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'Games Played',
+                        data: data.games,
+                        backgroundColor: '#FF9800AA',
+                        borderColor: '#F57C00',
+                        borderWidth: 2,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Win Rate & Games Played',
+                        font: { size: 16, weight: 'bold' }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                const label = ctx.dataset.label || '';
+                                return `${label}: ${ctx.parsed.y}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        position: 'left',
+                        ticks: { callback: v => `${v}%` },
+                        title: { display: true, text: 'Win Rate (%)' }
+                    },
+                    y1: {
+                        beginAtZero: true,
+                        position: 'right',
+                        grid: { drawOnChartArea: false },
+                        title: { display: true, text: 'Games' }
+                    }
+                }
+            }
+        });
+
+        return container;
+    }
+});
+
 // Performance Insights - AI-like Analysis
 StatisticsCalculators.register({
     id: 'performanceInsights',
@@ -3479,22 +3908,22 @@ class StatisticsDisplay {
             .replace(/'/g, '&#39;');
     }
 
-    displaySeasonStats(seasonNumber, container, category = null, subcategory = null) {
+    displaySeasonStats(seasonNumber, container, category = null, subcategory = null, allowedCalculatorIds = null) {
         const stats = this.tracker.getSeasonStats(seasonNumber);
-        this.renderStats(stats, container, category, subcategory);
+        this.renderStats(stats, container, category, subcategory, false, allowedCalculatorIds);
     }
 
-    displayOverallStats(container, category = null, subcategory = null) {
+    displayOverallStats(container, category = null, subcategory = null, allowedCalculatorIds = null) {
         const stats = this.tracker.getOverallStats();
-        this.renderStats(stats, container, category, subcategory);
+        this.renderStats(stats, container, category, subcategory, false, allowedCalculatorIds);
     }
 
-    displayTodayStats(container, category = null, subcategory = null) {
+    displayTodayStats(container, category = null, subcategory = null, allowedCalculatorIds = null) {
         const stats = this.tracker.getTodayStats();
-        this.renderStats(stats, container, category, subcategory, true);
+        this.renderStats(stats, container, category, subcategory, true, allowedCalculatorIds);
     }
 
-    renderStats(stats, container, category = null, subcategory = null, isToday = false) {
+    renderStats(stats, container, category = null, subcategory = null, isToday = false, allowedCalculatorIds = null) {
         container.innerHTML = '';
         
         if (Object.keys(stats).length === 0) {
@@ -3513,9 +3942,13 @@ class StatisticsDisplay {
         } else {
             calculators = StatisticsCalculators.getAll();
         }
+
+        if (allowedCalculatorIds && allowedCalculatorIds.length > 0) {
+            calculators = calculators.filter(calc => allowedCalculatorIds.includes(calc.id));
+        }
         
-        // When showing "All", ensure we show ALL calculators
-        const showAll = category === null;
+        // When showing "All", ensure we show ALL calculators or all in the selected group
+        const showAll = category === null || (allowedCalculatorIds && allowedCalculatorIds.length > 0);
         
         calculators.forEach(calculator => {
             try {
@@ -3948,7 +4381,7 @@ class ShareManager {
     }
 
     // Generate shareable image from statistics
-    async generateStatsImage(statsType, category = null, subcategory = null) {
+    async generateStatsImage(statsType, category = null, subcategory = null, calculatorIds = null) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         
@@ -4010,6 +4443,9 @@ class ShareManager {
             calculators = StatisticsCalculators.getByCategory(category);
         } else {
             calculators = StatisticsCalculators.getAll();
+        }
+        if (calculatorIds && calculatorIds.length > 0) {
+            calculators = calculators.filter(calc => calculatorIds.includes(calc.id));
         }
         
         calculators.forEach(calculator => {
@@ -4152,7 +4588,7 @@ class ShareManager {
     }
 
     // Export leaderboard as PDF
-    async exportLeaderboardPDF(statsType, category = null, subcategory = null) {
+    async exportLeaderboardPDF(statsType, category = null, subcategory = null, calculatorIds = null) {
         // Check if jsPDF is available
         if (typeof window.jspdf === 'undefined') {
             // Try to load jsPDF from CDN if not already loaded
@@ -4480,6 +4916,9 @@ class ShareManager {
             calculators = StatisticsCalculators.getByCategory(category);
         } else {
             calculators = StatisticsCalculators.getAll();
+        }
+        if (calculatorIds && calculatorIds.length > 0) {
+            calculators = calculators.filter(calc => calculatorIds.includes(calc.id));
         }
         
         calculators.forEach(calculator => {
@@ -6509,16 +6948,16 @@ class AppController {
         // Initialize swipe gestures for stats tabs if not already done
         this.initializeStatsTabSwipes();
 
-        const currentSeason = this.seasonManager.getCurrentSeason();
+        const defaultGroup = STAT_GROUPS[0]?.key || 'overview';
         if (tab === 'season') {
-            this.renderCategoryTabs('season', 'league');
-            this.switchStatsCategory('season', 'league');
+            this.renderCategoryTabs('season', defaultGroup);
+            this.switchStatsCategory('season', defaultGroup);
         } else if (tab === 'overall') {
-            this.renderCategoryTabs('overall', 'league');
-            this.switchStatsCategory('overall', 'league');
+            this.renderCategoryTabs('overall', defaultGroup);
+            this.switchStatsCategory('overall', defaultGroup);
         } else if (tab === 'today') {
-            this.renderCategoryTabs('today', 'league');
-            this.switchStatsCategory('today', 'league');
+            this.renderCategoryTabs('today', defaultGroup);
+            this.switchStatsCategory('today', defaultGroup);
         }
     }
 
@@ -6585,7 +7024,6 @@ class AppController {
     }
     
     renderCategoryTabs(type, selectedCategory = 'all') {
-        const categories = StatisticsCalculators.getCategories();
         let containerId;
         if (type === 'season') {
             containerId = 'seasonCategoryTabs';
@@ -6597,69 +7035,21 @@ class AppController {
             return;
         }
         const container = document.getElementById(containerId);
-        
-        // Category display names
-        const categoryNames = {
-            'performance': 'Performance',
-            'goals': 'Goals',
-            'league': 'League',
-            'records': 'Records',
-            'general': 'General',
-            'visualization': 'Charts',
-            'all': 'All'
-        };
-        
-        // Subcategory display names
-        const subcategoryNames = {
-            'wins-losses': 'Wins/Losses',
-            'win-rate': 'Win Rate',
-            'streak': 'Streak',
-            'form': 'Form',
-            'h2h': 'Head-to-Head',
-            'trends': 'Trends',
-            'overview': 'Overview',
-            'insights': 'Insights',
-            'comparison': 'Comparison',
-            'match-types': 'Match Types',
-            'goals': 'Goals'
-        };
-        
-        let tabsHTML = '';
-        
-        // Render main category tabs
-        tabsHTML += `
-            <button class="category-btn ${selectedCategory === 'all' ? 'active' : ''}" data-category="all">All</button>
-            ${categories.map(cat => `
-                <button class="category-btn ${selectedCategory === cat ? 'active' : ''}" data-category="${cat}">${categoryNames[cat] || cat}</button>
-            `).join('')}
-        `;
-        
-        // If performance is selected, show subcategory tabs
-        if (selectedCategory === 'performance') {
-            const subcategories = StatisticsCalculators.getSubcategories('performance');
-            tabsHTML += `<div class="subcategory-tabs">`;
-            tabsHTML += `<button class="subcategory-btn active" data-subcategory="all">All</button>`;
-            subcategories.forEach(subcat => {
-                tabsHTML += `<button class="subcategory-btn" data-subcategory="${subcat}">${subcategoryNames[subcat] || subcat}</button>`;
-            });
-            tabsHTML += `</div>`;
-        }
-        
+        if (!container) return;
+
+        const tabsHTML = STAT_GROUPS.map(group => `
+            <button class="category-btn ${selectedCategory === group.key ? 'active' : ''}" data-category="${group.key}">
+                ${group.label}
+            </button>
+        `).join('');
+
         container.innerHTML = tabsHTML;
         
-        // Add event listeners for category buttons
+        // Add event listeners for group buttons
         container.querySelectorAll('.category-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const category = e.target.dataset.category;
                 this.switchStatsCategory(type, category);
-            });
-        });
-        
-        // Add event listeners for subcategory buttons (if they exist)
-        container.querySelectorAll('.subcategory-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const subcategory = e.target.dataset.subcategory;
-                this.switchStatsSubcategory(type, 'performance', subcategory);
             });
         });
     }
@@ -6675,77 +7065,38 @@ class AppController {
         this.renderCategoryTabs(type, category);
         
         const currentSeason = this.seasonManager.getCurrentSeason();
-        const selectedCategory = category === 'all' ? null : category;
+        const selectedGroup = STAT_GROUPS.find(g => g.key === category) || STAT_GROUPS[0];
+        const allowedCalculatorIds = selectedGroup ? selectedGroup.calculatorIds : null;
         
         if (type === 'season') {
             this.statisticsDisplay.displaySeasonStats(
                 currentSeason, 
                 document.getElementById('seasonStatsDisplay'),
-                selectedCategory,
-                null
+                null,
+                null,
+                allowedCalculatorIds
             );
         } else if (type === 'overall') {
             this.statisticsDisplay.displayOverallStats(
                 document.getElementById('overallStatsDisplay'),
-                selectedCategory,
-                null
+                null,
+                null,
+                allowedCalculatorIds
             );
         } else if (type === 'today') {
             this.statisticsDisplay.displayTodayStats(
                 document.getElementById('todayStatsDisplay'),
-                selectedCategory,
-                null
+                null,
+                null,
+                allowedCalculatorIds
             );
         }
     }
     
     switchStatsSubcategory(type, category, subcategory) {
-        // Store current subcategory
-        if (!this.currentStatsState) {
-            this.currentStatsState = {};
-        }
-        this.currentStatsState[type] = { category, subcategory };
-        
-        // Update active subcategory button
-        let containerId;
-        if (type === 'season') {
-            containerId = 'seasonCategoryTabs';
-        } else if (type === 'overall') {
-            containerId = 'overallCategoryTabs';
-        } else if (type === 'today') {
-            containerId = 'todayCategoryTabs';
-        } else {
-            return;
-        }
-        const container = document.getElementById(containerId);
-        container.querySelectorAll('.subcategory-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.subcategory === subcategory);
-        });
-        
-        const currentSeason = this.seasonManager.getCurrentSeason();
-        const selectedCategory = category === 'all' ? null : category;
-        const selectedSubcategory = subcategory === 'all' ? null : subcategory;
-        
-        if (type === 'season') {
-            this.statisticsDisplay.displaySeasonStats(
-                currentSeason, 
-                document.getElementById('seasonStatsDisplay'),
-                selectedCategory,
-                selectedSubcategory
-            );
-        } else if (type === 'overall') {
-            this.statisticsDisplay.displayOverallStats(
-                document.getElementById('overallStatsDisplay'),
-                selectedCategory,
-                selectedSubcategory
-            );
-        } else if (type === 'today') {
-            this.statisticsDisplay.displayTodayStats(
-                document.getElementById('todayStatsDisplay'),
-                selectedCategory,
-                selectedSubcategory
-            );
-        }
+        // Subcategories are no longer used with the new grouped tabs.
+        // Keep this method as a no-op for backward compatibility.
+        return;
     }
 
     startNewSeason() {
@@ -6785,9 +7136,6 @@ class AppController {
     async shareStats(statsType) {
         try {
             // Get current category/subcategory from active tabs
-            let category = null;
-            let subcategory = null;
-            
             let categoryTabsId;
             if (statsType === 'today') {
                 categoryTabsId = 'todayCategoryTabs';
@@ -6797,24 +7145,16 @@ class AppController {
                 categoryTabsId = 'overallCategoryTabs';
             }
             
+            let calculatorIds = null;
             const categoryTabs = document.getElementById(categoryTabsId);
             if (categoryTabs) {
                 const activeCategoryBtn = categoryTabs.querySelector('.category-btn.active');
-                if (activeCategoryBtn && activeCategoryBtn.dataset.category !== 'all') {
-                    category = activeCategoryBtn.dataset.category;
-                    
-                    // Check for subcategory
-                    const subcategoryBtns = categoryTabs.querySelectorAll('.subcategory-btn');
-                    if (subcategoryBtns.length > 0) {
-                        const activeSubcategoryBtn = Array.from(subcategoryBtns).find(btn => btn.classList.contains('active'));
-                        if (activeSubcategoryBtn && activeSubcategoryBtn.dataset.subcategory !== 'all') {
-                            subcategory = activeSubcategoryBtn.dataset.subcategory;
-                        }
-                    }
-                }
+                const activeKey = activeCategoryBtn ? activeCategoryBtn.dataset.category : null;
+                const selectedGroup = STAT_GROUPS.find(g => g.key === activeKey) || STAT_GROUPS[0];
+                calculatorIds = selectedGroup ? selectedGroup.calculatorIds : null;
             }
             
-            const imageDataUrl = await this.shareManager.generateStatsImage(statsType, category, subcategory);
+            const imageDataUrl = await this.shareManager.generateStatsImage(statsType, null, null, calculatorIds);
             const fileName = `FC25_${statsType}_${new Date().toISOString().split('T')[0]}.png`;
             
             await this.shareManager.shareImage(imageDataUrl, fileName);
@@ -6854,9 +7194,6 @@ class AppController {
             }
             
             // Get current category/subcategory from active tabs
-            let category = null;
-            let subcategory = null;
-            
             let categoryTabsId;
             if (statsType === 'today') {
                 categoryTabsId = 'todayCategoryTabs';
@@ -6866,24 +7203,16 @@ class AppController {
                 categoryTabsId = 'overallCategoryTabs';
             }
             
+            let calculatorIds = null;
             const categoryTabs = document.getElementById(categoryTabsId);
             if (categoryTabs) {
                 const activeCategoryBtn = categoryTabs.querySelector('.category-btn.active');
-                if (activeCategoryBtn && activeCategoryBtn.dataset.category !== 'all') {
-                    category = activeCategoryBtn.dataset.category;
-                    
-                    // Check for subcategory
-                    const subcategoryBtns = categoryTabs.querySelectorAll('.subcategory-btn');
-                    if (subcategoryBtns.length > 0) {
-                        const activeSubcategoryBtn = Array.from(subcategoryBtns).find(btn => btn.classList.contains('active'));
-                        if (activeSubcategoryBtn && activeSubcategoryBtn.dataset.subcategory !== 'all') {
-                            subcategory = activeSubcategoryBtn.dataset.subcategory;
-                        }
-                    }
-                }
+                const activeKey = activeCategoryBtn ? activeCategoryBtn.dataset.category : null;
+                const selectedGroup = STAT_GROUPS.find(g => g.key === activeKey) || STAT_GROUPS[0];
+                calculatorIds = selectedGroup ? selectedGroup.calculatorIds : null;
             }
             
-            const result = await this.shareManager.exportLeaderboardPDF(statsType, category, subcategory);
+            const result = await this.shareManager.exportLeaderboardPDF(statsType, null, null, calculatorIds);
             
             // Store PDF blob URL for viewing
             if (result && result.blobUrl) {
