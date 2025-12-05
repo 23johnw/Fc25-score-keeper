@@ -3908,6 +3908,41 @@ class StatisticsTracker {
         const matches = this.getWeekMatches(startOfWeek);
         return this.calculateStatistics(matches, 'week');
     }
+
+    getMatchesByDateRange(fromDateStr = null, toDateStr = null) {
+        const allMatches = this.getAllMatches();
+        if (!fromDateStr && !toDateStr) return allMatches;
+
+        const normalizeStart = (dateStr) => {
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return null;
+            d.setHours(0, 0, 0, 0);
+            return d;
+        };
+
+        const normalizeEnd = (dateStr) => {
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return null;
+            d.setHours(23, 59, 59, 999);
+            return d;
+        };
+
+        const fromDate = fromDateStr ? normalizeStart(fromDateStr) : null;
+        const toDate = toDateStr ? normalizeEnd(toDateStr) : null;
+
+        return allMatches.filter(match => {
+            if (!match.timestamp) return false;
+            const matchDate = new Date(match.timestamp);
+            if (fromDate && matchDate < fromDate) return false;
+            if (toDate && matchDate > toDate) return false;
+            return true;
+        });
+    }
+
+    getCustomStats(fromDateStr = null, toDateStr = null) {
+        const matches = this.getMatchesByDateRange(fromDateStr, toDateStr);
+        return this.calculateStatistics(matches, 'custom');
+    }
 }
 
 // ============================================================================
@@ -4051,13 +4086,30 @@ class StatisticsDisplay {
         this.renderStats(stats, container, category, subcategory, true, allowedCalculatorIds);
     }
 
-    renderStats(stats, container, category = null, subcategory = null, isToday = false, allowedCalculatorIds = null) {
+    displayCustomStats(matches, container, category = null, subcategory = null, allowedCalculatorIds = null) {
+        const stats = this.tracker.calculateStatistics(matches || [], 'custom');
+        const customEmptyMessage = '<div class="empty-state"><p>Select a date range in By Date to see custom statistics.</p></div>';
+        const noMatches = !matches || matches.length === 0;
+        this.renderStats(
+            stats,
+            container,
+            category,
+            subcategory,
+            false,
+            allowedCalculatorIds,
+            noMatches ? customEmptyMessage : null
+        );
+    }
+
+    renderStats(stats, container, category = null, subcategory = null, isToday = false, allowedCalculatorIds = null, customEmptyMessage = null) {
         container.innerHTML = '';
         
         if (Object.keys(stats).length === 0) {
-            const message = isToday 
-                ? '<div class="empty-state"><p>No matches played today yet. Start playing to see today\'s statistics!</p></div>'
-                : '<div class="empty-state"><p>No statistics available yet. Play some matches first!</p></div>';
+            const message = customEmptyMessage || (
+                isToday 
+                    ? '<div class="empty-state"><p>No matches played today yet. Start playing to see today\'s statistics!</p></div>'
+                    : '<div class="empty-state"><p>No statistics available yet. Play some matches first!</p></div>'
+            );
             container.innerHTML = message;
             return;
         }
@@ -4511,7 +4563,7 @@ class ShareManager {
     }
 
     // Generate shareable image from statistics
-    async generateStatsImage(statsType, category = null, subcategory = null, calculatorIds = null) {
+    async generateStatsImage(statsType, category = null, subcategory = null, calculatorIds = null, options = {}) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         
@@ -4541,7 +4593,8 @@ class ShareManager {
         const typeLabels = {
             'today': 'Today\'s Statistics',
             'season': `Season ${this.seasonManager.getCurrentSeason()} Statistics`,
-            'overall': 'Overall Statistics'
+            'overall': 'Overall Statistics',
+            'custom': options.customLabel || 'Custom Statistics'
         };
         ctx.fillText(typeLabels[statsType] || 'Statistics', canvas.width / 2, 140);
         
@@ -4555,6 +4608,9 @@ class ShareManager {
             stats = this.tracker.getTodayStats();
         } else if (statsType === 'season') {
             stats = this.tracker.getSeasonStats(this.seasonManager.getCurrentSeason());
+        } else if (statsType === 'custom') {
+            const matches = options.customMatches || [];
+            stats = this.tracker.calculateStatistics(matches, 'custom');
         } else {
             stats = this.tracker.getOverallStats();
         }
@@ -4720,7 +4776,7 @@ class ShareManager {
     }
 
     // Export leaderboard as PDF
-    async exportLeaderboardPDF(statsType, category = null, subcategory = null, calculatorIds = null) {
+    async exportLeaderboardPDF(statsType, category = null, subcategory = null, calculatorIds = null, options = {}) {
         // Check if jsPDF is available
         if (typeof window.jspdf === 'undefined') {
             // Try to load jsPDF from CDN if not already loaded
@@ -4831,6 +4887,10 @@ class ShareManager {
         } else if (statsType === 'season') {
             stats = this.tracker.getSeasonStats(this.seasonManager.getCurrentSeason());
             title = `Season ${this.seasonManager.getCurrentSeason()} Statistics`;
+        } else if (statsType === 'custom') {
+            const matches = options.customMatches || [];
+            stats = this.tracker.calculateStatistics(matches, 'custom');
+            title = options.customLabel || 'Custom Statistics';
         } else {
             stats = this.tracker.getOverallStats();
             title = 'Overall Statistics';
@@ -5923,6 +5983,8 @@ class AppController {
         this.currentHistoryView = 'list'; // 'list' or 'timeline'
         this.historySortOrder = 'desc'; // 'desc' = last played first, 'asc' = oldest first
         this.lastPDFBlobUrl = null; // Store last exported PDF for viewing
+        this.currentByDateFilter = { from: null, to: null, selectedDate: null };
+        this.playedDates = [];
         
         // Initialize lock labels before anything else that might use them
         this.updateLockLabels();
@@ -5952,12 +6014,8 @@ class AppController {
 
         // Precompute played dates for By Date panel
         this.updatePlayedDates();
-
-        // Wire By Date panel controls
         this.initializeByDatePanel();
-
-        // Load initial By Date selection (none)
-        this.currentByDateFilter = { from: null, to: null, selectedDate: null };
+        this.updateCustomFilterSummary([]);
     }
 
     initializeEventListeners() {
@@ -6071,9 +6129,17 @@ class AppController {
         document.getElementById('shareTodayStatsBtn').addEventListener('click', () => this.shareStats('today'));
         document.getElementById('shareSeasonStatsBtn').addEventListener('click', () => this.shareStats('season'));
         document.getElementById('shareOverallStatsBtn').addEventListener('click', () => this.shareStats('overall'));
+        const shareCustomBtn = document.getElementById('shareCustomStatsBtn');
+        if (shareCustomBtn) {
+            shareCustomBtn.addEventListener('click', () => this.shareStats('custom'));
+        }
         document.getElementById('exportTodayPDFBtn').addEventListener('click', () => this.exportPDF());
         document.getElementById('exportSeasonPDFBtn').addEventListener('click', () => this.exportPDF());
         document.getElementById('exportOverallPDFBtn').addEventListener('click', () => this.exportPDF());
+        const exportCustomBtn = document.getElementById('exportCustomPDFBtn');
+        if (exportCustomBtn) {
+            exportCustomBtn.addEventListener('click', () => this.exportPDF('custom'));
+        }
         const viewPdfBtn = document.getElementById('viewLastPDFBtn');
         if (viewPdfBtn) {
             viewPdfBtn.addEventListener('click', () => this.viewLastPDF());
@@ -6227,6 +6293,7 @@ class AppController {
         } else if (screenId === 'sequenceScreen') {
             this.loadSequenceList();
         } else if (screenId === 'statsScreen') {
+            this.updatePlayedDates();
             this.loadStatistics();
             this.updateViewPDFButton();
             // Initialize swipe gestures for stats tabs
@@ -7082,6 +7149,8 @@ class AppController {
             // Reset score inputs
             document.getElementById('team1Score').value = 0;
             document.getElementById('team2Score').value = 0;
+            this.updatePlayedDates();
+            this.refreshCustomStatsIfActive();
             
             this.currentGameIndex++;
             
@@ -7097,9 +7166,177 @@ class AppController {
         }
     }
 
+    // By Date / Custom Stats helpers
+    initializeByDatePanel() {
+        const closeBtn = document.getElementById('closeByDatePanel');
+        const applyBtn = document.getElementById('applyByDateBtn');
+        const clearBtn = document.getElementById('clearByDateBtn');
+        const listContainer = document.getElementById('byDateList');
+        const fromInput = document.getElementById('byDateFrom');
+        const toInput = document.getElementById('byDateTo');
+
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.toggleByDatePanel(false));
+        }
+        if (applyBtn) {
+            applyBtn.addEventListener('click', () => this.applyByDateFilter());
+        }
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => this.clearByDateFilter());
+        }
+
+        if (listContainer) {
+            this.renderByDateList(listContainer);
+        }
+
+        if (fromInput) {
+            fromInput.addEventListener('change', (e) => {
+                this.currentByDateFilter.from = e.target.value || null;
+                this.currentByDateFilter.selectedDate = null;
+            });
+        }
+        if (toInput) {
+            toInput.addEventListener('change', (e) => {
+                this.currentByDateFilter.to = e.target.value || null;
+                this.currentByDateFilter.selectedDate = null;
+            });
+        }
+    }
+
+    toggleByDatePanel(show = false) {
+        const panel = document.getElementById('byDatePanel');
+        if (!panel) return;
+        panel.style.display = show ? 'block' : 'none';
+        if (show) {
+            const listContainer = document.getElementById('byDateList');
+            if (listContainer) {
+                this.renderByDateList(listContainer);
+            }
+        }
+    }
+
+    updatePlayedDates() {
+        const allMatches = this.statisticsTracker.getAllMatches();
+        const dateSet = new Set();
+        allMatches.forEach(match => {
+            if (match && match.timestamp) {
+                const dateKey = new Date(match.timestamp).toISOString().split('T')[0];
+                dateSet.add(dateKey);
+            }
+        });
+        this.playedDates = Array.from(dateSet).sort((a, b) => new Date(b) - new Date(a));
+
+        const listContainer = document.getElementById('byDateList');
+        const panel = document.getElementById('byDatePanel');
+        if (panel && panel.style.display !== 'none' && listContainer) {
+            this.renderByDateList(listContainer);
+        }
+    }
+
+    renderByDateList(container) {
+        const dates = this.playedDates || [];
+        if (dates.length === 0) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📅</div><h4>No Dates</h4><p>Play some matches to enable date filtering.</p></div>';
+            return;
+        }
+        container.innerHTML = dates.map(dateStr => {
+            const isSelected = this.currentByDateFilter.selectedDate === dateStr;
+            return `
+                <button class="by-date-pill ${isSelected ? 'selected' : ''}" data-date="${dateStr}">
+                    ${dateStr}
+                </button>
+            `;
+        }).join('');
+
+        container.querySelectorAll('.by-date-pill').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const chosen = btn.dataset.date;
+                this.currentByDateFilter.selectedDate = chosen;
+                this.currentByDateFilter.from = chosen;
+                this.currentByDateFilter.to = chosen;
+                const fromInput = document.getElementById('byDateFrom');
+                const toInput = document.getElementById('byDateTo');
+                if (fromInput) fromInput.value = chosen;
+                if (toInput) toInput.value = chosen;
+                this.renderByDateList(container);
+            });
+        });
+    }
+
+    clearByDateFilter() {
+        this.currentByDateFilter = { from: null, to: null, selectedDate: null };
+        const fromInput = document.getElementById('byDateFrom');
+        const toInput = document.getElementById('byDateTo');
+        if (fromInput) fromInput.value = '';
+        if (toInput) toInput.value = '';
+        const listContainer = document.getElementById('byDateList');
+        if (listContainer) this.renderByDateList(listContainer);
+        this.updateCustomFilterSummary([]);
+        this.switchStatsTab('custom');
+    }
+
+    applyByDateFilter() {
+        const { selectedDate, from, to } = this.currentByDateFilter || {};
+        let rangeFrom = null;
+        let rangeTo = null;
+
+        if (selectedDate) {
+            rangeFrom = selectedDate;
+            rangeTo = selectedDate;
+        } else {
+            rangeFrom = from || null;
+            rangeTo = to || null;
+        }
+
+        this.currentByDateFilter = { selectedDate: selectedDate || null, from: rangeFrom, to: rangeTo };
+        this.switchStatsTab('custom');
+        this.toggleByDatePanel(false);
+    }
+
+    getCustomMatches() {
+        const { from, to } = this.currentByDateFilter || {};
+        if (!from && !to) return [];
+        return this.statisticsTracker.getMatchesByDateRange(from, to);
+    }
+
+    getCustomFilterLabel() {
+        const { from, to } = this.currentByDateFilter || {};
+        if (!from && !to) return 'No date selected';
+        if (from && to) {
+            if (from === to) return `Date: ${from}`;
+            return `From ${from} to ${to}`;
+        }
+        if (from) return `From ${from}`;
+        return `Up to ${to}`;
+    }
+
+    updateCustomFilterSummary(matches = []) {
+        const summary = document.getElementById('customFilterSummary');
+        if (!summary) return;
+        const { from, to } = this.currentByDateFilter || {};
+        if (!from && !to) {
+            summary.textContent = 'Select a date from the By Date panel to view custom stats.';
+            return;
+        }
+        const label = this.getCustomFilterLabel();
+        const count = matches ? matches.length : 0;
+        summary.textContent = `${label} • ${count} match${count === 1 ? '' : 'es'}`;
+    }
+
+    refreshCustomStatsIfActive() {
+        const activeTab = document.querySelector('.tab-btn.active');
+        if (activeTab && activeTab.dataset.tab === 'custom') {
+            const defaultGroup = STAT_GROUPS[0]?.key || 'overview';
+            const currentCategory = this.currentStatsState.custom?.category || defaultGroup;
+            this.switchStatsCategory('custom', currentCategory);
+        }
+    }
+
     // Statistics
     loadStatistics() {
-        this.switchStatsTab('today');
+        const activeBtn = document.querySelector('.tab-btn.active');
+        const targetTab = activeBtn ? activeBtn.dataset.tab : 'today';
+        this.switchStatsTab(targetTab || 'today');
     }
 
     switchStatsTab(tab) {
@@ -7110,6 +7347,10 @@ class AppController {
         document.getElementById('seasonStats').classList.toggle('active', tab === 'season');
         document.getElementById('overallStats').classList.toggle('active', tab === 'overall');
         document.getElementById('todayStats').classList.toggle('active', tab === 'today');
+        const customStats = document.getElementById('customStats');
+        if (customStats) {
+            customStats.classList.toggle('active', tab === 'custom');
+        }
         
         // Initialize swipe gestures for stats tabs if not already done
         this.initializeStatsTabSwipes();
@@ -7124,6 +7365,10 @@ class AppController {
         } else if (tab === 'today') {
             this.renderCategoryTabs('today', defaultGroup);
             this.switchStatsCategory('today', defaultGroup);
+        } else if (tab === 'custom') {
+            const currentCategory = this.currentStatsState.custom?.category || defaultGroup;
+            this.renderCategoryTabs('custom', currentCategory);
+            this.switchStatsCategory('custom', currentCategory);
         }
     }
 
@@ -7132,7 +7377,7 @@ class AppController {
         const statsScreen = document.getElementById('statsScreen');
         if (!statsScreen || statsScreen.swipeInitialized) return;
 
-        const tabs = ['today', 'season', 'overall'];
+        const tabs = ['today', 'season', 'overall', 'custom'];
         
         this.touchSwipeHandler.attach(statsScreen, {
             onSwipeLeft: () => {
@@ -7197,6 +7442,8 @@ class AppController {
             containerId = 'overallCategoryTabs';
         } else if (type === 'today') {
             containerId = 'todayCategoryTabs';
+        } else if (type === 'custom') {
+            containerId = 'customCategoryTabs';
         } else {
             return;
         }
@@ -7256,6 +7503,16 @@ class AppController {
                 null,
                 allowedCalculatorIds
             );
+        } else if (type === 'custom') {
+            const matches = this.getCustomMatches();
+            this.updateCustomFilterSummary(matches);
+            this.statisticsDisplay.displayCustomStats(
+                matches,
+                document.getElementById('customStatsDisplay'),
+                null,
+                null,
+                allowedCalculatorIds
+            );
         }
     }
     
@@ -7307,8 +7564,10 @@ class AppController {
                 categoryTabsId = 'todayCategoryTabs';
             } else if (statsType === 'season') {
                 categoryTabsId = 'seasonCategoryTabs';
-            } else {
+            } else if (statsType === 'overall') {
                 categoryTabsId = 'overallCategoryTabs';
+            } else {
+                categoryTabsId = 'customCategoryTabs';
             }
             
             let calculatorIds = null;
@@ -7320,7 +7579,20 @@ class AppController {
                 calculatorIds = selectedGroup ? selectedGroup.calculatorIds : null;
             }
             
-            const imageDataUrl = await this.shareManager.generateStatsImage(statsType, null, null, calculatorIds);
+            let customOptions = null;
+            if (statsType === 'custom') {
+                const matches = this.getCustomMatches();
+                if (!matches || matches.length === 0) {
+                    this.toastManager.warning('Select a date in the By Date panel first.');
+                    return;
+                }
+                customOptions = {
+                    customMatches: matches,
+                    customLabel: this.getCustomFilterLabel()
+                };
+            }
+
+            const imageDataUrl = await this.shareManager.generateStatsImage(statsType, null, null, calculatorIds, customOptions || undefined);
             const fileName = `FC25_${statsType}_${new Date().toISOString().split('T')[0]}.png`;
             
             await this.shareManager.shareImage(imageDataUrl, fileName);
@@ -7344,6 +7616,8 @@ class AppController {
                         statsType = 'season';
                     } else if (tabId === 'overallStats') {
                         statsType = 'overall';
+                    } else if (tabId === 'customStats') {
+                        statsType = 'custom';
                     }
                 }
                 // Fallback: check active tab button
@@ -7365,8 +7639,10 @@ class AppController {
                 categoryTabsId = 'todayCategoryTabs';
             } else if (statsType === 'season') {
                 categoryTabsId = 'seasonCategoryTabs';
-            } else {
+            } else if (statsType === 'overall') {
                 categoryTabsId = 'overallCategoryTabs';
+            } else {
+                categoryTabsId = 'customCategoryTabs';
             }
             
             let calculatorIds = null;
@@ -7378,7 +7654,20 @@ class AppController {
                 calculatorIds = selectedGroup ? selectedGroup.calculatorIds : null;
             }
             
-            const result = await this.shareManager.exportLeaderboardPDF(statsType, null, null, calculatorIds);
+            let customOptions = null;
+            if (statsType === 'custom') {
+                const matches = this.getCustomMatches();
+                if (!matches || matches.length === 0) {
+                    this.toastManager.warning('Select a date in the By Date panel first.');
+                    return;
+                }
+                customOptions = {
+                    customMatches: matches,
+                    customLabel: this.getCustomFilterLabel()
+                };
+            }
+
+            const result = await this.shareManager.exportLeaderboardPDF(statsType, null, null, calculatorIds, customOptions || undefined);
             
             // Store PDF blob URL for viewing
             if (result && result.blobUrl) {

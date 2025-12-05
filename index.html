@@ -224,6 +224,7 @@
                     <button class="tab-btn active" data-tab="today">Today</button>
                     <button class="tab-btn" data-tab="season">Season</button>
                     <button class="tab-btn" data-tab="overall">Overall</button>
+                    <button class="tab-btn" data-tab="custom">Custom</button>
                 </div>
                 <div style="text-align: center; margin-top: 0.5rem;">
                     <button id="viewLastPDFBtn" class="btn btn-secondary" title="View Last Exported PDF" disabled style="opacity: 0.5; cursor: not-allowed;">👁️ View PDF</button>
@@ -264,6 +265,21 @@
                 </div>
                 <div class="category-tabs" id="overallCategoryTabs"></div>
                 <div id="overallStatsDisplay" class="stats-display"></div>
+            </div>
+
+            <div id="customStats" class="stats-content">
+                <div class="stats-header-actions">
+                    <h3>Custom Statistics</h3>
+                    <div class="share-buttons-group">
+                        <button id="shareCustomStatsBtn" class="btn btn-share" title="Share as Image">📤 Share</button>
+                        <button id="exportCustomPDFBtn" class="btn btn-share" title="Export as PDF">📄 PDF</button>
+                    </div>
+                </div>
+                <p id="customFilterSummary" class="screen-description" style="margin-bottom: 0.75rem;">
+                    Select a date from the By Date panel to view custom stats.
+                </p>
+                <div class="category-tabs" id="customCategoryTabs"></div>
+                <div id="customStatsDisplay" class="stats-display"></div>
             </div>
 
             <div class="button-group">
