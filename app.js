@@ -8209,7 +8209,7 @@ class AppController {
             return;
         }
         
-        container.innerHTML = players.map(player => {
+        const itemsHtml = players.map(player => {
             const currentColor = settings.playerColors[player] || '#2196F3';
             return `
                 <div class="player-color-item">
@@ -8221,14 +8221,9 @@ class AppController {
                            title="Choose color for ${this.escapeHtml(player)}">
                 </div>
             `;
-        });
+        }).join('');
 
-        // Apply chosen order for display (data remains cumulative)
-        if (timelineOrder === 'desc') {
-            timelineEntries.reverse();
-        }
-
-        container.innerHTML = timelineEntries.join('');
+        container.innerHTML = itemsHtml;
         
         // Add event listeners for color changes
         container.querySelectorAll('.player-color-picker').forEach(picker => {
