@@ -7809,6 +7809,11 @@ class AppController {
         document.getElementById('historySearch').value = '';
         document.getElementById('historyDateFrom').value = '';
         document.getElementById('historyDateTo').value = '';
+        const sortOrderSelect = document.getElementById('historySortOrder');
+        if (sortOrderSelect) {
+            sortOrderSelect.value = 'desc';
+        }
+        this.historySortOrder = 'desc';
         this.loadMatchHistory();
     }
 
