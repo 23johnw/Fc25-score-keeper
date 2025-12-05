@@ -533,11 +533,11 @@ const STAT_GROUPS = [
         key: 'overview',
         label: 'Overview',
         calculatorIds: [
+            'leaguePoints',
             'winLossDraw',
             'winRate',
             'streak',
             'form',
-            'leaguePoints',
             'avgGoalsPerGame',
             'totalGoals',
             'goalDifference',
@@ -3944,7 +3944,9 @@ class StatisticsDisplay {
         }
 
         if (allowedCalculatorIds && allowedCalculatorIds.length > 0) {
-            calculators = calculators.filter(calc => allowedCalculatorIds.includes(calc.id));
+            calculators = calculators
+                .filter(calc => allowedCalculatorIds.includes(calc.id))
+                .sort((a, b) => allowedCalculatorIds.indexOf(a.id) - allowedCalculatorIds.indexOf(b.id));
         }
         
         // When showing "All", ensure we show ALL calculators or all in the selected group
@@ -4445,7 +4447,9 @@ class ShareManager {
             calculators = StatisticsCalculators.getAll();
         }
         if (calculatorIds && calculatorIds.length > 0) {
-            calculators = calculators.filter(calc => calculatorIds.includes(calc.id));
+            calculators = calculators
+                .filter(calc => calculatorIds.includes(calc.id))
+                .sort((a, b) => calculatorIds.indexOf(a.id) - calculatorIds.indexOf(b.id));
         }
         
         calculators.forEach(calculator => {
@@ -4918,7 +4922,9 @@ class ShareManager {
             calculators = StatisticsCalculators.getAll();
         }
         if (calculatorIds && calculatorIds.length > 0) {
-            calculators = calculators.filter(calc => calculatorIds.includes(calc.id));
+            calculators = calculators
+                .filter(calc => calculatorIds.includes(calc.id))
+                .sort((a, b) => calculatorIds.indexOf(a.id) - calculatorIds.indexOf(b.id));
         }
         
         calculators.forEach(calculator => {
@@ -5787,6 +5793,7 @@ class AppController {
         this.playerEditorValues = [];
         this.hasUnsavedPlayerChanges = false;
         this.currentHistoryView = 'list'; // 'list' or 'timeline'
+        this.historySortOrder = 'desc'; // 'desc' = last played first, 'asc' = oldest first
         this.lastPDFBlobUrl = null; // Store last exported PDF for viewing
         
         // Initialize lock labels before anything else that might use them
@@ -5941,6 +5948,14 @@ class AppController {
         document.getElementById('historySearch').addEventListener('input', () => this.loadMatchHistory());
         document.getElementById('historyDateFrom').addEventListener('change', () => this.loadMatchHistory());
         document.getElementById('historyDateTo').addEventListener('change', () => this.loadMatchHistory());
+        const historySortOrder = document.getElementById('historySortOrder');
+        if (historySortOrder) {
+            historySortOrder.value = this.historySortOrder;
+            historySortOrder.addEventListener('change', (e) => {
+                this.historySortOrder = e.target.value === 'asc' ? 'asc' : 'desc';
+                this.loadMatchHistory();
+            });
+        }
         document.getElementById('clearHistoryFiltersBtn').addEventListener('click', () => this.clearHistoryFilters());
         document.getElementById('historyListViewBtn').addEventListener('click', () => this.switchHistoryView('list'));
         document.getElementById('historyTimelineViewBtn').addEventListener('click', () => this.switchHistoryView('timeline'));
@@ -7366,11 +7381,14 @@ class AppController {
             });
         }
 
-        // Sort by date (newest first for list, oldest first for timeline)
+        // Sort by date (toggleable for list, chronological for timeline)
         if (this.currentHistoryView === 'timeline') {
             allMatches.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
         } else {
-            allMatches.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            const order = this.historySortOrder === 'asc' ? 'asc' : 'desc';
+            allMatches.sort((a, b) => order === 'asc'
+                ? new Date(a.timestamp) - new Date(b.timestamp)
+                : new Date(b.timestamp) - new Date(a.timestamp));
         }
 
         // Show quick stats if filters are active
