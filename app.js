@@ -3888,7 +3888,11 @@ class StatisticsTracker {
             const gp = gamesPlayedMap[player] || 0;
             if (gp === 0) return mode === 'projected' ? 0 : 0;
             if (mode === 'perGame') {
-                return typeof value === 'number' ? value / gp : value;
+                if (typeof value === 'number') {
+                    const per = value / gp;
+                    return Math.round(per * 10) / 10;
+                }
+                return value;
             }
             if (mode === 'projected') {
                 if (typeof value === 'number') {
