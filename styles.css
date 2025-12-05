@@ -887,6 +887,18 @@ body.dark-mode .player-editable-item.active {
     padding: 1rem 0;
 }
 
+.stats-display table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+}
+
+.stats-display th,
+.stats-display td {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
 .stat-card:last-child {
     border-bottom: none;
 }

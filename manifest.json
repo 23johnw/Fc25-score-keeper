@@ -6,7 +6,7 @@
   "display": "standalone",
   "background_color": "#F5F5F5",
   "theme_color": "#2196F3",
-  "orientation": "portrait",
+  "orientation": "any",
   "scope": "/Fc25-score-keeper/",
   "icons": [
     {
