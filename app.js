@@ -52,7 +52,17 @@ class LocalStorageManager {
     toggleByDatePanel(show = false) {
         const panel = document.getElementById('byDatePanel');
         if (!panel) return;
-        panel.style.display = show ? 'block' : 'none';
+        if (show) {
+            panel.style.display = 'flex';
+            panel.style.position = 'fixed';
+            panel.style.inset = '0';
+            panel.style.justifyContent = 'center';
+            panel.style.alignItems = 'center';
+            panel.style.background = 'rgba(0,0,0,0.6)';
+            panel.style.zIndex = '2000';
+        } else {
+            panel.style.display = 'none';
+        }
         if (show) {
             const listContainer = document.getElementById('byDateList');
             if (listContainer) {
@@ -6016,6 +6026,7 @@ class AppController {
         this.updatePlayedDates();
         this.initializeByDatePanel();
         this.updateCustomFilterSummary([]);
+        this.renderCustomStatsSection();
     }
 
     initializeEventListeners() {
@@ -7150,7 +7161,7 @@ class AppController {
             document.getElementById('team1Score').value = 0;
             document.getElementById('team2Score').value = 0;
             this.updatePlayedDates();
-            this.refreshCustomStatsIfActive();
+            this.renderCustomStatsSection();
             
             this.currentGameIndex++;
             
@@ -7234,6 +7245,8 @@ class AppController {
     }
 
     renderByDateList(container) {
+        container.style.maxHeight = '240px';
+        container.style.overflowY = 'auto';
         const dates = this.playedDates || [];
         if (dates.length === 0) {
             container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📅</div><h4>No Dates</h4><p>Play some matches to enable date filtering.</p></div>';
@@ -7272,7 +7285,7 @@ class AppController {
         const listContainer = document.getElementById('byDateList');
         if (listContainer) this.renderByDateList(listContainer);
         this.updateCustomFilterSummary([]);
-        this.switchStatsTab('custom');
+        this.renderCustomStatsSection();
     }
 
     applyByDateFilter() {
@@ -7289,7 +7302,7 @@ class AppController {
         }
 
         this.currentByDateFilter = { selectedDate: selectedDate || null, from: rangeFrom, to: rangeTo };
-        this.switchStatsTab('custom');
+        this.renderCustomStatsSection();
         this.toggleByDatePanel(false);
     }
 
@@ -7323,13 +7336,19 @@ class AppController {
         summary.textContent = `${label} • ${count} match${count === 1 ? '' : 'es'}`;
     }
 
-    refreshCustomStatsIfActive() {
-        const activeTab = document.querySelector('.tab-btn.active');
-        if (activeTab && activeTab.dataset.tab === 'custom') {
-            const defaultGroup = STAT_GROUPS[0]?.key || 'overview';
-            const currentCategory = this.currentStatsState.custom?.category || defaultGroup;
-            this.switchStatsCategory('custom', currentCategory);
+    renderCustomStatsSection() {
+        const section = document.getElementById('customStats');
+        if (!section) return;
+        const matches = this.getCustomMatches();
+        this.updateCustomFilterSummary(matches);
+        if (!matches || matches.length === 0) {
+            section.style.display = 'none';
+            return;
         }
+        section.style.display = 'block';
+        const defaultGroup = this.currentStatsState.custom?.category || STAT_GROUPS[0]?.key || 'overview';
+        this.renderCategoryTabs('custom', defaultGroup);
+        this.switchStatsCategory('custom', defaultGroup);
     }
 
     // Statistics
@@ -7347,10 +7366,6 @@ class AppController {
         document.getElementById('seasonStats').classList.toggle('active', tab === 'season');
         document.getElementById('overallStats').classList.toggle('active', tab === 'overall');
         document.getElementById('todayStats').classList.toggle('active', tab === 'today');
-        const customStats = document.getElementById('customStats');
-        if (customStats) {
-            customStats.classList.toggle('active', tab === 'custom');
-        }
         
         // Initialize swipe gestures for stats tabs if not already done
         this.initializeStatsTabSwipes();
@@ -7365,10 +7380,6 @@ class AppController {
         } else if (tab === 'today') {
             this.renderCategoryTabs('today', defaultGroup);
             this.switchStatsCategory('today', defaultGroup);
-        } else if (tab === 'custom') {
-            const currentCategory = this.currentStatsState.custom?.category || defaultGroup;
-            this.renderCategoryTabs('custom', currentCategory);
-            this.switchStatsCategory('custom', currentCategory);
         }
     }
 
@@ -7377,7 +7388,7 @@ class AppController {
         const statsScreen = document.getElementById('statsScreen');
         if (!statsScreen || statsScreen.swipeInitialized) return;
 
-        const tabs = ['today', 'season', 'overall', 'custom'];
+        const tabs = ['today', 'season', 'overall'];
         
         this.touchSwipeHandler.attach(statsScreen, {
             onSwipeLeft: () => {
