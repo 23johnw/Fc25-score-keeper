@@ -17,6 +17,29 @@
 <body>
     <!-- Toast Notification Container -->
     <div id="toastContainer" class="toast-container"></div>
+    <div id="byDatePanel" class="by-date-panel" style="display: none;">
+        <div class="by-date-header">
+            <h3>Select Dates</h3>
+            <button id="closeByDatePanel" class="btn btn-secondary">✕</button>
+        </div>
+        <div class="by-date-content">
+            <div class="by-date-range">
+                <label class="date-field">
+                    <span class="date-label">📅 From</span>
+                    <input type="date" id="byDateFrom" class="date-input" title="From Date">
+                </label>
+                <label class="date-field">
+                    <span class="date-label">📅 To</span>
+                    <input type="date" id="byDateTo" class="date-input" title="To Date">
+                </label>
+            </div>
+            <div id="byDateList" class="by-date-list"></div>
+        </div>
+        <div class="by-date-actions">
+            <button id="clearByDateBtn" class="btn btn-secondary">Clear</button>
+            <button id="applyByDateBtn" class="btn btn-primary">Apply</button>
+        </div>
+    </div>
     <!-- Header -->
     <header class="app-header">
         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -249,6 +272,7 @@
                 <button id="importDataBtn" class="btn btn-secondary">Import Data</button>
                 <button id="clearOverallStatsBtn" class="btn btn-secondary" style="background-color: #f44336;">Clear All Statistics (Testing)</button>
                 <button id="backToMenuBtn" class="btn btn-secondary">Back to Menu</button>
+                <button id="byDateStatsBtn" class="btn btn-secondary" style="background-color: #4CAF50;">By Date</button>
             </div>
         </div>
     </section>

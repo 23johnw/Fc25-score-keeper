@@ -15,6 +15,134 @@ class LocalStorageManager {
         this.data = this.loadData();
     }
 
+    initializeByDatePanel() {
+        const closeBtn = document.getElementById('closeByDatePanel');
+        const applyBtn = document.getElementById('applyByDateBtn');
+        const clearBtn = document.getElementById('clearByDateBtn');
+        const listContainer = document.getElementById('byDateList');
+        const fromInput = document.getElementById('byDateFrom');
+        const toInput = document.getElementById('byDateTo');
+
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.toggleByDatePanel(false));
+        }
+        if (applyBtn) {
+            applyBtn.addEventListener('click', () => this.applyByDateFilter());
+        }
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => this.clearByDateFilter());
+        }
+
+        if (listContainer) {
+            this.renderByDateList(listContainer);
+        }
+
+        if (fromInput) {
+            fromInput.addEventListener('change', (e) => {
+                this.currentByDateFilter.from = e.target.value || null;
+            });
+        }
+        if (toInput) {
+            toInput.addEventListener('change', (e) => {
+                this.currentByDateFilter.to = e.target.value || null;
+            });
+        }
+    }
+
+    toggleByDatePanel(show = false) {
+        const panel = document.getElementById('byDatePanel');
+        if (!panel) return;
+        panel.style.display = show ? 'block' : 'none';
+        if (show) {
+            const listContainer = document.getElementById('byDateList');
+            if (listContainer) {
+                this.renderByDateList(listContainer);
+            }
+        }
+    }
+
+    updatePlayedDates() {
+        const allMatches = this.statisticsTracker.getAllMatches();
+        const dateSet = new Set();
+        allMatches.forEach(match => {
+            if (match.timestamp) {
+                const dateKey = new Date(match.timestamp).toISOString().split('T')[0];
+                dateSet.add(dateKey);
+            }
+        });
+        this.playedDates = Array.from(dateSet).sort((a, b) => new Date(b) - new Date(a));
+    }
+
+    renderByDateList(container) {
+        const dates = this.playedDates || [];
+        if (dates.length === 0) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📅</div><h4>No Dates</h4><p>Play some matches to enable date filtering.</p></div>';
+            return;
+        }
+        container.innerHTML = dates.map(dateStr => {
+            const isSelected = this.currentByDateFilter.selectedDate === dateStr;
+            return `
+                <button class="by-date-pill ${isSelected ? 'selected' : ''}" data-date="${dateStr}">
+                    ${dateStr}
+                </button>
+            `;
+        }).join('');
+
+        container.querySelectorAll('.by-date-pill').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const chosen = btn.dataset.date;
+                this.currentByDateFilter.selectedDate = chosen;
+                this.currentByDateFilter.from = null;
+                this.currentByDateFilter.to = null;
+                const fromInput = document.getElementById('byDateFrom');
+                const toInput = document.getElementById('byDateTo');
+                if (fromInput) fromInput.value = '';
+                if (toInput) toInput.value = '';
+                this.renderByDateList(container);
+            });
+        });
+    }
+
+    clearByDateFilter() {
+        this.currentByDateFilter = { from: null, to: null, selectedDate: null };
+        const fromInput = document.getElementById('byDateFrom');
+        const toInput = document.getElementById('byDateTo');
+        if (fromInput) fromInput.value = '';
+        if (toInput) toInput.value = '';
+        const listContainer = document.getElementById('byDateList');
+        if (listContainer) this.renderByDateList(listContainer);
+        this.applyByDateFilter();
+    }
+
+    applyByDateFilter() {
+        // If a single date is selected, use that; otherwise use range
+        const { selectedDate, from, to } = this.currentByDateFilter || {};
+        let rangeFrom = null;
+        let rangeTo = null;
+
+        if (selectedDate) {
+            rangeFrom = selectedDate;
+            rangeTo = selectedDate;
+        } else {
+            rangeFrom = from || null;
+            rangeTo = to || null;
+        }
+
+        this.currentByDateFilter = { selectedDate: null, from: rangeFrom, to: rangeTo };
+
+        // Re-render current stats view using filtered matches
+        this.refreshCurrentStatsWithDateFilter();
+        this.toggleByDatePanel(false);
+    }
+
+    refreshCurrentStatsWithDateFilter() {
+        // Determine active stats tab
+        const activeTabBtn = document.querySelector('.tab-btn.active');
+        const tab = activeTabBtn ? activeTabBtn.dataset.tab : 'today';
+
+        // Force reload of stats with filter applied
+        this.switchStatsTab(tab);
+    }
     loadData() {
         try {
             const stored = localStorage.getItem(this.storageKey);
@@ -5821,6 +5949,15 @@ class AppController {
         this.updateSeasonInfo();
         this.updatePlayerNameHistory(); // Add this line
         this.renderPlayerLockOptions();
+
+        // Precompute played dates for By Date panel
+        this.updatePlayedDates();
+
+        // Wire By Date panel controls
+        this.initializeByDatePanel();
+
+        // Load initial By Date selection (none)
+        this.currentByDateFilter = { from: null, to: null, selectedDate: null };
     }
 
     initializeEventListeners() {
@@ -5940,6 +6077,10 @@ class AppController {
         const viewPdfBtn = document.getElementById('viewLastPDFBtn');
         if (viewPdfBtn) {
             viewPdfBtn.addEventListener('click', () => this.viewLastPDF());
+        }
+        const byDateBtn = document.getElementById('byDateStatsBtn');
+        if (byDateBtn) {
+            byDateBtn.addEventListener('click', () => this.toggleByDatePanel(true));
         }
 
         // History screen
