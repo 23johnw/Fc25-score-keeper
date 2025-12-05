@@ -3874,6 +3874,10 @@ class StatisticsTracker {
         const mode = this.getStatsMode();
         if (mode === 'raw') return calculated;
 
+        // If we don't have games played info, don't transform
+        const hasGP = gamesPlayedMap && Object.keys(gamesPlayedMap).length > 0;
+        if (!hasGP) return calculated;
+
         const transformValue = (player, value) => {
             const gp = gamesPlayedMap[player] || 0;
             if (gp === 0) return mode === 'projected' ? 0 : 0;
@@ -3906,6 +3910,13 @@ class StatisticsTracker {
         }
 
         if (calculated && typeof calculated === 'object') {
+            // Only transform objects that are keyed by known players; otherwise leave as-is (charts, aggregates)
+            const keys = Object.keys(calculated);
+            const keysArePlayers = keys.length > 0 && keys.every(k => gamesPlayedMap[k] !== undefined);
+            if (!keysArePlayers) {
+                return calculated;
+            }
+
             const result = {};
             Object.entries(calculated).forEach(([player, value]) => {
                 if (typeof value === 'number') {
