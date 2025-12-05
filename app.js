@@ -8222,6 +8222,10 @@ class AppController {
             // Try to get version from service worker cache name (more accurate)
             this.displayAppVersion(versionDisplay);
         }
+        const bannerVersion = document.getElementById('appVersionBanner');
+        if (bannerVersion) {
+            this.displayAppVersion(bannerVersion);
+        }
     }
 
     async displayAppVersion(versionDisplayElement) {

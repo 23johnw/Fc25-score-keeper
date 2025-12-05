@@ -26,7 +26,9 @@
                 <button id="darkModeToggle" class="dark-mode-toggle" title="Toggle Dark Mode">🌙</button>
             </div>
         </div>
-        <div style="background: #4CAF50; color: white; padding: 0.5rem 1rem; border-radius: 8px; margin: 0.5rem 0; text-align: center; font-weight: bold; font-size: 0.9rem;">UPDATE TEST - v42 ✅ - Compact History Enabled</div>
+        <div style="background: #4CAF50; color: white; padding: 0.5rem 1rem; border-radius: 8px; margin: 0.5rem 0; text-align: center; font-weight: bold; font-size: 0.9rem;">
+            <span id="appVersionBanner">UPDATE TEST - loading…</span> ✅ - Compact History Enabled
+        </div>
         <div class="season-info" id="seasonInfo" style="display: none;">
             <span>Season <span id="currentSeasonNumber">1</span></span>
         </div>
@@ -274,10 +276,16 @@
                     <option value="desc">▼ Last played</option>
                     <option value="asc">▲ First played</option>
                 </select>
-                <input type="date" id="historyDateFrom" class="date-input" title="From Date">
-                <input type="date" id="historyDateTo" class="date-input" title="To Date">
+                <label class="date-field">
+                    <span class="date-label">📅 From</span>
+                    <input type="date" id="historyDateFrom" class="date-input" title="From Date">
+                </label>
+                <label class="date-field">
+                    <span class="date-label">📅 To</span>
+                    <input type="date" id="historyDateTo" class="date-input" title="To Date">
+                </label>
                 <input type="text" id="historySearch" placeholder="Search players..." class="search-input">
-                <button id="clearHistoryFiltersBtn" class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Clear</button>
+                <button id="clearHistoryFiltersBtn" class="btn btn-secondary clear-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Clear</button>
             </div>
             
             <div id="matchHistoryList" class="match-history-list"></div>

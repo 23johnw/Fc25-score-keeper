@@ -3089,14 +3089,40 @@ body.dark-mode .filter-stat-item {
     display: none;
 }
 
+.history-controls .date-field {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.35rem 0.5rem;
+    background: var(--surface-color);
+}
+
+.history-controls .date-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
 .history-controls .date-input {
     min-width: 0;
     width: 100%;
+    border: none;
+    background: transparent;
 }
 
 .history-controls .btn,
 .history-controls button[type="button"] {
     grid-column: 1 / -1;
+    width: 100%;
+}
+
+.history-controls .search-input {
+    width: 100%;
+}
+
+.history-controls .clear-btn {
     width: 100%;
 }
 
