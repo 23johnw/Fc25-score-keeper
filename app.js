@@ -3883,7 +3883,8 @@ class StatisticsTracker {
             if (mode === 'projected') {
                 if (typeof value === 'number') {
                     const perGame = value / gp;
-                    return perGame * (maxGamesPlayed || gp);
+                    const projected = perGame * (maxGamesPlayed || gp);
+                    return Math.round(projected * 10) / 10;
                 }
             }
             return value;
