@@ -7544,27 +7544,51 @@ class AppController {
             const date = new Date(match.timestamp);
             const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+            const hasExtra = match.team1ExtraTimeScore !== undefined && match.team2ExtraTimeScore !== undefined;
+            const hasPens = match.team1PenaltiesScore !== undefined && match.team2PenaltiesScore !== undefined;
+
+            const scoreLine = `
+                <div class="match-history-score-line">
+                    <span class="match-history-score">${match.team1Score || 0}</span>
+                    <span class="match-history-score-sep">-</span>
+                    <span class="match-history-score">${match.team2Score || 0}</span>
+                    ${hasExtra ? `<span class="match-history-tag">ET ${match.team1ExtraTimeScore}-${match.team2ExtraTimeScore}</span>` : ''}
+                    ${hasPens ? `<span class="match-history-tag">Pens ${match.team1PenaltiesScore}-${match.team2PenaltiesScore}</span>` : ''}
+                </div>
+            `;
+
             return `
-                <div class="match-history-item">
-                    <div class="match-history-info">
-                        <div class="match-history-teams">${team1Display} vs ${team2Display}</div>
-                        <div class="match-history-score">
-                            ${match.team1Score || 0} - ${match.team2Score || 0}
-                            ${match.team1ExtraTimeScore !== undefined && match.team2ExtraTimeScore !== undefined ? 
-                                ` <span class="extra-time-score">(${match.team1ExtraTimeScore}-${match.team2ExtraTimeScore} ET)</span>` : ''}
-                            ${match.team1PenaltiesScore !== undefined && match.team2PenaltiesScore !== undefined ? 
-                                ` <span class="penalties-score">(${match.team1PenaltiesScore}-${match.team2PenaltiesScore} Pens)</span>` : ''}
+                <div class="match-history-item compact" data-timestamp="${match.timestamp}">
+                    <div class="match-history-header">
+                        <div class="match-history-main">
+                            <div class="match-history-teams">${team1Display} vs ${team2Display}</div>
+                            ${scoreLine}
+                            <div class="match-history-date">${dateStr}</div>
                         </div>
-                        <div class="match-history-date">${dateStr}</div>
+                        <button class="match-history-toggle" aria-expanded="false" aria-label="Show details">▾</button>
                     </div>
-                    <div class="match-history-actions">
-                        <button class="match-history-btn share" data-timestamp="${match.timestamp}" title="Share Match">📤</button>
-                        <button class="match-history-btn edit" data-timestamp="${match.timestamp}">Edit</button>
-                        <button class="match-history-btn delete" data-timestamp="${match.timestamp}">Delete</button>
+                    <div class="match-history-details" hidden>
+                        <div class="match-history-actions">
+                            <button class="match-history-btn share" data-timestamp="${match.timestamp}" title="Share Match">📤</button>
+                            <button class="match-history-btn edit" data-timestamp="${match.timestamp}">Edit</button>
+                            <button class="match-history-btn delete" data-timestamp="${match.timestamp}">Delete</button>
+                        </div>
                     </div>
                 </div>
             `;
         }).join('');
+
+        // Toggle details
+        container.querySelectorAll('.match-history-toggle').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const item = btn.closest('.match-history-item');
+                const details = item ? item.querySelector('.match-history-details') : null;
+                const isOpen = item && details ? item.classList.toggle('expanded') : false;
+                if (details) details.hidden = !isOpen;
+                btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            });
+        });
 
         this.attachHistoryEventListeners(container);
         
