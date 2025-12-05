@@ -7359,6 +7359,7 @@ class AppController {
             this.customFilterActive = false;
             section.style.display = 'none';
             this.setByDateButtonActive(false);
+            this.showNormalStatsTabs();
             return;
         }
 
@@ -7389,6 +7390,13 @@ class AppController {
         if (customStats) {
             customStats.style.display = 'none';
         }
+        const todayStats = document.getElementById('todayStats');
+        const seasonStats = document.getElementById('seasonStats');
+        const overallStats = document.getElementById('overallStats');
+        if (todayStats) todayStats.style.display = '';
+        if (seasonStats) seasonStats.style.display = '';
+        if (overallStats) overallStats.style.display = '';
+
         const targetTab = this.lastStatsTab || 'today';
         this.setByDateButtonActive(false);
         this.switchStatsTab(targetTab);
@@ -7406,19 +7414,25 @@ class AppController {
     }
 
     switchStatsTab(tab) {
-        if (this.customFilterActive && tab !== 'custom') {
-            return;
-        }
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.tab === tab);
         });
 
+        const seasonStats = document.getElementById('seasonStats');
+        const overallStats = document.getElementById('overallStats');
+        const todayStats = document.getElementById('todayStats');
+        const customStats = document.getElementById('customStats');
+
+        if (todayStats) todayStats.style.display = tab === 'today' ? '' : 'none';
+        if (seasonStats) seasonStats.style.display = tab === 'season' ? '' : 'none';
+        if (overallStats) overallStats.style.display = tab === 'overall' ? '' : 'none';
+        if (customStats) customStats.style.display = tab === 'custom' ? '' : 'none';
+
         document.getElementById('seasonStats').classList.toggle('active', tab === 'season');
         document.getElementById('overallStats').classList.toggle('active', tab === 'overall');
         document.getElementById('todayStats').classList.toggle('active', tab === 'today');
-        const customStats = document.getElementById('customStats');
-        if (customStats && tab !== 'custom') {
-            customStats.style.display = 'none';
+        if (customStats) {
+            customStats.classList.toggle('active', tab === 'custom');
         }
         if (tab !== 'custom') {
             this.setByDateButtonActive(false);
