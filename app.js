@@ -7335,6 +7335,12 @@ class AppController {
         const timelineContainer = document.getElementById('matchHistoryTimeline');
         if (!listContainer || !timelineContainer) return;
 
+        // Sync sort order from UI control (if present)
+        const sortOrderSelect = document.getElementById('historySortOrder');
+        if (sortOrderSelect) {
+            this.historySortOrder = sortOrderSelect.value === 'asc' ? 'asc' : 'desc';
+        }
+
         const filter = document.getElementById('historyFilter').value;
         const search = document.getElementById('historySearch').value.toLowerCase();
         const dateFrom = document.getElementById('historyDateFrom').value;
@@ -7592,6 +7598,7 @@ class AppController {
             const dateB = new Date(b[0]);
             return dateA - dateB;
         });
+        const timelineOrder = this.historySortOrder === 'asc' ? 'asc' : 'desc';
 
         // Get all players for chart calculations
         if (!this.playerManager) {
@@ -7604,7 +7611,7 @@ class AppController {
             return;
         }
 
-        container.innerHTML = sortedDateEntries.map(([dateKey, dateMatches], dateIndex) => {
+        const timelineEntries = sortedDateEntries.map(([dateKey, dateMatches], dateIndex) => {
             // Calculate cumulative stats up to this date
             const allMatchesUpToThisDate = [];
             for (let i = 0; i <= dateIndex; i++) {
@@ -8214,7 +8221,14 @@ class AppController {
                            title="Choose color for ${this.escapeHtml(player)}">
                 </div>
             `;
-        }).join('');
+        });
+
+        // Apply chosen order for display (data remains cumulative)
+        if (timelineOrder === 'desc') {
+            timelineEntries.reverse();
+        }
+
+        container.innerHTML = timelineEntries.join('');
         
         // Add event listeners for color changes
         container.querySelectorAll('.player-color-picker').forEach(picker => {
