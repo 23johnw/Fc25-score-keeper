@@ -1893,7 +1893,7 @@ StatisticsCalculators.register({
                                 return '<span style="color: #f44336; font-weight: bold;">L</span>';
                             }).join(' ')
                             : '-';
-                        const points = stats.wins * 3 + stats.draws;
+                        const points = Math.round((stats.wins * 3 + stats.draws) * 10) / 10;
                         return `
                             <tr>
                                 <td class="player-name">${player}</td>
