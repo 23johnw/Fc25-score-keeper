@@ -3913,28 +3913,27 @@ class StatisticsTracker {
         const allMatches = this.getAllMatches();
         if (!fromDateStr && !toDateStr) return allMatches;
 
-        const normalizeStart = (dateStr) => {
-            const d = new Date(dateStr);
-            if (isNaN(d.getTime())) return null;
-            d.setHours(0, 0, 0, 0);
-            return d;
+        const normalizeDateKey = (dateStr) => {
+            // Expect yyyy-mm-dd from date inputs / stored keys; fall back gracefully
+            if (!dateStr || typeof dateStr !== 'string') return null;
+            const parts = dateStr.split('-');
+            if (parts.length !== 3) return null;
+            const [y, m, d] = parts;
+            if (!y || !m || !d) return null;
+            // Ensure zero-padded
+            const mm = m.padStart(2, '0');
+            const dd = d.padStart(2, '0');
+            return `${y}-${mm}-${dd}`;
         };
 
-        const normalizeEnd = (dateStr) => {
-            const d = new Date(dateStr);
-            if (isNaN(d.getTime())) return null;
-            d.setHours(23, 59, 59, 999);
-            return d;
-        };
-
-        const fromDate = fromDateStr ? normalizeStart(fromDateStr) : null;
-        const toDate = toDateStr ? normalizeEnd(toDateStr) : null;
+        const fromKey = normalizeDateKey(fromDateStr);
+        const toKey = normalizeDateKey(toDateStr);
 
         return allMatches.filter(match => {
             if (!match.timestamp) return false;
-            const matchDate = new Date(match.timestamp);
-            if (fromDate && matchDate < fromDate) return false;
-            if (toDate && matchDate > toDate) return false;
+            const matchKey = new Date(match.timestamp).toISOString().split('T')[0];
+            if (fromKey && matchKey < fromKey) return false;
+            if (toKey && matchKey > toKey) return false;
             return true;
         });
     }
