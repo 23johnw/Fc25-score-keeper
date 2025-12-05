@@ -7584,7 +7584,7 @@ class AppController {
                 e.stopPropagation();
                 const item = btn.closest('.match-history-item');
                 const details = item ? item.querySelector('.match-history-details') : null;
-                const isOpen = item && details ? item.classList.toggle('expanded') : false;
+                const isOpen = item ? item.classList.toggle('expanded') : false;
                 if (details) details.hidden = !isOpen;
                 btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
             });
@@ -7668,13 +7668,14 @@ class AppController {
             });
 
             const dateHeader = `
-                <div class="timeline-date-group">
+                <div class="timeline-date-group compact">
                     <div class="timeline-date-header">
                         <div class="timeline-date-title">${dateKey}</div>
                         <div class="timeline-date-count">${dateMatches.length} match${dateMatches.length !== 1 ? 'es' : ''}</div>
+                        <button class="timeline-date-toggle" aria-expanded="false" aria-label="Show stats">▶</button>
                     </div>
-                    ${players.length > 0 ? `
-                    <div class="timeline-mini-stats">
+                    <div class="timeline-mini-stats" hidden>
+                        ${players.length > 0 ? `
                         <div class="timeline-stats-section">
                             <div class="timeline-stats-label">Win Rates (Cumulative)</div>
                             <div class="timeline-win-rate-bars">
@@ -7711,8 +7712,8 @@ class AppController {
                                 }).join('')}
                             </div>
                         </div>
+                        ` : ''}
                     </div>
-                    ` : ''}
             `;
 
             const matchesHTML = dateMatches.map(match => {
@@ -7737,28 +7738,29 @@ class AppController {
                 }
 
                 return `
-                    <div class="timeline-match-item ${resultClass}" data-timestamp="${match.timestamp}">
+                    <div class="timeline-match-item ${resultClass} compact" data-timestamp="${match.timestamp}">
                         <div class="timeline-match-header">
                             <div class="timeline-match-teams">
                                 <span class="timeline-result-indicator ${resultIndicator}"></span>
                                 ${team1Display} vs ${team2Display}
                             </div>
                             <div class="timeline-match-score">
-                                ${match.result === 'team1' ? 
-                                    `<span class="winning-score">${match.team1Score || 0}</span>` : 
+                                ${match.result === 'team1' ?
+                                    `<span class="winning-score">${match.team1Score || 0}</span>` :
                                     `<span>${match.team1Score || 0}</span>`
-                                } - ${match.result === 'team2' ? 
-                                    `<span class="winning-score">${match.team2Score || 0}</span>` : 
+                                } - ${match.result === 'team2' ?
+                                    `<span class="winning-score">${match.team2Score || 0}</span>` :
                                     `<span>${match.team2Score || 0}</span>`
                                 }
-                                ${match.team1ExtraTimeScore !== undefined && match.team2ExtraTimeScore !== undefined ? 
-                                    ` <span class="extra-time-score">(${match.team1ExtraTimeScore}-${match.team2ExtraTimeScore} ET)</span>` : ''}
-                                ${match.team1PenaltiesScore !== undefined && match.team2PenaltiesScore !== undefined ? 
-                                    ` <span class="penalties-score">(${match.team1PenaltiesScore}-${match.team2PenaltiesScore} Pens)</span>` : ''}
+                                ${match.team1ExtraTimeScore !== undefined && match.team2ExtraTimeScore !== undefined ?
+                                    ` <span class="timeline-match-tag">ET</span>` : ''}
+                                ${match.team1PenaltiesScore !== undefined && match.team2PenaltiesScore !== undefined ?
+                                    ` <span class="timeline-match-tag">Pens</span>` : ''}
                             </div>
+                            <div class="timeline-match-time">${timeStr}</div>
+                            <button class="timeline-match-toggle" aria-expanded="false" aria-label="Show details">▼</button>
                         </div>
-                        <div class="timeline-match-time">${timeStr}</div>
-                        <div class="timeline-match-details">
+                        <div class="timeline-match-details" hidden>
                             <div class="timeline-match-actions">
                                 <button class="match-history-btn share" data-timestamp="${match.timestamp}" title="Share Match">📤 Share</button>
                                 <button class="match-history-btn edit" data-timestamp="${match.timestamp}">Edit</button>
@@ -7779,18 +7781,33 @@ class AppController {
 
         container.innerHTML = timelineEntries.join('');
         this.attachHistoryEventListeners(container);
-        
-        // Add click handlers to expand/collapse match details
-        container.querySelectorAll('.timeline-match-item').forEach(item => {
-            item.addEventListener('click', (e) => {
-                // Don't expand if clicking on a button
-                if (e.target.closest('.match-history-btn')) {
-                    return;
-                }
-                item.classList.toggle('expanded');
+
+        // Add click handlers to expand/collapse date group stats
+        container.querySelectorAll('.timeline-date-toggle').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const header = btn.closest('.timeline-date-header');
+                const stats = header ? header.nextElementSibling : null;
+                const isOpen = header && header.parentElement ? header.parentElement.classList.toggle('expanded') : false;
+                if (stats) stats.hidden = !isOpen;
+                btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
             });
-            
-            // Add swipe-to-delete functionality to timeline items
+        });
+
+        // Add click handlers to expand/collapse match details
+        container.querySelectorAll('.timeline-match-toggle').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const item = btn.closest('.timeline-match-item');
+                const details = item ? item.querySelector('.timeline-match-details') : null;
+                const isOpen = item ? item.classList.toggle('expanded') : false;
+                if (details) details.hidden = !isOpen;
+                btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            });
+        });
+
+        // Add swipe-to-delete functionality to timeline items
+        container.querySelectorAll('.timeline-match-item').forEach(item => {
             const deleteBtn = item.querySelector('.match-history-btn.delete');
             if (deleteBtn) {
                 const timestamp = deleteBtn.dataset.timestamp;
