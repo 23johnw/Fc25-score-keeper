@@ -1118,6 +1118,12 @@ StatisticsCalculators.register({
     display: (data) => {
         const container = document.createElement('div');
         container.className = 'stat-card';
+        const escapeSafe = (str = '') => String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
         
         // Sort by goals (descending)
         const sorted = Object.entries(data)
@@ -1148,7 +1154,7 @@ StatisticsCalculators.register({
                         return `
                             <tr ${position === 1 ? 'class="leader"' : ''}>
                                 <td class="position">${position}</td>
-                                <td class="player-name" ${playerStyle}>${positionSymbol} ${escapeHtml(player)}</td>
+                                <td class="player-name" ${playerStyle}>${positionSymbol} ${escapeSafe(player)}</td>
                                 <td class="points"><strong>${stats.goals}</strong></td>
                                 ${hasExtraTimeGoals ? `
                                     <td>${stats.fullTimeGoals}</td>
