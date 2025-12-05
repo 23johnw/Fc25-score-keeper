@@ -3080,8 +3080,8 @@ body.dark-mode .filter-stat-item {
 
 .history-controls {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 0.5rem;
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+    gap: 0.4rem;
     align-items: center;
 }
 
@@ -3091,15 +3091,13 @@ body.dark-mode .filter-stat-item {
 
 .history-controls .date-input {
     min-width: 0;
+    width: 100%;
 }
 
-@media (min-width: 540px) {
-    .history-controls {
-        grid-template-columns: repeat(2, minmax(180px, 1fr));
-    }
-    .history-controls .date-input {
-        width: 100%;
-    }
+.history-controls .btn,
+.history-controls button[type="button"] {
+    grid-column: 1 / -1;
+    width: 100%;
 }
 
 .match-history-item {
