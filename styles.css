@@ -3065,9 +3065,9 @@ body.dark-mode .filter-stat-item {
     border: 1px solid var(--border-color);
     background: rgba(33, 150, 243, 0.08);
     color: var(--text-primary);
-    padding: 0.65rem 0.85rem;
+    padding: 0.55rem 0.75rem;
     border-radius: 10px;
-    margin: 0.5rem 0 0.25rem 0;
+    margin: 0.35rem 0 0.15rem 0;
     font-weight: 700;
     text-align: center;
     cursor: pointer;
@@ -3078,8 +3078,28 @@ body.dark-mode .filter-stat-item {
     background: rgba(33, 150, 243, 0.15);
 }
 
+.history-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.5rem;
+    align-items: center;
+}
+
 .history-controls.collapsed {
     display: none;
+}
+
+.history-controls .date-input {
+    min-width: 0;
+}
+
+@media (min-width: 540px) {
+    .history-controls {
+        grid-template-columns: repeat(2, minmax(180px, 1fr));
+    }
+    .history-controls .date-input {
+        width: 100%;
+    }
 }
 
 .match-history-item {
