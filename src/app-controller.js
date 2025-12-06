@@ -188,9 +188,10 @@ class AppController {
         });
 
         // Stats screen
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => this.switchStatsTab(e.target.dataset.tab));
-        });
+        const statsTabSelect = document.getElementById('statsTabSelect');
+        if (statsTabSelect) {
+            statsTabSelect.addEventListener('change', (e) => this.switchStatsTab(e.target.value));
+        }
         document.querySelectorAll('.mode-btn').forEach(btn => {
             btn.addEventListener('click', (e) => this.switchStatsMode(e.target.dataset.mode));
         });
@@ -1469,8 +1470,9 @@ class AppController {
     }
 
     getActiveStatsTab() {
-        const activeTabBtn = document.querySelector('.tab-btn.active');
-        return activeTabBtn ? activeTabBtn.dataset.tab : 'today';
+        const select = document.getElementById('statsTabSelect');
+        if (select && select.value) return select.value;
+        return 'today';
     }
 
     setByDateButtonActive(active = false) {
@@ -1503,7 +1505,10 @@ class AppController {
         this.customFilterActive = true;
         this.lastStatsTab = this.getActiveStatsTab();
         // Clear tab button active states so only By Date indicates active filter
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        const statsTabSelect = document.getElementById('statsTabSelect');
+        if (statsTabSelect) {
+            statsTabSelect.value = '';
+        }
 
         // Hide normal stats panels while filter is active
         const todayStats = document.getElementById('todayStats');
@@ -1553,15 +1558,16 @@ class AppController {
             this.renderCustomStatsSection();
             return;
         }
-        const activeBtn = document.querySelector('.tab-btn.active');
-        const targetTab = activeBtn ? activeBtn.dataset.tab : 'today';
+        const select = document.getElementById('statsTabSelect');
+        const targetTab = select ? select.value : 'today';
         this.switchStatsTab(targetTab || 'today');
     }
 
     switchStatsTab(tab) {
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.tab === tab);
-        });
+        const select = document.getElementById('statsTabSelect');
+        if (select) {
+            select.value = tab;
+        }
 
         const seasonStats = document.getElementById('seasonStats');
         const overallStats = document.getElementById('overallStats');
@@ -1699,21 +1705,23 @@ class AppController {
         const container = document.getElementById(containerId);
         if (!container) return;
 
-        const tabsHTML = STAT_GROUPS.map(group => `
-            <button class="category-btn ${selectedCategory === group.key ? 'active' : ''}" data-category="${group.key}">
-                ${group.label}
-            </button>
+        const selectId = `${containerId}Select`;
+        const optionsHTML = STAT_GROUPS.map(group => `
+            <option value="${group.key}" ${selectedCategory === group.key ? 'selected' : ''}>${group.label}</option>
         `).join('');
-
-        container.innerHTML = tabsHTML;
+        container.innerHTML = `
+            <label style="font-size: 0.9rem; margin-right: 0.35rem;">Group:</label>
+            <select class="category-select" id="${selectId}" data-type="${type}" style="min-width: 160px;">
+                ${optionsHTML}
+            </select>
+        `;
         
-        // Add event listeners for group buttons
-        container.querySelectorAll('.category-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const category = e.target.dataset.category;
-                this.switchStatsCategory(type, category);
+        const selectEl = container.querySelector('.category-select');
+        if (selectEl) {
+            selectEl.addEventListener('change', (e) => {
+                this.switchStatsCategory(type, e.target.value);
             });
-        });
+        }
     }
     
     switchStatsCategory(type, category) {
@@ -1722,9 +1730,18 @@ class AppController {
             this.currentStatsState = {};
         }
         this.currentStatsState[type] = { category, subcategory: null };
-        
-        // Re-render category tabs to show/hide subcategories
-        this.renderCategoryTabs(type, category);
+        // Update select value if it exists
+        const containerId = type === 'season' ? 'seasonCategoryTabs'
+            : type === 'overall' ? 'overallCategoryTabs'
+            : type === 'today' ? 'todayCategoryTabs'
+            : type === 'custom' ? 'customCategoryTabs'
+            : null;
+        if (containerId) {
+            const selectEl = document.querySelector(`#${containerId} .category-select`);
+            if (selectEl && selectEl.value !== category) {
+                selectEl.value = category;
+            }
+        }
         
         const currentSeason = this.seasonManager.getCurrentSeason();
         const selectedGroup = STAT_GROUPS.find(g => g.key === category) || STAT_GROUPS[0];
@@ -1822,8 +1839,8 @@ class AppController {
             let calculatorIds = null;
             const categoryTabs = document.getElementById(categoryTabsId);
             if (categoryTabs) {
-                const activeCategoryBtn = categoryTabs.querySelector('.category-btn.active');
-                const activeKey = activeCategoryBtn ? activeCategoryBtn.dataset.category : null;
+                const selectEl = categoryTabs.querySelector('.category-select');
+                const activeKey = selectEl ? selectEl.value : null;
                 const selectedGroup = STAT_GROUPS.find(g => g.key === activeKey) || STAT_GROUPS[0];
                 calculatorIds = selectedGroup ? selectedGroup.calculatorIds : null;
             }
@@ -1897,8 +1914,8 @@ class AppController {
             let calculatorIds = null;
             const categoryTabs = document.getElementById(categoryTabsId);
             if (categoryTabs) {
-                const activeCategoryBtn = categoryTabs.querySelector('.category-btn.active');
-                const activeKey = activeCategoryBtn ? activeCategoryBtn.dataset.category : null;
+                const selectEl = categoryTabs.querySelector('.category-select');
+                const activeKey = selectEl ? selectEl.value : null;
                 const selectedGroup = STAT_GROUPS.find(g => g.key === activeKey) || STAT_GROUPS[0];
                 calculatorIds = selectedGroup ? selectedGroup.calculatorIds : null;
             }
