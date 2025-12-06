@@ -666,9 +666,12 @@ const STAT_GROUPS = [
             'winRate',
             'streak',
             'form',
+            'clutchPerformance',
             'avgGoalsPerGame',
             'totalGoals',
             'goalDifference',
+            'cleanSheetStats',
+            'volatility',
             'extraTimePenalties'
         ]
     },
@@ -707,7 +710,8 @@ const STAT_GROUPS = [
         calculatorIds: [
             'dailyMatchesChart',
             'dayOfWeekChart',
-            'matchDistributionChart'
+            'matchDistributionChart',
+            'timeOfDayPerformance'
         ]
     }
 ];
@@ -728,6 +732,10 @@ class StatDescriptions {
             'worstLosses': 'Records showing best wins (most goals scored, biggest margin) and worst losses (most goals conceded, biggest deficit).',
             'avgGoalsPerGame': 'Average number of goals scored per game for each player.',
             'form': 'Last 5 games form showing recent match results (W/D/L) and points earned.',
+            'clutchPerformance': 'Shows tight (one-goal) wins/losses and blowout results per player, plus tight-win rate.',
+            'cleanSheetStats': 'Clean sheets, goals-allowed buckets, and average goals conceded per game for each player.',
+            'volatility': 'Goal-difference volatility per player (average goal difference and standard deviation).',
+            'timeOfDayPerformance': 'Win/draw/loss split by time of day (morning, afternoon, evening, night) for each player.',
             'headToHead': 'Statistics for player pairs: "Together" shows results when playing as teammates, "Against" shows head-to-head matchups.',
             'trendAnalysis': 'Compares early vs recent performance to show if players are improving, declining, or stable. Strength percentage indicates how significant the trend is.',
             'comparativeStats': 'Direct comparison between player pairs showing win rates when facing each other.',
@@ -754,7 +762,11 @@ class StatDescriptions {
             'leaguePoints': 'League table sorted by points, where each win = 1 point. This simple scoring system rewards wins equally.',
             'worstLosses': 'Records table showing: Worst Loss - Most Goals Conceded (highest goals allowed in a single loss), Worst Loss - Biggest Deficit (largest goal difference in a loss), Best Win - Most Goals Scored (highest goals scored in a win), Best Win - Biggest Surplus (largest goal difference in a win).',
             'avgGoalsPerGame': 'Average goals per game is calculated as total goals divided by games played. This metric helps identify consistently high-scoring players regardless of total matches played.',
-            'form': 'Form shows results from the last 5 matches (W = Win, D = Draw, L = Loss) and total points earned. Points are calculated as wins × 3 + draws. This indicates recent performance trends.',
+            'form': 'Form shows results from the last 5 matches (W = Win, D = Draw, L = Loss) and total points earned. Points are calculated as wins + draws (1 point per win or draw). This indicates recent performance trends.',
+            'clutchPerformance': 'Tight and blowout results: one-goal wins/losses, blowout wins/losses, and tight win rate for each player.',
+            'cleanSheetStats': 'Defensive view showing clean sheets, goals-allowed distribution (0,1,2,3+), and average goals conceded per game.',
+            'volatility': 'Goal-difference volatility per player: average goal difference and standard deviation across their matches.',
+            'timeOfDayPerformance': 'Win/draw/loss records by time of day (morning, afternoon, evening, night) to reveal when players perform best.',
             'headToHead': 'Head-to-head statistics for player pairs. "Together" shows results when two players are on the same team (wins-draws-losses). "Against" shows results when the two players face each other in opposing teams.',
             'trendAnalysis': 'Trend analysis compares performance across three periods (early, middle, late) to identify if players are improving, declining, or stable. The strength percentage (0-100%) indicates how significant the trend is. A value of 0% means stable performance with no significant change.',
             'comparativeStats': 'Player comparison shows win rates for each player when facing specific opponents. This helps identify matchups where certain players perform better or worse.',
@@ -1871,9 +1883,9 @@ StatisticsCalculators.register({
         
         const sorted = Object.entries(data)
             .sort((a, b) => {
-                // Sort by points (W=3, D=1, L=0) then by most recent wins
-                const pointsA = b[1].wins * 3 + b[1].draws;
-                const pointsB = a[1].wins * 3 + a[1].draws;
+                // Sort by points (W=1, D=1, L=0) then by most recent wins
+                const pointsA = (b[1].wins || 0) + (b[1].draws || 0);
+                const pointsB = (a[1].wins || 0) + (a[1].draws || 0);
                 if (pointsA !== pointsB) return pointsA - pointsB;
                 return b[1].wins - a[1].wins;
             });
@@ -1899,7 +1911,7 @@ StatisticsCalculators.register({
                                 return '<span style="color: #f44336; font-weight: bold;">L</span>';
                             }).join(' ')
                             : '-';
-                        const points = Math.round((stats.wins * 3 + stats.draws) * 10) / 10;
+                        const points = (stats.wins || 0) + (stats.draws || 0);
                         return `
                             <tr>
                                 <td class="player-name">${player}</td>
@@ -1915,6 +1927,418 @@ StatisticsCalculators.register({
             </table>
         `;
         
+        container.innerHTML = html;
+        return container;
+    }
+});
+
+// Clutch (Tight & Blowout) Performance
+StatisticsCalculators.register({
+    id: 'clutchPerformance',
+    name: 'Tight & Blowout Results',
+    category: 'performance',
+    subcategory: 'wins-losses',
+    calculate: (matches, players) => {
+        const stats = {};
+        players.forEach(player => {
+            stats[player] = {
+                tightWins: 0,
+                tightLosses: 0,
+                blowoutWins: 0,
+                blowoutLosses: 0,
+                tightGames: 0,
+                winRateTight: 0
+            };
+        });
+
+        matches.forEach(match => {
+            const { team1, team2, team1Score, team2Score, result } = match;
+            if (typeof team1Score === 'undefined' || typeof team2Score === 'undefined') {
+                return;
+            }
+
+            const team1Players = Array.isArray(team1) ? team1 : [team1];
+            const team2Players = Array.isArray(team2) ? team2 : [team2];
+            const margin = team1Score - team2Score;
+            const absMargin = Math.abs(margin);
+
+            const winningTeam = result === 'team1' ? team1Players : result === 'team2' ? team2Players : null;
+            const losingTeam = result === 'team1' ? team2Players : result === 'team2' ? team1Players : null;
+
+            if (absMargin === 1 && winningTeam && losingTeam) {
+                winningTeam.forEach(p => {
+                    if (stats[p]) {
+                        stats[p].tightWins++;
+                        stats[p].tightGames++;
+                    }
+                });
+                losingTeam.forEach(p => {
+                    if (stats[p]) {
+                        stats[p].tightLosses++;
+                        stats[p].tightGames++;
+                    }
+                });
+            }
+
+            if (absMargin >= 3 && winningTeam && losingTeam) {
+                winningTeam.forEach(p => {
+                    if (stats[p]) {
+                        stats[p].blowoutWins++;
+                    }
+                });
+                losingTeam.forEach(p => {
+                    if (stats[p]) {
+                        stats[p].blowoutLosses++;
+                    }
+                });
+            }
+        });
+
+        Object.keys(stats).forEach(player => {
+            const playerStats = stats[player];
+            if (playerStats.tightGames > 0) {
+                playerStats.winRateTight = Math.round((playerStats.tightWins / playerStats.tightGames) * 1000) / 10;
+            }
+        });
+
+        return stats;
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card';
+
+        const sorted = Object.entries(data).sort((a, b) => {
+            if (b[1].tightWins !== a[1].tightWins) {
+                return b[1].tightWins - a[1].tightWins;
+            }
+            return (b[1].tightGames || 0) - (a[1].tightGames || 0);
+        });
+
+        const html = `
+            <table class="league-table">
+                <thead>
+                    <tr>
+                        <th>Player</th>
+                        <th>Tight (W-L)</th>
+                        <th>Tight Win %</th>
+                        <th>Blowout (W-L)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${sorted.map(([player, stats]) => {
+                        const tightRecord = `${stats.tightWins}-${stats.tightLosses}`;
+                        const blowoutRecord = `${stats.blowoutWins}-${stats.blowoutLosses}`;
+                        const tightWinRate = stats.tightGames ? `${stats.winRateTight}%` : '-';
+                        return `
+                            <tr>
+                                <td class="player-name">${player}</td>
+                                <td>${tightRecord}</td>
+                                <td>${tightWinRate}</td>
+                                <td>${blowoutRecord}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        `;
+
+        container.innerHTML = html;
+        return container;
+    }
+});
+
+// Clean Sheets & Goals Allowed Distribution
+StatisticsCalculators.register({
+    id: 'cleanSheetStats',
+    name: 'Clean Sheets & GA',
+    category: 'performance',
+    subcategory: 'defense',
+    calculate: (matches, players) => {
+        const stats = {};
+        players.forEach(player => {
+            stats[player] = {
+                cleanSheets: 0,
+                goalsAgainst: 0,
+                games: 0,
+                gaBuckets: { zero: 0, one: 0, two: 0, threePlus: 0 },
+                avgGoalsAgainst: 0
+            };
+        });
+
+        matches.forEach(match => {
+            const { team1, team2, team1Score, team2Score } = match;
+            if (typeof team1Score === 'undefined' || typeof team2Score === 'undefined') {
+                return;
+            }
+            const team1Players = Array.isArray(team1) ? team1 : [team1];
+            const team2Players = Array.isArray(team2) ? team2 : [team2];
+
+            team1Players.forEach(p => {
+                if (!stats[p]) return;
+                const ga = team2Score;
+                stats[p].goalsAgainst += ga;
+                stats[p].games++;
+                if (ga === 0) stats[p].cleanSheets++;
+                if (ga === 0) stats[p].gaBuckets.zero++;
+                else if (ga === 1) stats[p].gaBuckets.one++;
+                else if (ga === 2) stats[p].gaBuckets.two++;
+                else stats[p].gaBuckets.threePlus++;
+            });
+
+            team2Players.forEach(p => {
+                if (!stats[p]) return;
+                const ga = team1Score;
+                stats[p].goalsAgainst += ga;
+                stats[p].games++;
+                if (ga === 0) stats[p].cleanSheets++;
+                if (ga === 0) stats[p].gaBuckets.zero++;
+                else if (ga === 1) stats[p].gaBuckets.one++;
+                else if (ga === 2) stats[p].gaBuckets.two++;
+                else stats[p].gaBuckets.threePlus++;
+            });
+        });
+
+        Object.keys(stats).forEach(player => {
+            const s = stats[player];
+            s.avgGoalsAgainst = s.games ? Math.round((s.goalsAgainst / s.games) * 100) / 100 : 0;
+        });
+
+        return stats;
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card';
+
+        const sorted = Object.entries(data).sort((a, b) => {
+            if (b[1].cleanSheets !== a[1].cleanSheets) {
+                return b[1].cleanSheets - a[1].cleanSheets;
+            }
+            return (a[1].avgGoalsAgainst || 0) - (b[1].avgGoalsAgainst || 0);
+        });
+
+        const html = `
+            <table class="league-table">
+                <thead>
+                    <tr>
+                        <th>Player</th>
+                        <th>CS</th>
+                        <th>GA/gm</th>
+                        <th>0 GA</th>
+                        <th>1 GA</th>
+                        <th>2 GA</th>
+                        <th>3+ GA</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${sorted.map(([player, stats]) => `
+                        <tr>
+                            <td class="player-name">${player}</td>
+                            <td>${stats.cleanSheets}</td>
+                            <td>${stats.avgGoalsAgainst.toFixed(2)}</td>
+                            <td>${stats.gaBuckets.zero}</td>
+                            <td>${stats.gaBuckets.one}</td>
+                            <td>${stats.gaBuckets.two}</td>
+                            <td>${stats.gaBuckets.threePlus}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+
+        container.innerHTML = html;
+        return container;
+    }
+});
+
+// Goal Difference Volatility
+StatisticsCalculators.register({
+    id: 'volatility',
+    name: 'Goal Difference Volatility',
+    category: 'performance',
+    subcategory: 'form',
+    calculate: (matches, players) => {
+        const stats = {};
+        players.forEach(player => {
+            stats[player] = {
+                games: 0,
+                totalGD: 0,
+                gdSquares: 0,
+                avgGD: 0,
+                stdDev: 0
+            };
+        });
+
+        matches.forEach(match => {
+            const { team1, team2, team1Score, team2Score } = match;
+            if (typeof team1Score === 'undefined' || typeof team2Score === 'undefined') {
+                return;
+            }
+            const team1Players = Array.isArray(team1) ? team1 : [team1];
+            const team2Players = Array.isArray(team2) ? team2 : [team2];
+
+            const updatePlayer = (player, gd) => {
+                if (!stats[player]) return;
+                stats[player].games++;
+                stats[player].totalGD += gd;
+                stats[player].gdSquares += gd * gd;
+            };
+
+            team1Players.forEach(p => updatePlayer(p, team1Score - team2Score));
+            team2Players.forEach(p => updatePlayer(p, team2Score - team1Score));
+        });
+
+        Object.keys(stats).forEach(player => {
+            const s = stats[player];
+            if (s.games > 0) {
+                s.avgGD = s.totalGD / s.games;
+                const variance = (s.gdSquares / s.games) - (s.avgGD * s.avgGD);
+                s.stdDev = Math.sqrt(Math.max(variance, 0));
+            }
+        });
+
+        return stats;
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card';
+
+        const sorted = Object.entries(data).sort((a, b) => (b[1].stdDev || 0) - (a[1].stdDev || 0));
+
+        const html = `
+            <table class="league-table">
+                <thead>
+                    <tr>
+                        <th>Player</th>
+                        <th>Avg GD</th>
+                        <th>Std Dev</th>
+                        <th>GP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${sorted.map(([player, stats]) => `
+                        <tr>
+                            <td class="player-name">${player}</td>
+                            <td>${stats.avgGD ? stats.avgGD.toFixed(2) : '0.00'}</td>
+                            <td>${stats.stdDev ? stats.stdDev.toFixed(2) : '0.00'}</td>
+                            <td>${stats.games}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+
+        container.innerHTML = html;
+        return container;
+    }
+});
+
+// Time-of-Day Performance
+StatisticsCalculators.register({
+    id: 'timeOfDayPerformance',
+    name: 'Time of Day Performance',
+    category: 'timeline',
+    subcategory: 'time',
+    calculate: (matches, players) => {
+        const periods = ['morning', 'afternoon', 'evening', 'night'];
+        const stats = {};
+        players.forEach(player => {
+            stats[player] = {
+                periods: {
+                    morning: { wins: 0, draws: 0, losses: 0, games: 0 },
+                    afternoon: { wins: 0, draws: 0, losses: 0, games: 0 },
+                    evening: { wins: 0, draws: 0, losses: 0, games: 0 },
+                    night: { wins: 0, draws: 0, losses: 0, games: 0 }
+                }
+            };
+        });
+
+        const getPeriod = (date) => {
+            const hour = date.getHours();
+            if (hour >= 6 && hour < 12) return 'morning';
+            if (hour >= 12 && hour < 18) return 'afternoon';
+            if (hour >= 18 && hour < 24) return 'evening';
+            return 'night';
+        };
+
+        matches.forEach(match => {
+            const { team1, team2, team1Score, team2Score, result, timestamp } = match;
+            if (!timestamp || typeof team1Score === 'undefined' || typeof team2Score === 'undefined') {
+                return;
+            }
+            const date = new Date(timestamp);
+            if (isNaN(date.getTime())) return;
+
+            const team1Players = Array.isArray(team1) ? team1 : [team1];
+            const team2Players = Array.isArray(team2) ? team2 : [team2];
+            const period = getPeriod(date);
+
+            const updatePlayer = (player, outcome) => {
+                if (!stats[player]) return;
+                const bucket = stats[player].periods[period];
+                if (!bucket) return;
+                if (outcome === 'win') bucket.wins++;
+                else if (outcome === 'draw') bucket.draws++;
+                else bucket.losses++;
+                bucket.games++;
+            };
+
+            if (result === 'draw') {
+                [...team1Players, ...team2Players].forEach(p => updatePlayer(p, 'draw'));
+            } else if (result === 'team1') {
+                team1Players.forEach(p => updatePlayer(p, 'win'));
+                team2Players.forEach(p => updatePlayer(p, 'loss'));
+            } else if (result === 'team2') {
+                team2Players.forEach(p => updatePlayer(p, 'win'));
+                team1Players.forEach(p => updatePlayer(p, 'loss'));
+            }
+        });
+
+        return stats;
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card';
+
+        const formatPeriod = (bucket) => {
+            if (!bucket || bucket.games === 0) return '-';
+            const winRate = Math.round((bucket.wins / bucket.games) * 100);
+            return `${bucket.wins}-${bucket.draws}-${bucket.losses} (${winRate}%)`;
+        };
+
+        const sorted = Object.entries(data).sort((a, b) => {
+            const gamesA = Object.values(a[1].periods).reduce((sum, p) => sum + (p.games || 0), 0);
+            const gamesB = Object.values(b[1].periods).reduce((sum, p) => sum + (p.games || 0), 0);
+            return gamesB - gamesA;
+        });
+
+        const html = `
+            <table class="league-table">
+                <thead>
+                    <tr>
+                        <th>Player</th>
+                        <th>Morning</th>
+                        <th>Afternoon</th>
+                        <th>Evening</th>
+                        <th>Night</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${sorted.map(([player, stats]) => {
+                        const { morning, afternoon, evening, night } = stats.periods;
+                        return `
+                            <tr>
+                                <td class="player-name">${player}</td>
+                                <td>${formatPeriod(morning)}</td>
+                                <td>${formatPeriod(afternoon)}</td>
+                                <td>${formatPeriod(evening)}</td>
+                                <td>${formatPeriod(night)}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        `;
+
         container.innerHTML = html;
         return container;
     }
@@ -5276,11 +5700,33 @@ class ShareManager {
                 } else if (calculator.id === 'streak') {
                     sortedEntries = sortedEntries.sort((a, b) => (b[1].currentStreak || 0) - (a[1].currentStreak || 0));
                 } else if (calculator.id === 'form') {
-                    // Form: sort by points (wins × 3 + draws for form, as shown in description)
+                    // Form: sort by points (wins + draws, 1 point each)
                     sortedEntries = sortedEntries.sort((a, b) => {
-                        const pointsA = (b[1].wins || 0) * 3 + (b[1].draws || 0);
-                        const pointsB = (a[1].wins || 0) * 3 + (a[1].draws || 0);
+                        const pointsA = (b[1].wins || 0) + (b[1].draws || 0);
+                        const pointsB = (a[1].wins || 0) + (a[1].draws || 0);
                         return pointsA - pointsB;
+                    });
+                } else if (calculator.id === 'clutchPerformance') {
+                    sortedEntries = sortedEntries.sort((a, b) => {
+                        if ((b[1].tightWins || 0) !== (a[1].tightWins || 0)) {
+                            return (b[1].tightWins || 0) - (a[1].tightWins || 0);
+                        }
+                        return (b[1].tightGames || 0) - (a[1].tightGames || 0);
+                    });
+                } else if (calculator.id === 'cleanSheetStats') {
+                    sortedEntries = sortedEntries.sort((a, b) => {
+                        if ((b[1].cleanSheets || 0) !== (a[1].cleanSheets || 0)) {
+                            return (b[1].cleanSheets || 0) - (a[1].cleanSheets || 0);
+                        }
+                        return (a[1].avgGoalsAgainst || 0) - (b[1].avgGoalsAgainst || 0);
+                    });
+                } else if (calculator.id === 'volatility') {
+                    sortedEntries = sortedEntries.sort((a, b) => (b[1].stdDev || 0) - (a[1].stdDev || 0));
+                } else if (calculator.id === 'timeOfDayPerformance') {
+                    sortedEntries = sortedEntries.sort((a, b) => {
+                        const gamesA = Object.values(a[1].periods || {}).reduce((sum, p) => sum + (p.games || 0), 0);
+                        const gamesB = Object.values(b[1].periods || {}).reduce((sum, p) => sum + (p.games || 0), 0);
+                        return gamesB - gamesA;
                     });
                 } else if (calculator.id === 'leaguePoints') {
                     // League: sort by points (1 point per win)
@@ -5393,6 +5839,58 @@ class ShareManager {
                         `${(stats.winRate || 0)}%`,
                         (stats.games || 0).toString()
                     ]);
+                } else if (calculator.id === 'clutchPerformance') {
+                    headers = ['Pos', 'Player', 'Tight W-L', 'Tight Win %', 'Blowout W-L'];
+                    colWidths = [12, 80, 30, 30, 35];
+                    rows = sortedEntries.slice(0, 20).map(([player, stats], index) => [
+                        (index + 1).toString(),
+                        player.substring(0, 25),
+                        `${stats.tightWins || 0}-${stats.tightLosses || 0}`,
+                        stats.winRateTight ? `${stats.winRateTight}%` : '-',
+                        `${stats.blowoutWins || 0}-${stats.blowoutLosses || 0}`
+                    ]);
+                } else if (calculator.id === 'cleanSheetStats') {
+                    headers = ['Pos', 'Player', 'CS', 'GA/gm', '0 GA', '1 GA', '2 GA', '3+ GA'];
+                    colWidths = [12, 60, 15, 20, 15, 15, 15, 18];
+                    rows = sortedEntries.slice(0, 20).map(([player, stats], index) => [
+                        (index + 1).toString(),
+                        player.substring(0, 20),
+                        (stats.cleanSheets || 0).toString(),
+                        (stats.avgGoalsAgainst || 0).toFixed(2),
+                        (stats.gaBuckets?.zero || 0).toString(),
+                        (stats.gaBuckets?.one || 0).toString(),
+                        (stats.gaBuckets?.two || 0).toString(),
+                        (stats.gaBuckets?.threePlus || 0).toString()
+                    ]);
+                } else if (calculator.id === 'volatility') {
+                    headers = ['Pos', 'Player', 'Avg GD', 'Std Dev', 'GP'];
+                    colWidths = [12, 80, 25, 25, 20];
+                    rows = sortedEntries.slice(0, 20).map(([player, stats], index) => [
+                        (index + 1).toString(),
+                        player.substring(0, 20),
+                        (stats.avgGD || 0).toFixed(2),
+                        (stats.stdDev || 0).toFixed(2),
+                        (stats.games || 0).toString()
+                    ]);
+                } else if (calculator.id === 'timeOfDayPerformance') {
+                    headers = ['Pos', 'Player', 'Morning', 'Afternoon', 'Evening', 'Night'];
+                    colWidths = [12, 55, 35, 35, 35, 35];
+                    const formatPeriod = (bucket) => {
+                        if (!bucket || bucket.games === 0) return '-';
+                        const winRate = Math.round((bucket.wins / bucket.games) * 100);
+                        return `${bucket.wins}-${bucket.draws}-${bucket.losses} (${winRate}%)`;
+                    };
+                    rows = sortedEntries.slice(0, 20).map(([player, stats], index) => {
+                        const { morning, afternoon, evening, night } = stats.periods || {};
+                        return [
+                            (index + 1).toString(),
+                            player.substring(0, 18),
+                            formatPeriod(morning),
+                            formatPeriod(afternoon),
+                            formatPeriod(evening),
+                            formatPeriod(night)
+                        ];
+                    });
                 } else if (calculator.id === 'streak') {
                     headers = ['Pos', 'Player', 'Streak', 'Type'];
                     colWidths = [12, 100, 25, 35];
@@ -5410,7 +5908,7 @@ class ShareManager {
                     colWidths = [12, 70, 25, 15, 15, 15, 20];
                     rows = sortedEntries.slice(0, 20).map(([player, stats], index) => {
                         const formStr = (stats.form || []).slice(-5).map(f => f === 'W' ? 'W' : f === 'D' ? 'D' : 'L').join('');
-                        const points = (stats.wins || 0) * 3 + (stats.draws || 0);
+                        const points = (stats.wins || 0) + (stats.draws || 0);
                         return [
                             (index + 1).toString(),
                             player.substring(0, 18),
