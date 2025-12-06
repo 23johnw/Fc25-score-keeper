@@ -2402,6 +2402,17 @@ body.dark-mode {
     color: #E0E0E0;
 }
 
+body.dark-mode h1,
+body.dark-mode h2,
+body.dark-mode h3,
+body.dark-mode h4,
+body.dark-mode h5,
+body.dark-mode h6,
+body.dark-mode label,
+body.dark-mode .screen-description {
+    color: #F5F5F5;
+}
+
 body.dark-mode .screen-content,
 body.dark-mode .stat-card,
 body.dark-mode .card,
@@ -2410,6 +2421,13 @@ body.dark-mode .round-structure-card,
 body.dark-mode .sequence-item,
 body.dark-mode .match-history-item {
     background-color: #1E1E1E;
+    color: #E0E0E0;
+}
+
+body.dark-mode .settings-section,
+body.dark-mode .stats-header,
+body.dark-mode .stats-header-actions {
+    background-color: #1A1A1A;
     color: #E0E0E0;
 }
 
@@ -2425,6 +2443,19 @@ body.dark-mode .score-input {
     border-color: #424242;
 }
 
+body.dark-mode .settings-input,
+body.dark-mode .category-select,
+body.dark-mode #statsTabSelect {
+    background-color: #2C2C2C;
+    color: #F5F5F5;
+    border: 1px solid #4A4A4A;
+}
+
+body.dark-mode select option {
+    background-color: #1E1E1E;
+    color: #E0E0E0;
+}
+
 body.dark-mode .league-table,
 body.dark-mode table {
     background-color: #1E1E1E;
@@ -2433,6 +2464,14 @@ body.dark-mode table {
 body.dark-mode .league-table th,
 body.dark-mode .league-table td {
     border-color: #424242;
+}
+
+/* By Date panel and modals */
+body.dark-mode .by-date-panel,
+body.dark-mode .by-date-modal,
+body.dark-mode .modal-content {
+    background-color: #1E1E1E;
+    color: #E0E0E0;
 }
 
 /* Match History */
