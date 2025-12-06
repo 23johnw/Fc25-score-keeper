@@ -2451,9 +2451,34 @@ body.dark-mode #statsTabSelect {
     border: 1px solid #4A4A4A;
 }
 
+body.dark-mode .date-input {
+    background-color: #2C2C2C;
+    color: #F5F5F5;
+    border: 1px solid #4A4A4A;
+}
+
 body.dark-mode select option {
     background-color: #1E1E1E;
     color: #E0E0E0;
+}
+
+/* Match/Team screens */
+body.dark-mode .match-info,
+body.dark-mode .match-result,
+body.dark-mode .score-input-container,
+body.dark-mode .score-input-group,
+body.dark-mode .team-combinations,
+body.dark-mode .team-combinations-grid,
+body.dark-mode .team-combination-card,
+body.dark-mode .sequence-list,
+body.dark-mode .sequence-item {
+    background-color: #1C1C1C;
+    border-color: #333;
+}
+body.dark-mode .score-separator,
+body.dark-mode .vs,
+body.dark-mode .match-info span {
+    color: #F5F5F5;
 }
 
 body.dark-mode .league-table,
@@ -2466,12 +2491,58 @@ body.dark-mode .league-table td {
     border-color: #424242;
 }
 
+/* Settings - visuals player color items */
+body.dark-mode .player-color-item {
+    background-color: #1E1E1E;
+    border: 1px solid #333;
+    color: #F5F5F5;
+}
+
 /* By Date panel and modals */
 body.dark-mode .by-date-panel,
 body.dark-mode .by-date-modal,
 body.dark-mode .modal-content {
     background-color: #1E1E1E;
     color: #E0E0E0;
+}
+
+/* History filters and inputs */
+body.dark-mode .history-controls,
+body.dark-mode .history-view-toggle,
+body.dark-mode .history-quick-filters {
+    background-color: #1A1A1A;
+}
+body.dark-mode .history-controls .filter-select,
+body.dark-mode .history-controls .search-input,
+body.dark-mode .history-controls .date-input {
+    background-color: #2C2C2C;
+    color: #F5F5F5;
+    border: 1px solid #4A4A4A;
+}
+body.dark-mode .view-toggle-btn,
+body.dark-mode .history-quick-btn {
+    background-color: #2A2A2A;
+    border-color: #3A3A3A;
+    color: #F5F5F5;
+}
+body.dark-mode .view-toggle-btn.active,
+body.dark-mode .history-quick-btn.active {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #fff;
+}
+
+/* Bottom navigation */
+body.dark-mode .bottom-nav {
+    background-color: #0F0F0F;
+    border-top: 1px solid #2A2A2A;
+}
+body.dark-mode .nav-btn {
+    color: #E0E0E0;
+}
+body.dark-mode .nav-btn.active,
+body.dark-mode .nav-btn:focus {
+    background-color: #1E1E1E;
 }
 
 /* Match History */
