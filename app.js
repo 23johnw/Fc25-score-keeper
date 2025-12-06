@@ -6826,6 +6826,14 @@ class AppController {
         if (pointsSettingsBtn) {
             pointsSettingsBtn.addEventListener('click', () => this.openPointsSettingsModal());
         }
+        // Fallback delegated handler in case button is re-rendered
+        document.addEventListener('click', (e) => {
+            const trigger = e.target.closest('#pointsSettingsBtn');
+            if (trigger) {
+                e.preventDefault();
+                this.openPointsSettingsModal();
+            }
+        });
         document.getElementById('newSeasonBtn').addEventListener('click', () => this.startNewSeason());
         document.getElementById('exportDataBtn').addEventListener('click', () => this.exportData());
         document.getElementById('importDataBtn').addEventListener('click', () => this.importData());
@@ -9500,10 +9508,18 @@ class AppController {
         if (winInput) winInput.value = points.win;
         if (drawInput) drawInput.value = points.draw;
         if (lossInput) lossInput.value = points.loss;
-        modal.style.display = 'block';
+        modal.style.display = 'flex';
         if (winInput) {
             setTimeout(() => winInput.focus(), 50);
         }
+        // Close on Escape
+        const escapeHandler = (e) => {
+            if (e.key === 'Escape') {
+                this.closePointsSettingsModal();
+                document.removeEventListener('keydown', escapeHandler);
+            }
+        };
+        document.addEventListener('keydown', escapeHandler);
     }
 
     closePointsSettingsModal() {
