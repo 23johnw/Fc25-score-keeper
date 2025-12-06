@@ -209,6 +209,7 @@
                 </div>
                 
                 <button id="submitScoreBtn" class="btn btn-primary" style="margin-top: 1rem;">Record Score</button>
+                <button id="undoLastMatchBtn" class="btn btn-secondary" style="margin-top: 0.5rem;">Undo Last Match</button>
             </div>
 
             <div class="button-group">
@@ -310,7 +311,13 @@
                 <button id="historyTimelineViewBtn" class="view-toggle-btn" data-view="timeline">📅 Timeline</button>
             </div>
 
-            <button id="historyFiltersToggle" class="filters-toggle" aria-expanded="true">Filters ▾</button>
+            <div class="history-quick-filters" style="display: flex; gap: 0.5rem; margin: 0.5rem 0;">
+                <button class="view-toggle-btn history-quick-btn active" data-filter="all">All</button>
+                <button class="view-toggle-btn history-quick-btn" data-filter="current">This season</button>
+                <button class="view-toggle-btn history-quick-btn" data-filter="today">Today</button>
+            </div>
+
+            <button id="historyFiltersToggle" class="filters-toggle" aria-expanded="true">More filters ▾</button>
 
             <div id="historyControlsWrapper" class="history-controls">
                 <select id="historyFilter" class="filter-select">

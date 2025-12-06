@@ -32,6 +32,7 @@ class AppController {
         this.lastPDFBlobUrl = null; // Store last exported PDF for viewing
         this.currentByDateFilter = { from: null, to: null, selectedDate: null };
         this.playedDates = [];
+        this.lastRecordedMatch = null; // Store last recorded match for undo
         
         // Initialize lock labels before anything else that might use them
         this.updateLockLabels();
@@ -142,6 +143,10 @@ class AppController {
         // Match screen
         document.getElementById('submitScoreBtn').addEventListener('click', () => this.recordScore());
         document.getElementById('backToSequenceBtn').addEventListener('click', () => this.showScreen('sequenceScreen'));
+        const undoBtn = document.getElementById('undoLastMatchBtn');
+        if (undoBtn) {
+            undoBtn.addEventListener('click', () => this.undoLastMatch());
+        }
         
         // Extra time and penalties checkboxes
         const extraTimeCheckbox = document.getElementById('wentToExtraTime');
@@ -243,9 +248,15 @@ class AppController {
                 const isCollapsed = historyControlsWrapper.classList.toggle('collapsed');
                 historyControlsWrapper.style.display = isCollapsed ? 'none' : 'grid';
                 historyFiltersToggle.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
-                historyFiltersToggle.textContent = isCollapsed ? 'Filters ▸' : 'Filters ▾';
+                historyFiltersToggle.textContent = isCollapsed ? 'More filters ▸' : 'More filters ▾';
             });
         }
+        document.querySelectorAll('.history-quick-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const filter = btn.dataset.filter || 'all';
+                this.setHistoryQuickFilter(filter);
+            });
+        });
 
         // Settings screen
         document.querySelectorAll('.settings-tab-btn').forEach(btn => {
@@ -1206,7 +1217,8 @@ class AppController {
         }
 
         const { team1, team2 } = this.currentMatch;
-        if (this.matchRecorder.recordMatch(
+        const matchIndex = this.currentGameIndex;
+        const savedMatch = this.matchRecorder.recordMatch(
             team1, 
             team2, 
             team1Score, 
@@ -1215,7 +1227,12 @@ class AppController {
             team2ExtraTimeScore,
             team1PenaltiesScore,
             team2PenaltiesScore
-        )) {
+        );
+        
+        if (savedMatch) {
+            // Track last recorded match for undo
+            this.lastRecordedMatch = { match: savedMatch, gameIndex: matchIndex };
+
             // Reset score inputs
             document.getElementById('team1Score').value = 0;
             document.getElementById('team2Score').value = 0;
@@ -1366,6 +1383,32 @@ class AppController {
         const matches = this.getCustomMatches();
         this.renderCustomStatsSection(matches);
         this.toggleByDatePanel(false);
+    }
+
+    // Undo last recorded match and re-show that matchup for correction
+    undoLastMatch() {
+        if (!this.lastRecordedMatch || !this.lastRecordedMatch.match) {
+            this.toastManager.info('No match to undo');
+            return;
+        }
+
+        const { match, gameIndex } = this.lastRecordedMatch;
+        this.matchRecorder.deleteMatch(match.timestamp);
+
+        // Rewind to that match in the sequence
+        this.currentGameIndex = typeof gameIndex === 'number' ? gameIndex : Math.max(0, this.currentGameIndex - 1);
+        this.lastRecordedMatch = null;
+
+        // Refresh derived data
+        this.updatePlayedDates();
+        this.renderCustomStatsSection();
+        if (this.currentScreen === 'historyScreen') {
+            this.loadMatchHistory();
+        }
+
+        // Show the same matchup again for re-entry
+        this.showCurrentMatch();
+        this.toastManager.success('Last match removed. Re-enter the score.', 'Undo');
     }
 
     getCustomMatches() {
@@ -1949,6 +1992,30 @@ class AppController {
     }
 
     // Match History
+    setHistoryQuickFilter(filter = 'all') {
+        const select = document.getElementById('historyFilter');
+        if (select) {
+            select.value = ['all', 'current', 'today'].includes(filter) ? filter : 'all';
+        }
+        // Clear other filters for quick taps
+        const search = document.getElementById('historySearch');
+        const from = document.getElementById('historyDateFrom');
+        const to = document.getElementById('historyDateTo');
+        if (search) search.value = '';
+        if (from) from.value = '';
+        if (to) to.value = '';
+
+        this.updateHistoryQuickFilterButtons(filter);
+        this.loadMatchHistory();
+    }
+
+    updateHistoryQuickFilterButtons(activeFilter = 'all') {
+        document.querySelectorAll('.history-quick-btn').forEach(btn => {
+            const matches = (btn.dataset.filter || 'all') === activeFilter;
+            btn.classList.toggle('active', matches);
+        });
+    }
+
     loadMatchHistory() {
         const listContainer = document.getElementById('matchHistoryList');
         const timelineContainer = document.getElementById('matchHistoryTimeline');
@@ -1961,6 +2028,7 @@ class AppController {
         }
 
         const filter = document.getElementById('historyFilter').value;
+        this.updateHistoryQuickFilterButtons(filter);
         const search = document.getElementById('historySearch').value.toLowerCase();
         const dateFrom = document.getElementById('historyDateFrom').value;
         const dateTo = document.getElementById('historyDateTo').value;

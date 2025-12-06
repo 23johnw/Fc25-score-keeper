@@ -32,13 +32,14 @@ class MatchRecorder {
             result = 'draw';
         }
 
+        const timestamp = new Date().toISOString();
         const match = {
             team1: team1,
             team2: team2,
             team1Score: team1Score,
             team2Score: team2Score,
             result: result, // Automatically determined from scores
-            timestamp: new Date().toISOString()
+            timestamp
         };
 
         // Add extra time scores if provided
@@ -54,13 +55,15 @@ class MatchRecorder {
         }
 
         const currentSeason = this.seasonManager.getCurrentSeason();
-        return this.storage.updateData(data => {
+        const saved = this.storage.updateData(data => {
             if (!data.seasons[currentSeason]) {
                 data.seasons[currentSeason] = { matches: [], startDate: new Date().toISOString() };
             }
             data.seasons[currentSeason].matches.push(match);
             data.overallStats.totalMatches = (data.overallStats.totalMatches || 0) + 1;
         });
+
+        return saved ? match : null;
     }
 
     getCurrentSeasonMatches() {
@@ -153,6 +156,30 @@ class MatchRecorder {
                 }
             }
         });
+    }
+
+    // Delete the most recently recorded match in the current season
+    deleteLastMatch() {
+        const currentSeason = this.seasonManager.getCurrentSeason();
+        const data = this.storage.getData();
+        const season = data.seasons[currentSeason];
+        if (!season || !season.matches || season.matches.length === 0) {
+            return null;
+        }
+
+        const removedMatch = season.matches[season.matches.length - 1];
+
+        this.storage.updateData(d => {
+            const s = d.seasons[currentSeason];
+            if (s && s.matches && s.matches.length > 0) {
+                s.matches.pop();
+                if (d.overallStats.totalMatches > 0) {
+                    d.overallStats.totalMatches--;
+                }
+            }
+        });
+
+        return removedMatch;
     }
 }
 
