@@ -6220,6 +6220,25 @@ class AppController {
             });
         }
 
+        // Auto-select score inputs on focus so new typing replaces existing values
+        const autoSelectIds = [
+            // Match screen
+            'team1Score', 'team2Score',
+            'team1ExtraTimeScore', 'team2ExtraTimeScore',
+            'team1PenaltiesScore', 'team2PenaltiesScore',
+            // Edit modal
+            'editTeam1Score', 'editTeam2Score',
+            'editTeam1ExtraTimeScore', 'editTeam2ExtraTimeScore',
+            'editTeam1PenaltiesScore', 'editTeam2PenaltiesScore'
+        ];
+        autoSelectIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('focus', () => requestAnimationFrame(() => el.select()));
+            // Prevent mouseup/tap from clearing the selection
+            el.addEventListener('mouseup', (e) => e.preventDefault());
+        });
+
         // Stats screen
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', (e) => this.switchStatsTab(e.target.dataset.tab));
