@@ -1,9 +1,26 @@
-const CACHE_NAME = 'fc25-score-tracker-v62';
+const CACHE_NAME = 'fc25-score-tracker-v63';
 const BASE_PATH = '/Fc25-score-keeper';
 const urlsToCache = [
   `${BASE_PATH}/`,
   `${BASE_PATH}/index.html`,
   `${BASE_PATH}/styles.css`,
+  // Split application scripts
+  `${BASE_PATH}/src/constants.js`,
+  `${BASE_PATH}/src/persistence.js`,
+  `${BASE_PATH}/src/settings.js`,
+  `${BASE_PATH}/src/players.js`,
+  `${BASE_PATH}/src/team-generator.js`,
+  `${BASE_PATH}/src/stats-calculators.js`,
+  `${BASE_PATH}/src/statistics-tracker.js`,
+  `${BASE_PATH}/src/toast.js`,
+  `${BASE_PATH}/src/statistics-display.js`,
+  `${BASE_PATH}/src/match.js`,
+  `${BASE_PATH}/src/season.js`,
+  `${BASE_PATH}/src/share.js`,
+  `${BASE_PATH}/src/touch.js`,
+  `${BASE_PATH}/src/app-controller.js`,
+  `${BASE_PATH}/src/main.js`,
+  // Legacy single-bundle (kept for compatibility)
   `${BASE_PATH}/app.js`,
   `${BASE_PATH}/manifest.json`,
   `${BASE_PATH}/icon-192.png`,
