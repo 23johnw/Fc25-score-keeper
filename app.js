@@ -264,6 +264,11 @@ class SettingsManager {
                 away: 'Away',
                 neutral: 'Neutral'
             },
+            pointsPerResult: {
+                win: 1,
+                draw: 1,
+                loss: 0
+            },
             playerColors: {},
             darkMode: false
         };
@@ -315,6 +320,34 @@ class SettingsManager {
 
     getPlayerColor(playerName) {
         return this.settings.playerColors[playerName] || null;
+    }
+
+    getPointsPerResult() {
+        const defaults = this.getDefaultSettings().pointsPerResult;
+        const stored = this.settings.pointsPerResult || {};
+        const parseVal = (v, fallback) => {
+            const num = Number(v);
+            return Number.isFinite(num) ? num : fallback;
+        };
+        return {
+            win: parseVal(stored.win, defaults.win),
+            draw: parseVal(stored.draw, defaults.draw),
+            loss: parseVal(stored.loss, defaults.loss)
+        };
+    }
+
+    setPointsPerResult({ win, draw, loss }) {
+        const defaults = this.getDefaultSettings().pointsPerResult;
+        const parseVal = (v, fallback) => {
+            const num = Number(v);
+            return Number.isFinite(num) ? num : fallback;
+        };
+        this.settings.pointsPerResult = {
+            win: parseVal(win, defaults.win),
+            draw: parseVal(draw, defaults.draw),
+            loss: parseVal(loss, defaults.loss)
+        };
+        return this.saveSettings();
     }
 
     setPlayerColor(playerName, color) {
@@ -728,10 +761,10 @@ class StatDescriptions {
             'streak': 'Shows the current consecutive win or loss streak for each player.',
             'totalGoals': 'Total goals scored by each player across all matches.',
             'goalDifference': 'Goal difference (goals for - goals against) for each player.',
-            'leaguePoints': 'League table with points calculated as 1 point per win. Sorted by points.',
+            'leaguePoints': 'League table using your points settings (win/draw/loss). Sorted by points.',
             'worstLosses': 'Records showing best wins (most goals scored, biggest margin) and worst losses (most goals conceded, biggest deficit).',
             'avgGoalsPerGame': 'Average number of goals scored per game for each player.',
-            'form': 'Last 5 games form showing recent match results (W/D/L) and points earned.',
+            'form': 'Last 5 games form showing recent match results (W/D/L) and points earned using your points settings.',
             'clutchPerformance': 'Shows tight (one-goal) wins/losses and blowout results per player, plus tight-win rate.',
             'cleanSheetStats': 'Clean sheets, goals-allowed buckets, and average goals conceded per game for each player.',
             'volatility': 'Goal-difference volatility per player (average goal difference and standard deviation).',
@@ -759,10 +792,10 @@ class StatDescriptions {
             'streak': 'Current streak shows consecutive wins or losses. A positive streak indicates recent good form, while a negative streak suggests recent struggles.',
             'totalGoals': 'Total goals scored across all matches. This includes goals from both wins and losses, giving an overall picture of offensive performance.',
             'goalDifference': 'Goal difference is calculated as goals for (GF) - goals against (GA). Positive values indicate strong offensive and defensive play, while negative values suggest areas for improvement.',
-            'leaguePoints': 'League table sorted by points, where each win = 1 point. This simple scoring system rewards wins equally.',
+            'leaguePoints': 'League table sorted by points, using your configured values for win/draw/loss.',
             'worstLosses': 'Records table showing: Worst Loss - Most Goals Conceded (highest goals allowed in a single loss), Worst Loss - Biggest Deficit (largest goal difference in a loss), Best Win - Most Goals Scored (highest goals scored in a win), Best Win - Biggest Surplus (largest goal difference in a win).',
             'avgGoalsPerGame': 'Average goals per game is calculated as total goals divided by games played. This metric helps identify consistently high-scoring players regardless of total matches played.',
-            'form': 'Form shows results from the last 5 matches (W = Win, D = Draw, L = Loss) and total points earned. Points are calculated as wins + draws (1 point per win or draw). This indicates recent performance trends.',
+            'form': 'Form shows results from the last 5 matches (W = Win, D = Draw, L = Loss) and total points earned using your configured points for win/draw/loss. This indicates recent performance trends.',
             'clutchPerformance': 'Tight and blowout results: one-goal wins/losses, blowout wins/losses, and tight win rate for each player.',
             'cleanSheetStats': 'Defensive view showing clean sheets, goals-allowed distribution (0,1,2,3+), and average goals conceded per game.',
             'volatility': 'Goal-difference volatility per player: average goal difference and standard deviation across their matches.',
@@ -1285,7 +1318,7 @@ StatisticsCalculators.register({
     id: 'leaguePoints',
     name: 'League Table',
     category: 'league',
-    calculate: (matches, players) => {
+    calculate: (matches, players, pointsConfig = { win: 1, draw: 1, loss: 0 }) => {
         const stats = {};
         players.forEach(player => {
             stats[player] = { 
@@ -1299,6 +1332,22 @@ StatisticsCalculators.register({
             };
         });
 
+        const normalizePoints = (cfg) => {
+            const fallback = { win: 1, draw: 1, loss: 0 };
+            if (!cfg || typeof cfg !== 'object') return fallback;
+            const num = (v, fb) => {
+                const n = Number(v);
+                return Number.isFinite(n) ? n : fb;
+            };
+            return {
+                win: num(cfg.win, fallback.win),
+                draw: num(cfg.draw, fallback.draw),
+                loss: num(cfg.loss, fallback.loss)
+            };
+        };
+
+        const { win: winPts, draw: drawPts, loss: lossPts } = normalizePoints(pointsConfig);
+
         matches.forEach(match => {
             const { team1, team2, result, team1Score, team2Score } = match;
             
@@ -1311,19 +1360,19 @@ StatisticsCalculators.register({
             const team2Players = Array.isArray(team2) ? team2 : [team2];
 
             if (result === 'team1') {
-                // Team 1 wins - each player gets 1 point
+                // Team 1 wins
                 team1Players.forEach(p => {
                     if (stats[p]) {
-                        stats[p].points += 1;
+                        stats[p].points += winPts;
                         stats[p].wins++;
                         stats[p].games++;
                         stats[p].goalsFor += team1Score;
                         stats[p].goalsAgainst += team2Score;
                     }
                 });
-                // Team 2 loses - 0 points
                 team2Players.forEach(p => {
                     if (stats[p]) {
+                        stats[p].points += lossPts;
                         stats[p].losses++;
                         stats[p].games++;
                         stats[p].goalsFor += team2Score;
@@ -1331,19 +1380,19 @@ StatisticsCalculators.register({
                     }
                 });
             } else if (result === 'team2') {
-                // Team 2 wins - each player gets 1 point
+                // Team 2 wins
                 team2Players.forEach(p => {
                     if (stats[p]) {
-                        stats[p].points += 1;
+                        stats[p].points += winPts;
                         stats[p].wins++;
                         stats[p].games++;
                         stats[p].goalsFor += team2Score;
                         stats[p].goalsAgainst += team1Score;
                     }
                 });
-                // Team 1 loses - 0 points
                 team1Players.forEach(p => {
                     if (stats[p]) {
+                        stats[p].points += lossPts;
                         stats[p].losses++;
                         stats[p].games++;
                         stats[p].goalsFor += team1Score;
@@ -1351,10 +1400,10 @@ StatisticsCalculators.register({
                     }
                 });
             } else if (result === 'draw') {
-                // Draw - all players get 1 point
+                // Draw
                 [...team1Players, ...team2Players].forEach(p => {
                     if (stats[p]) {
-                        stats[p].points += 1;
+                        stats[p].points += drawPts;
                         stats[p].draws++;
                         stats[p].games++;
                         // Goals for/against depend on which team they're on
@@ -1827,16 +1876,32 @@ StatisticsCalculators.register({
     name: 'Form (Last 5 Games)',
     category: 'performance',
     subcategory: 'form',
-    calculate: (matches, players) => {
+    calculate: (matches, players, pointsConfig = { win: 1, draw: 1, loss: 0 }) => {
         const stats = {};
         players.forEach(player => {
             stats[player] = {
                 form: [],
                 wins: 0,
                 draws: 0,
-                losses: 0
+                losses: 0,
+                points: 0
             };
         });
+
+        const normalizePoints = (cfg) => {
+            const fallback = { win: 1, draw: 1, loss: 0 };
+            if (!cfg || typeof cfg !== 'object') return fallback;
+            const num = (v, fb) => {
+                const n = Number(v);
+                return Number.isFinite(n) ? n : fb;
+            };
+            return {
+                win: num(cfg.win, fallback.win),
+                draw: num(cfg.draw, fallback.draw),
+                loss: num(cfg.loss, fallback.loss)
+            };
+        };
+        const { win: winPts, draw: drawPts, loss: lossPts } = normalizePoints(pointsConfig);
 
         // Sort matches by date (most recent first)
         const sortedMatches = [...matches].sort((a, b) => 
@@ -1862,12 +1927,15 @@ StatisticsCalculators.register({
                 if (result === 'draw') {
                     outcome = 'D';
                     stats[player].draws++;
+                    stats[player].points += drawPts;
                 } else if ((result === 'team1' && inTeam1) || (result === 'team2' && inTeam2)) {
                     outcome = 'W';
                     stats[player].wins++;
+                    stats[player].points += winPts;
                 } else {
                     outcome = 'L';
                     stats[player].losses++;
+                    stats[player].points += lossPts;
                 }
                 
                 stats[player].form.push(outcome);
@@ -1883,9 +1951,9 @@ StatisticsCalculators.register({
         
         const sorted = Object.entries(data)
             .sort((a, b) => {
-                // Sort by points (W=1, D=1, L=0) then by most recent wins
-                const pointsA = (b[1].wins || 0) + (b[1].draws || 0);
-                const pointsB = (a[1].wins || 0) + (a[1].draws || 0);
+                // Sort by points (configurable) then by wins
+                const pointsA = Number.isFinite(b[1].points) ? b[1].points : ((b[1].wins || 0) + (b[1].draws || 0));
+                const pointsB = Number.isFinite(a[1].points) ? a[1].points : ((a[1].wins || 0) + (a[1].draws || 0));
                 if (pointsA !== pointsB) return pointsA - pointsB;
                 return b[1].wins - a[1].wins;
             });
@@ -1911,7 +1979,7 @@ StatisticsCalculators.register({
                                 return '<span style="color: #f44336; font-weight: bold;">L</span>';
                             }).join(' ')
                             : '-';
-                        const points = (stats.wins || 0) + (stats.draws || 0);
+                        const points = Number.isFinite(stats.points) ? stats.points : (stats.wins || 0) + (stats.draws || 0);
                         return `
                             <tr>
                                 <td class="player-name">${player}</td>
@@ -4234,8 +4302,9 @@ StatisticsCalculators.register({
 // ============================================================================
 
 class StatisticsTracker {
-    constructor(storageManager) {
+    constructor(storageManager, settingsManager = null) {
         this.storage = storageManager;
+        this.settingsManager = settingsManager;
         this.statsMode = 'raw'; // raw | perGame | projected
     }
 
@@ -4268,9 +4337,10 @@ class StatisticsTracker {
         const calculators = StatisticsCalculators.getAll();
         const gamesPlayedMap = this.getGamesPlayed(matches);
         const maxGamesPlayed = Math.max(...Object.values(gamesPlayedMap || { 0: 0 }), 0);
+        const pointsConfig = this.getPointsConfig();
 
         calculators.forEach(calculator => {
-            const calculated = calculator.calculate(matches, players);
+            const calculated = calculator.calculate(matches, players, pointsConfig);
             stats[calculator.id] = this.applyModeToStats(calculated, calculator.id, gamesPlayedMap, maxGamesPlayed);
         });
 
@@ -4468,6 +4538,14 @@ class StatisticsTracker {
     getCustomStats(fromDateStr = null, toDateStr = null) {
         const matches = this.getMatchesByDateRange(fromDateStr, toDateStr);
         return this.calculateStatistics(matches, 'custom');
+    }
+
+    getPointsConfig() {
+        const defaults = { win: 1, draw: 1, loss: 0 };
+        if (this.settingsManager && typeof this.settingsManager.getPointsPerResult === 'function') {
+            return this.settingsManager.getPointsPerResult();
+        }
+        return defaults;
     }
 }
 
@@ -5700,10 +5778,10 @@ class ShareManager {
                 } else if (calculator.id === 'streak') {
                     sortedEntries = sortedEntries.sort((a, b) => (b[1].currentStreak || 0) - (a[1].currentStreak || 0));
                 } else if (calculator.id === 'form') {
-                    // Form: sort by points (wins + draws, 1 point each)
+                    // Form: sort by points (configurable)
                     sortedEntries = sortedEntries.sort((a, b) => {
-                        const pointsA = (b[1].wins || 0) + (b[1].draws || 0);
-                        const pointsB = (a[1].wins || 0) + (a[1].draws || 0);
+                        const pointsA = Number.isFinite(b[1].points) ? b[1].points : ((b[1].wins || 0) + (b[1].draws || 0));
+                        const pointsB = Number.isFinite(a[1].points) ? a[1].points : ((a[1].wins || 0) + (a[1].draws || 0));
                         return pointsA - pointsB;
                     });
                 } else if (calculator.id === 'clutchPerformance') {
@@ -5908,7 +5986,7 @@ class ShareManager {
                     colWidths = [12, 70, 25, 15, 15, 15, 20];
                     rows = sortedEntries.slice(0, 20).map(([player, stats], index) => {
                         const formStr = (stats.form || []).slice(-5).map(f => f === 'W' ? 'W' : f === 'D' ? 'D' : 'L').join('');
-                        const points = (stats.wins || 0) + (stats.draws || 0);
+                        const points = Number.isFinite(stats.points) ? stats.points : (stats.wins || 0) + (stats.draws || 0);
                         return [
                             (index + 1).toString(),
                             player.substring(0, 18),
@@ -6566,7 +6644,7 @@ class AppController {
         this.teamGenerator = new TeamGenerator();
         this.seasonManager = new SeasonManager(this.storage);
         this.matchRecorder = new MatchRecorder(this.storage, this.seasonManager);
-        this.statisticsTracker = new StatisticsTracker(this.storage);
+        this.statisticsTracker = new StatisticsTracker(this.storage, this.settingsManager);
         this.statisticsDisplay = new StatisticsDisplay(this.statisticsTracker, this.settingsManager);
         this.shareManager = new ShareManager(this.storage, this.statisticsTracker, this.seasonManager);
         
@@ -6744,6 +6822,10 @@ class AppController {
         document.querySelectorAll('.mode-btn').forEach(btn => {
             btn.addEventListener('click', (e) => this.switchStatsMode(e.target.dataset.mode));
         });
+        const pointsSettingsBtn = document.getElementById('pointsSettingsBtn');
+        if (pointsSettingsBtn) {
+            pointsSettingsBtn.addEventListener('click', () => this.openPointsSettingsModal());
+        }
         document.getElementById('newSeasonBtn').addEventListener('click', () => this.startNewSeason());
         document.getElementById('exportDataBtn').addEventListener('click', () => this.exportData());
         document.getElementById('importDataBtn').addEventListener('click', () => this.importData());
@@ -6817,6 +6899,22 @@ class AppController {
             darkModeSetting.addEventListener('change', (e) => {
                 this.settingsManager.setDarkMode(e.target.checked);
                 this.toggleDarkMode();
+            });
+        }
+        const savePointsSettingsBtn = document.getElementById('savePointsSettingsBtn');
+        if (savePointsSettingsBtn) {
+            savePointsSettingsBtn.addEventListener('click', () => this.savePointsSettings());
+        }
+        const cancelPointsSettingsBtn = document.getElementById('cancelPointsSettingsBtn');
+        if (cancelPointsSettingsBtn) {
+            cancelPointsSettingsBtn.addEventListener('click', () => this.closePointsSettingsModal());
+        }
+        const pointsModal = document.getElementById('pointsSettingsModal');
+        if (pointsModal) {
+            pointsModal.addEventListener('click', (e) => {
+                if (e.target === pointsModal) {
+                    this.closePointsSettingsModal();
+                }
             });
         }
 
@@ -9390,6 +9488,51 @@ class AppController {
         if (bannerVersion) {
             this.displayAppVersion(bannerVersion);
         }
+    }
+
+    openPointsSettingsModal() {
+        const modal = document.getElementById('pointsSettingsModal');
+        if (!modal) return;
+        const winInput = document.getElementById('pointsWinInput');
+        const drawInput = document.getElementById('pointsDrawInput');
+        const lossInput = document.getElementById('pointsLossInput');
+        const points = this.settingsManager.getPointsPerResult();
+        if (winInput) winInput.value = points.win;
+        if (drawInput) drawInput.value = points.draw;
+        if (lossInput) lossInput.value = points.loss;
+        modal.style.display = 'block';
+        if (winInput) {
+            setTimeout(() => winInput.focus(), 50);
+        }
+    }
+
+    closePointsSettingsModal() {
+        const modal = document.getElementById('pointsSettingsModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }
+
+    savePointsSettings() {
+        const winInput = document.getElementById('pointsWinInput');
+        const drawInput = document.getElementById('pointsDrawInput');
+        const lossInput = document.getElementById('pointsLossInput');
+        const parseVal = (input, fallback) => {
+            if (!input) return fallback;
+            const num = Number(input.value);
+            return Number.isFinite(num) ? num : fallback;
+        };
+        const defaults = this.settingsManager.getDefaultSettings().pointsPerResult;
+        const next = {
+            win: parseVal(winInput, defaults.win),
+            draw: parseVal(drawInput, defaults.draw),
+            loss: parseVal(lossInput, defaults.loss)
+        };
+        this.settingsManager.setPointsPerResult(next);
+        this.closePointsSettingsModal();
+        this.toastManager.show('Points settings updated', 'success');
+        // Recompute all stats with new points
+        this.refreshCurrentStatsWithDateFilter();
     }
 
     async displayAppVersion(versionDisplayElement) {

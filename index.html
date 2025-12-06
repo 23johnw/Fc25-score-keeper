@@ -235,6 +235,7 @@
                     </div>
                 <div style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 0.5rem; align-items: center;">
                     <button id="byDateStatsBtn" class="btn btn-secondary" style="padding: 0.35rem 0.75rem;">By Date</button>
+                    <button id="pointsSettingsBtn" class="btn btn-secondary" style="padding: 0.35rem 0.75rem;">Points Settings</button>
                     <button id="viewLastPDFBtn" class="btn btn-secondary" title="View Last Exported PDF" disabled style="opacity: 0.5; cursor: not-allowed;">👁️ View PDF</button>
                 </div>
             </div>
@@ -413,6 +414,30 @@
                 <button id="saveEditMatchBtn" class="btn btn-primary">Save Changes</button>
                 <button id="cancelEditMatchBtn" class="btn btn-secondary">Cancel</button>
                 <button id="deleteMatchBtn" class="btn btn-secondary" style="background-color: #f44336;">Delete Match</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Points Settings Modal -->
+    <div id="pointsSettingsModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3>Points Settings</h3>
+            <p class="settings-description">Set points awarded for each result. Changes update all stats immediately.</p>
+            <div class="settings-group">
+                <label for="pointsWinInput">Points for a Win</label>
+                <input type="number" id="pointsWinInput" class="settings-input" step="0.1" inputmode="decimal">
+            </div>
+            <div class="settings-group">
+                <label for="pointsDrawInput">Points for a Draw</label>
+                <input type="number" id="pointsDrawInput" class="settings-input" step="0.1" inputmode="decimal">
+            </div>
+            <div class="settings-group">
+                <label for="pointsLossInput">Points for a Loss</label>
+                <input type="number" id="pointsLossInput" class="settings-input" step="0.1" inputmode="decimal">
+            </div>
+            <div class="button-group">
+                <button id="savePointsSettingsBtn" class="btn btn-primary">Save</button>
+                <button id="cancelPointsSettingsBtn" class="btn btn-secondary">Cancel</button>
             </div>
         </div>
     </div>
