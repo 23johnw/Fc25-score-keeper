@@ -11,7 +11,7 @@ class AppController {
         this.teamGenerator = new TeamGenerator();
         this.seasonManager = new SeasonManager(this.storage);
         this.matchRecorder = new MatchRecorder(this.storage, this.seasonManager);
-        this.statisticsTracker = new StatisticsTracker(this.storage);
+        this.statisticsTracker = new StatisticsTracker(this.storage, this.settingsManager);
         this.statisticsDisplay = new StatisticsDisplay(this.statisticsTracker, this.settingsManager);
         this.shareManager = new ShareManager(this.storage, this.statisticsTracker, this.seasonManager);
         
@@ -194,6 +194,17 @@ class AppController {
         document.querySelectorAll('.mode-btn').forEach(btn => {
             btn.addEventListener('click', (e) => this.switchStatsMode(e.target.dataset.mode));
         });
+        const pointsSettingsBtn = document.getElementById('pointsSettingsBtn');
+        if (pointsSettingsBtn) {
+            pointsSettingsBtn.addEventListener('click', () => this.openPointsSettingsModal());
+        }
+        document.addEventListener('click', (e) => {
+            const trigger = e.target.closest('#pointsSettingsBtn');
+            if (trigger) {
+                e.preventDefault();
+                this.openPointsSettingsModal();
+            }
+        });
         document.getElementById('newSeasonBtn').addEventListener('click', () => this.startNewSeason());
         document.getElementById('exportDataBtn').addEventListener('click', () => this.exportData());
         document.getElementById('importDataBtn').addEventListener('click', () => this.importData());
@@ -273,6 +284,22 @@ class AppController {
             darkModeSetting.addEventListener('change', (e) => {
                 this.settingsManager.setDarkMode(e.target.checked);
                 this.toggleDarkMode();
+            });
+        }
+        const savePointsSettingsBtn = document.getElementById('savePointsSettingsBtn');
+        if (savePointsSettingsBtn) {
+            savePointsSettingsBtn.addEventListener('click', () => this.savePointsSettings());
+        }
+        const cancelPointsSettingsBtn = document.getElementById('cancelPointsSettingsBtn');
+        if (cancelPointsSettingsBtn) {
+            cancelPointsSettingsBtn.addEventListener('click', () => this.closePointsSettingsModal());
+        }
+        const pointsModal = document.getElementById('pointsSettingsModal');
+        if (pointsModal) {
+            pointsModal.addEventListener('click', (e) => {
+                if (e.target === pointsModal) {
+                    this.closePointsSettingsModal();
+                }
             });
         }
 
@@ -2971,6 +2998,57 @@ class AppController {
                 this.settingsManager.setPlayerColor(player, color);
             });
         });
+    }
+
+    openPointsSettingsModal() {
+        const modal = document.getElementById('pointsSettingsModal');
+        if (!modal) return;
+        const winInput = document.getElementById('pointsWinInput');
+        const drawInput = document.getElementById('pointsDrawInput');
+        const lossInput = document.getElementById('pointsLossInput');
+        const points = this.settingsManager.getPointsPerResult();
+        if (winInput) winInput.value = points.win;
+        if (drawInput) drawInput.value = points.draw;
+        if (lossInput) lossInput.value = points.loss;
+        modal.style.display = 'flex';
+        if (winInput) {
+            setTimeout(() => winInput.focus(), 50);
+        }
+        const escapeHandler = (e) => {
+            if (e.key === 'Escape') {
+                this.closePointsSettingsModal();
+                document.removeEventListener('keydown', escapeHandler);
+            }
+        };
+        document.addEventListener('keydown', escapeHandler);
+    }
+
+    closePointsSettingsModal() {
+        const modal = document.getElementById('pointsSettingsModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }
+
+    savePointsSettings() {
+        const winInput = document.getElementById('pointsWinInput');
+        const drawInput = document.getElementById('pointsDrawInput');
+        const lossInput = document.getElementById('pointsLossInput');
+        const parseVal = (input, fallback) => {
+            if (!input) return fallback;
+            const num = Number(input.value);
+            return Number.isFinite(num) ? num : fallback;
+        };
+        const defaults = this.settingsManager.getDefaultSettings().pointsPerResult;
+        const next = {
+            win: parseVal(winInput, defaults.win),
+            draw: parseVal(drawInput, defaults.draw),
+            loss: parseVal(lossInput, defaults.loss)
+        };
+        this.settingsManager.setPointsPerResult(next);
+        this.closePointsSettingsModal();
+        this.toastManager.show('Points settings updated', 'success');
+        this.refreshCurrentStatsWithDateFilter();
     }
 
     saveSettings() {

@@ -16,6 +16,11 @@ class SettingsManager {
                 away: 'Away',
                 neutral: 'Neutral'
             },
+            pointsPerResult: {
+                win: 1,
+                draw: 1,
+                loss: 0
+            },
             playerColors: {},
             darkMode: false
         };
@@ -67,6 +72,34 @@ class SettingsManager {
 
     getPlayerColor(playerName) {
         return this.settings.playerColors[playerName] || null;
+    }
+
+    getPointsPerResult() {
+        const defaults = this.getDefaultSettings().pointsPerResult;
+        const stored = this.settings.pointsPerResult || {};
+        const parseVal = (v, fallback) => {
+            const num = Number(v);
+            return Number.isFinite(num) ? num : fallback;
+        };
+        return {
+            win: parseVal(stored.win, defaults.win),
+            draw: parseVal(stored.draw, defaults.draw),
+            loss: parseVal(stored.loss, defaults.loss)
+        };
+    }
+
+    setPointsPerResult({ win, draw, loss }) {
+        const defaults = this.getDefaultSettings().pointsPerResult;
+        const parseVal = (v, fallback) => {
+            const num = Number(v);
+            return Number.isFinite(num) ? num : fallback;
+        };
+        this.settings.pointsPerResult = {
+            win: parseVal(win, defaults.win),
+            draw: parseVal(draw, defaults.draw),
+            loss: parseVal(loss, defaults.loss)
+        };
+        return this.saveSettings();
     }
 
     setPlayerColor(playerName, color) {

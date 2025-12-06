@@ -117,10 +117,10 @@ class StatDescriptions {
             'streak': 'Shows the current consecutive win or loss streak for each player.',
             'totalGoals': 'Total goals scored by each player across all matches.',
             'goalDifference': 'Goal difference (goals for - goals against) for each player.',
-            'leaguePoints': 'League table with points calculated as 1 point per win. Sorted by points.',
+            'leaguePoints': 'League table using your points settings (win/draw/loss). Sorted by points.',
             'worstLosses': 'Records showing best wins (most goals scored, biggest margin) and worst losses (most goals conceded, biggest deficit).',
             'avgGoalsPerGame': 'Average number of goals scored per game for each player.',
-            'form': 'Last 5 games form showing recent match results (W/D/L) and points earned.',
+            'form': 'Last 5 games form showing recent match results (W/D/L) and points earned using your points settings.',
             'headToHead': 'Statistics for player pairs: "Together" shows results when playing as teammates, "Against" shows head-to-head matchups.',
             'trendAnalysis': 'Compares early vs recent performance to show if players are improving, declining, or stable. Strength percentage indicates how significant the trend is.',
             'comparativeStats': 'Direct comparison between player pairs showing win rates when facing each other.',
@@ -144,10 +144,10 @@ class StatDescriptions {
             'streak': 'Current streak shows consecutive wins or losses. A positive streak indicates recent good form, while a negative streak suggests recent struggles.',
             'totalGoals': 'Total goals scored across all matches. This includes goals from both wins and losses, giving an overall picture of offensive performance.',
             'goalDifference': 'Goal difference is calculated as goals for (GF) - goals against (GA). Positive values indicate strong offensive and defensive play, while negative values suggest areas for improvement.',
-            'leaguePoints': 'League table sorted by points, where each win = 1 point. This simple scoring system rewards wins equally.',
+            'leaguePoints': 'League table sorted by points, using your configured values for win/draw/loss.',
             'worstLosses': 'Records table showing: Worst Loss - Most Goals Conceded (highest goals allowed in a single loss), Worst Loss - Biggest Deficit (largest goal difference in a loss), Best Win - Most Goals Scored (highest goals scored in a win), Best Win - Biggest Surplus (largest goal difference in a win).',
             'avgGoalsPerGame': 'Average goals per game is calculated as total goals divided by games played. This metric helps identify consistently high-scoring players regardless of total matches played.',
-            'form': 'Form shows results from the last 5 matches (W = Win, D = Draw, L = Loss) and total points earned. Points are calculated as wins × 3 + draws. This indicates recent performance trends.',
+            'form': 'Form shows results from the last 5 matches (W = Win, D = Draw, L = Loss) and total points earned using your configured points for win/draw/loss. This indicates recent performance trends.',
             'headToHead': 'Head-to-head statistics for player pairs. "Together" shows results when two players are on the same team (wins-draws-losses). "Against" shows results when the two players face each other in opposing teams.',
             'trendAnalysis': 'Trend analysis compares performance across three periods (early, middle, late) to identify if players are improving, declining, or stable. The strength percentage (0-100%) indicates how significant the trend is. A value of 0% means stable performance with no significant change.',
             'comparativeStats': 'Player comparison shows win rates for each player when facing specific opponents. This helps identify matchups where certain players perform better or worse.',
@@ -666,7 +666,7 @@ StatisticsCalculators.register({
     id: 'leaguePoints',
     name: 'League Table',
     category: 'league',
-    calculate: (matches, players) => {
+    calculate: (matches, players, pointsConfig = { win: 1, draw: 1, loss: 0 }) => {
         const stats = {};
         players.forEach(player => {
             stats[player] = { 
@@ -680,6 +680,22 @@ StatisticsCalculators.register({
             };
         });
 
+        const normalizePoints = (cfg) => {
+            const fallback = { win: 1, draw: 1, loss: 0 };
+            if (!cfg || typeof cfg !== 'object') return fallback;
+            const num = (v, fb) => {
+                const n = Number(v);
+                return Number.isFinite(n) ? n : fb;
+            };
+            return {
+                win: num(cfg.win, fallback.win),
+                draw: num(cfg.draw, fallback.draw),
+                loss: num(cfg.loss, fallback.loss)
+            };
+        };
+
+        const { win: winPts, draw: drawPts, loss: lossPts } = normalizePoints(pointsConfig);
+
         matches.forEach(match => {
             const { team1, team2, result, team1Score, team2Score } = match;
             
@@ -692,19 +708,19 @@ StatisticsCalculators.register({
             const team2Players = Array.isArray(team2) ? team2 : [team2];
 
             if (result === 'team1') {
-                // Team 1 wins - each player gets 1 point
+                // Team 1 wins
                 team1Players.forEach(p => {
                     if (stats[p]) {
-                        stats[p].points += 1;
+                        stats[p].points += winPts;
                         stats[p].wins++;
                         stats[p].games++;
                         stats[p].goalsFor += team1Score;
                         stats[p].goalsAgainst += team2Score;
                     }
                 });
-                // Team 2 loses - 0 points
                 team2Players.forEach(p => {
                     if (stats[p]) {
+                        stats[p].points += lossPts;
                         stats[p].losses++;
                         stats[p].games++;
                         stats[p].goalsFor += team2Score;
@@ -712,19 +728,19 @@ StatisticsCalculators.register({
                     }
                 });
             } else if (result === 'team2') {
-                // Team 2 wins - each player gets 1 point
+                // Team 2 wins
                 team2Players.forEach(p => {
                     if (stats[p]) {
-                        stats[p].points += 1;
+                        stats[p].points += winPts;
                         stats[p].wins++;
                         stats[p].games++;
                         stats[p].goalsFor += team2Score;
                         stats[p].goalsAgainst += team1Score;
                     }
                 });
-                // Team 1 loses - 0 points
                 team1Players.forEach(p => {
                     if (stats[p]) {
+                        stats[p].points += lossPts;
                         stats[p].losses++;
                         stats[p].games++;
                         stats[p].goalsFor += team1Score;
@@ -732,10 +748,10 @@ StatisticsCalculators.register({
                     }
                 });
             } else if (result === 'draw') {
-                // Draw - all players get 1 point
+                // Draw
                 [...team1Players, ...team2Players].forEach(p => {
                     if (stats[p]) {
-                        stats[p].points += 1;
+                        stats[p].points += drawPts;
                         stats[p].draws++;
                         stats[p].games++;
                         // Goals for/against depend on which team they're on
@@ -1208,16 +1224,32 @@ StatisticsCalculators.register({
     name: 'Form (Last 5 Games)',
     category: 'performance',
     subcategory: 'form',
-    calculate: (matches, players) => {
+    calculate: (matches, players, pointsConfig = { win: 1, draw: 1, loss: 0 }) => {
         const stats = {};
         players.forEach(player => {
             stats[player] = {
                 form: [],
                 wins: 0,
                 draws: 0,
-                losses: 0
+                losses: 0,
+                points: 0
             };
         });
+
+        const normalizePoints = (cfg) => {
+            const fallback = { win: 1, draw: 1, loss: 0 };
+            if (!cfg || typeof cfg !== 'object') return fallback;
+            const num = (v, fb) => {
+                const n = Number(v);
+                return Number.isFinite(n) ? n : fb;
+            };
+            return {
+                win: num(cfg.win, fallback.win),
+                draw: num(cfg.draw, fallback.draw),
+                loss: num(cfg.loss, fallback.loss)
+            };
+        };
+        const { win: winPts, draw: drawPts, loss: lossPts } = normalizePoints(pointsConfig);
 
         // Sort matches by date (most recent first)
         const sortedMatches = [...matches].sort((a, b) => 
@@ -1243,12 +1275,15 @@ StatisticsCalculators.register({
                 if (result === 'draw') {
                     outcome = 'D';
                     stats[player].draws++;
+                    stats[player].points += drawPts;
                 } else if ((result === 'team1' && inTeam1) || (result === 'team2' && inTeam2)) {
                     outcome = 'W';
                     stats[player].wins++;
+                    stats[player].points += winPts;
                 } else {
                     outcome = 'L';
                     stats[player].losses++;
+                    stats[player].points += lossPts;
                 }
                 
                 stats[player].form.push(outcome);
@@ -1264,9 +1299,9 @@ StatisticsCalculators.register({
         
         const sorted = Object.entries(data)
             .sort((a, b) => {
-                // Sort by points (W=3, D=1, L=0) then by most recent wins
-                const pointsA = b[1].wins * 3 + b[1].draws;
-                const pointsB = a[1].wins * 3 + a[1].draws;
+                // Sort by points (configurable) then by most recent wins
+                const pointsA = Number.isFinite(b[1].points) ? b[1].points : ((b[1].wins || 0) + (b[1].draws || 0));
+                const pointsB = Number.isFinite(a[1].points) ? a[1].points : ((a[1].wins || 0) + (a[1].draws || 0));
                 if (pointsA !== pointsB) return pointsA - pointsB;
                 return b[1].wins - a[1].wins;
             });
@@ -1292,7 +1327,7 @@ StatisticsCalculators.register({
                                 return '<span style="color: #f44336; font-weight: bold;">L</span>';
                             }).join(' ')
                             : '-';
-                        const points = Math.round((stats.wins * 3 + stats.draws) * 10) / 10;
+                        const points = Number.isFinite(stats.points) ? stats.points : (stats.wins || 0) + (stats.draws || 0);
                         return `
                             <tr>
                                 <td class="player-name">${player}</td>

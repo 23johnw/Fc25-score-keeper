@@ -3,8 +3,9 @@
 // ============================================================================
 
 class StatisticsTracker {
-    constructor(storageManager) {
+    constructor(storageManager, settingsManager = null) {
         this.storage = storageManager;
+        this.settingsManager = settingsManager;
         this.statsMode = 'raw'; // raw | perGame | projected
     }
 
@@ -37,9 +38,10 @@ class StatisticsTracker {
         const calculators = StatisticsCalculators.getAll();
         const gamesPlayedMap = this.getGamesPlayed(matches);
         const maxGamesPlayed = Math.max(...Object.values(gamesPlayedMap || { 0: 0 }), 0);
+        const pointsConfig = this.getPointsConfig();
 
         calculators.forEach(calculator => {
-            const calculated = calculator.calculate(matches, players);
+            const calculated = calculator.calculate(matches, players, pointsConfig);
             stats[calculator.id] = this.applyModeToStats(calculated, calculator.id, gamesPlayedMap, maxGamesPlayed);
         });
 
@@ -237,6 +239,14 @@ class StatisticsTracker {
     getCustomStats(fromDateStr = null, toDateStr = null) {
         const matches = this.getMatchesByDateRange(fromDateStr, toDateStr);
         return this.calculateStatistics(matches, 'custom');
+    }
+
+    getPointsConfig() {
+        const defaults = { win: 1, draw: 1, loss: 0 };
+        if (this.settingsManager && typeof this.settingsManager.getPointsPerResult === 'function') {
+            return this.settingsManager.getPointsPerResult();
+        }
+        return defaults;
     }
 }
 

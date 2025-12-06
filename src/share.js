@@ -621,14 +621,14 @@ class ShareManager {
                 } else if (calculator.id === 'streak') {
                     sortedEntries = sortedEntries.sort((a, b) => (b[1].currentStreak || 0) - (a[1].currentStreak || 0));
                 } else if (calculator.id === 'form') {
-                    // Form: sort by points (wins × 3 + draws for form, as shown in description)
+                    // Form: sort by points (configurable)
                     sortedEntries = sortedEntries.sort((a, b) => {
-                        const pointsA = (b[1].wins || 0) * 3 + (b[1].draws || 0);
-                        const pointsB = (a[1].wins || 0) * 3 + (a[1].draws || 0);
+                        const pointsA = Number.isFinite(b[1].points) ? b[1].points : ((b[1].wins || 0) + (b[1].draws || 0));
+                        const pointsB = Number.isFinite(a[1].points) ? a[1].points : ((a[1].wins || 0) + (a[1].draws || 0));
                         return pointsA - pointsB;
                     });
                 } else if (calculator.id === 'leaguePoints') {
-                    // League: sort by points (1 point per win)
+                    // League: sort by points (configurable)
                     sortedEntries = sortedEntries.sort((a, b) => {
                         const pointsA = (b[1].points || 0);
                         const pointsB = (a[1].points || 0);
@@ -755,7 +755,7 @@ class ShareManager {
                     colWidths = [12, 70, 25, 15, 15, 15, 20];
                     rows = sortedEntries.slice(0, 20).map(([player, stats], index) => {
                         const formStr = (stats.form || []).slice(-5).map(f => f === 'W' ? 'W' : f === 'D' ? 'D' : 'L').join('');
-                        const points = (stats.wins || 0) * 3 + (stats.draws || 0);
+                        const points = Number.isFinite(stats.points) ? stats.points : (stats.wins || 0) + (stats.draws || 0);
                         return [
                             (index + 1).toString(),
                             player.substring(0, 18),
