@@ -27,7 +27,28 @@ class StatisticsTracker {
     }
 
     getPlayers() {
-        return this.storage.getData().players || [];
+        const data = this.storage.getData();
+        const players = Array.isArray(data.players) ? [...data.players] : [];
+        const seen = new Set(players);
+        const addPlayer = (p) => {
+            if (!p) return;
+            if (!seen.has(p)) {
+                seen.add(p);
+                players.push(p);
+            }
+        };
+
+        // Include any players found in recorded matches (even if not in current players list)
+        Object.values(data.seasons || {}).forEach(season => {
+            (season.matches || []).forEach(match => {
+                const team1 = Array.isArray(match.team1) ? match.team1 : [match.team1];
+                const team2 = Array.isArray(match.team2) ? match.team2 : [match.team2];
+                team1.forEach(addPlayer);
+                team2.forEach(addPlayer);
+            });
+        });
+
+        return players;
     }
 
     calculateStatistics(matches, type = 'season') {
