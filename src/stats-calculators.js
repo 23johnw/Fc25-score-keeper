@@ -128,29 +128,35 @@ const getMatchResult = (match) => {
 const getFinalScoresForGoals = (match) => {
     const has = (v) => v !== undefined && v !== null;
 
-    // Use the same logic as getMatchResult: penalties > extra time > full time
-    // But for goals: penalties use full time scores, extra time uses extra time scores, full time uses full time scores
+    // Logic for goals: use the highest level of scores that was reached
+    // Penalties don't add goals, so use the previous level (extra time or full time)
+    // Extra time goals count, so use extra time scores
+    // Regular time goals count, so use regular time scores
 
-    // If penalties exist and were likely used (check if full time was a draw and penalties exist)
+    // If penalties were played, use the scores from the end of extra time (if played) or full time
     if (has(match.team1PenaltiesScore) && has(match.team2PenaltiesScore)) {
-        // For penalties, goals are always the full time scores
-        return {
-            team1Goals: match.team1Score || 0,
-            team2Goals: match.team2Score || 0
-        };
-    }
-
-    // If extra time exists and was likely used (full time was a draw)
-    if (has(match.team1ExtraTimeScore) && has(match.team2ExtraTimeScore)) {
-        // Check if extra time actually changed the result (full time was a draw)
-        const fullTimeDraw = (match.team1Score || 0) === (match.team2Score || 0);
-        if (fullTimeDraw) {
-            // Extra time decided the result, so use extra time scores for goals
+        // Check if extra time was also played
+        if (has(match.team1ExtraTimeScore) && has(match.team2ExtraTimeScore)) {
+            // Use extra time scores (penalties don't add goals)
             return {
                 team1Goals: match.team1ExtraTimeScore,
                 team2Goals: match.team2ExtraTimeScore
             };
+        } else {
+            // No extra time, use full time scores
+            return {
+                team1Goals: match.team1Score || 0,
+                team2Goals: match.team2Score || 0
+            };
         }
+    }
+
+    // If extra time was played (but no penalties), use extra time scores
+    if (has(match.team1ExtraTimeScore) && has(match.team2ExtraTimeScore)) {
+        return {
+            team1Goals: match.team1ExtraTimeScore,
+            team2Goals: match.team2ExtraTimeScore
+        };
     }
 
     // Otherwise, use regular time scores
