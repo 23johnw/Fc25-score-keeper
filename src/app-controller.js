@@ -1158,6 +1158,7 @@ class AppController {
             return;
         }
         this.currentGameIndex = 0;
+        this.showScreen('matchScreen'); // Make sure we're on the match screen
         this.saveCurrentGameState(); // Save the state when starting games
         this.showCurrentMatch();
     }
@@ -3178,6 +3179,11 @@ class AppController {
         // Show the saved screen
         if (this.currentScreen && this.currentScreen !== 'playerScreen') {
             this.showScreen(this.currentScreen, 'forward');
+
+            // If we're restoring to the match screen, also show the current match
+            if (this.currentScreen === 'matchScreen' && this.selectedStructure) {
+                this.showCurrentMatch();
+            }
         }
     }
 
