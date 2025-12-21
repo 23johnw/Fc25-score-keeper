@@ -162,8 +162,36 @@ class LocalStorageManager {
             playerLock: {
                 player: null,
                 side: 'neutral'
+            },
+            currentGameState: {
+                screen: null, // Current screen the user was on
+                selectedStructureIndex: null, // Which team structure was selected
+                selectedStructure: null, // The actual structure data
+                currentGameIndex: 0, // Which match in the sequence they're on
+                currentMatch: null, // Current match being played (if any)
+                enteredScores: null // Any scores that were entered but not submitted
             }
         };
+    }
+
+    // Save current game state
+    saveCurrentGameState(gameState) {
+        this.data.currentGameState = {
+            ...this.data.currentGameState,
+            ...gameState
+        };
+        this.saveData();
+    }
+
+    // Get current game state
+    getCurrentGameState() {
+        return this.data.currentGameState || this.getDefaultData().currentGameState;
+    }
+
+    // Clear current game state (when starting fresh)
+    clearCurrentGameState() {
+        this.data.currentGameState = this.getDefaultData().currentGameState;
+        this.saveData();
     }
 
     applyDefaults(data) {
@@ -176,7 +204,8 @@ class LocalStorageManager {
                 ...defaults.overallStats,
                 ...(data.overallStats || {})
             },
-            playerLock: data.playerLock || defaults.playerLock
+            playerLock: data.playerLock || defaults.playerLock,
+            currentGameState: data.currentGameState || defaults.currentGameState
         };
 
         if (!merged.playerLock || typeof merged.playerLock !== 'object') {

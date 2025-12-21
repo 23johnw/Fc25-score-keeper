@@ -54,8 +54,15 @@ class AppController {
         // Load existing players
         const players = this.playerManager.getPlayers();
         this.loadPlayersIntoUI(players);
-        this.showScreen(players.length >= 2 ? 'teamScreen' : 'playerScreen');
-        
+
+        // Try to restore saved game state
+        this.restoreSavedGameState();
+
+        // If no saved state or insufficient players, show appropriate screen
+        if (!this.currentScreen || players.length < 2) {
+            this.showScreen(players.length >= 2 ? 'teamScreen' : 'playerScreen');
+        }
+
         this.updateSeasonInfo();
         this.updatePlayerNameHistory(); // Add this line
         this.renderPlayerLockOptions();
@@ -390,6 +397,7 @@ class AppController {
         // Show target screen with enter animation
         targetScreen.classList.add('active', direction === 'forward' ? 'slide-in-right' : 'slide-in-left');
         this.currentScreen = screenId;
+        this.saveCurrentGameState(); // Save the state when screen changes
 
         // Update navigation
         document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -1025,6 +1033,7 @@ class AppController {
             this.selectedAllStructures = false; // Clear "select all" when selecting individual structure
             this.loadTeamCombinations();
             document.getElementById('confirmSequenceBtn').disabled = false;
+            this.saveCurrentGameState(); // Save the state
             console.log('Structure selected successfully');
         } else {
             console.log('Invalid structure index:', structureIndex, 'max:', structures.length - 1);
@@ -1055,6 +1064,7 @@ class AppController {
 
         this.loadTeamCombinations();
         this.toastManager.success(`Randomized order selected: Structure ${randomIndex + 1}`, 'Random Pick');
+        this.saveCurrentGameState(); // Save the state
         this.confirmSequence();
     }
 
@@ -1087,9 +1097,10 @@ class AppController {
         };
         this.selectedStructureIndex = null; // Clear individual selection
         this.selectedAllStructures = true;
-        
+
         this.loadTeamCombinations();
         document.getElementById('confirmSequenceBtn').disabled = false;
+        this.saveCurrentGameState(); // Save the state
         this.toastManager.success(`Selected all ${allMatches.length} matches from ${structures.length} structures`, 'All Selected');
         console.log('All structures selected, total matches:', allMatches.length);
     }
@@ -1147,6 +1158,7 @@ class AppController {
             return;
         }
         this.currentGameIndex = 0;
+        this.saveCurrentGameState(); // Save the state when starting games
         this.showCurrentMatch();
     }
 
@@ -1266,9 +1278,10 @@ class AppController {
             document.getElementById('team2Score').value = 0;
             this.updatePlayedDates();
             this.renderCustomStatsSection();
-            
+
             this.currentGameIndex++;
-            
+            this.saveCurrentGameState(); // Save the state after recording match
+
             if (this.selectedStructure && this.currentGameIndex < this.selectedStructure.matches.length) {
                 this.showCurrentMatch();
             } else {
@@ -3104,6 +3117,67 @@ class AppController {
                 this.settingsManager.resetAll();
                 location.reload();
             }
+        }
+    }
+
+    // Save current game state for persistence
+    saveCurrentGameState() {
+        const gameState = {
+            screen: this.currentScreen,
+            selectedStructureIndex: this.selectedStructureIndex,
+            selectedStructure: this.selectedStructure,
+            currentGameIndex: this.currentGameIndex,
+            currentMatch: this.currentMatch
+        };
+        this.storage.saveCurrentGameState(gameState);
+    }
+
+    // Restore saved game state on app startup
+    restoreSavedGameState() {
+        const savedState = this.storage.getCurrentGameState();
+
+        // Only restore if we have valid saved state and enough players
+        const players = this.playerManager.getPlayers();
+        if (!savedState || players.length < 2) {
+            return;
+        }
+
+        // Restore basic state variables
+        this.currentScreen = savedState.screen || this.currentScreen;
+        this.selectedStructureIndex = savedState.selectedStructureIndex;
+        this.selectedStructure = savedState.selectedStructure;
+        this.currentGameIndex = savedState.currentGameIndex || 0;
+        this.currentMatch = savedState.currentMatch;
+
+        // Validate that the saved structure is still valid with current players
+        if (this.selectedStructure && this.selectedStructure.matches) {
+            const currentPlayers = new Set(players);
+            const isValidStructure = this.selectedStructure.matches.every(match => {
+                const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
+                const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
+                return [...team1Players, ...team2Players].every(player => currentPlayers.has(player));
+            });
+
+            if (!isValidStructure) {
+                // Saved structure is no longer valid (players changed), clear it
+                this.selectedStructure = null;
+                this.selectedStructureIndex = null;
+                this.currentGameIndex = 0;
+                this.currentMatch = null;
+                this.storage.saveCurrentGameState({
+                    screen: this.currentScreen,
+                    selectedStructureIndex: null,
+                    selectedStructure: null,
+                    currentGameIndex: 0,
+                    currentMatch: null
+                });
+                return;
+            }
+        }
+
+        // Show the saved screen
+        if (this.currentScreen && this.currentScreen !== 'playerScreen') {
+            this.showScreen(this.currentScreen, 'forward');
         }
     }
 
