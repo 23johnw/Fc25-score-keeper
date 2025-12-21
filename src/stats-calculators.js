@@ -124,6 +124,33 @@ const getMatchResult = (match) => {
     return 'draw';
 };
 
+// Helper to get final scores for goals calculation
+const getFinalScoresForGoals = (match) => {
+    const has = (v) => v !== undefined && v !== null;
+
+    // If penalties were played, goals are the full time scores (penalties don't count as goals)
+    if (has(match.team1PenaltiesScore) && has(match.team2PenaltiesScore)) {
+        return {
+            team1Goals: match.team1Score || 0,
+            team2Goals: match.team2Score || 0
+        };
+    }
+
+    // If extra time was played, goals include extra time scores
+    if (has(match.team1ExtraTimeScore) && has(match.team2ExtraTimeScore)) {
+        return {
+            team1Goals: match.team1ExtraTimeScore,
+            team2Goals: match.team2ExtraTimeScore
+        };
+    }
+
+    // Otherwise, use regular time scores
+    return {
+        team1Goals: match.team1Score || 0,
+        team2Goals: match.team2Score || 0
+    };
+};
+
 // ============================================================================
 // StatDescriptions - Provides descriptions for statistics tables
 // ============================================================================
@@ -719,12 +746,15 @@ StatisticsCalculators.register({
         matches.forEach(match => {
             const { team1, team2, team1Score, team2Score } = match;
             const result = getMatchResult(match);
-            
+
             // Skip matches without scores
             if (typeof team1Score === 'undefined' || typeof team2Score === 'undefined') {
                 return;
             }
-            
+
+            // Get final scores for goals calculation (includes extra time, excludes penalties)
+            const finalScores = getFinalScoresForGoals(match);
+
             const team1Players = Array.isArray(team1) ? team1 : [team1];
             const team2Players = Array.isArray(team2) ? team2 : [team2];
 
@@ -735,8 +765,8 @@ StatisticsCalculators.register({
                         stats[p].points += winPts;
                         stats[p].wins++;
                         stats[p].games++;
-                        stats[p].goalsFor += team1Score;
-                        stats[p].goalsAgainst += team2Score;
+                        stats[p].goalsFor += finalScores.team1Goals;
+                        stats[p].goalsAgainst += finalScores.team2Goals;
                     }
                 });
                 team2Players.forEach(p => {
@@ -744,8 +774,8 @@ StatisticsCalculators.register({
                         stats[p].points += lossPts;
                         stats[p].losses++;
                         stats[p].games++;
-                        stats[p].goalsFor += team2Score;
-                        stats[p].goalsAgainst += team1Score;
+                        stats[p].goalsFor += finalScores.team2Goals;
+                        stats[p].goalsAgainst += finalScores.team1Goals;
                     }
                 });
             } else if (result === 'team2') {
@@ -755,8 +785,8 @@ StatisticsCalculators.register({
                         stats[p].points += winPts;
                         stats[p].wins++;
                         stats[p].games++;
-                        stats[p].goalsFor += team2Score;
-                        stats[p].goalsAgainst += team1Score;
+                        stats[p].goalsFor += finalScores.team2Goals;
+                        stats[p].goalsAgainst += finalScores.team1Goals;
                     }
                 });
                 team1Players.forEach(p => {
@@ -764,8 +794,8 @@ StatisticsCalculators.register({
                         stats[p].points += lossPts;
                         stats[p].losses++;
                         stats[p].games++;
-                        stats[p].goalsFor += team1Score;
-                        stats[p].goalsAgainst += team2Score;
+                        stats[p].goalsFor += finalScores.team1Goals;
+                        stats[p].goalsAgainst += finalScores.team2Goals;
                     }
                 });
             } else if (result === 'draw') {
@@ -777,11 +807,11 @@ StatisticsCalculators.register({
                         stats[p].games++;
                         // Goals for/against depend on which team they're on
                         if (team1Players.includes(p)) {
-                            stats[p].goalsFor += team1Score;
-                            stats[p].goalsAgainst += team2Score;
+                            stats[p].goalsFor += finalScores.team1Goals;
+                            stats[p].goalsAgainst += finalScores.team2Goals;
                         } else {
-                            stats[p].goalsFor += team2Score;
-                            stats[p].goalsAgainst += team1Score;
+                            stats[p].goalsFor += finalScores.team2Goals;
+                            stats[p].goalsAgainst += finalScores.team1Goals;
                         }
                     }
                 });
