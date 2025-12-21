@@ -105,6 +105,25 @@ const STAT_GROUPS = [
     }
 ];
 
+// Helper to derive match result, considering penalties/extra time fallback
+const getMatchResult = (match) => {
+    if (!match) return null;
+    if (match.result) return match.result;
+    const has = (v) => v !== undefined && v !== null;
+    let team1 = match.team1Score;
+    let team2 = match.team2Score;
+    if (has(match.team1PenaltiesScore) && has(match.team2PenaltiesScore)) {
+        team1 = match.team1PenaltiesScore;
+        team2 = match.team2PenaltiesScore;
+    } else if (has(match.team1ExtraTimeScore) && has(match.team2ExtraTimeScore)) {
+        team1 = match.team1ExtraTimeScore;
+        team2 = match.team2ExtraTimeScore;
+    }
+    if (team1 > team2) return 'team1';
+    if (team2 > team1) return 'team2';
+    return 'draw';
+};
+
 // ============================================================================
 // StatDescriptions - Provides descriptions for statistics tables
 // ============================================================================
@@ -180,7 +199,8 @@ StatisticsCalculators.register({
         });
 
         matches.forEach(match => {
-            const { team1, team2, result } = match;
+            const { team1, team2 } = match;
+            const result = getMatchResult(match);
             const team1Players = Array.isArray(team1) ? team1 : [team1];
             const team2Players = Array.isArray(team2) ? team2 : [team2];
 
@@ -697,7 +717,8 @@ StatisticsCalculators.register({
         const { win: winPts, draw: drawPts, loss: lossPts } = normalizePoints(pointsConfig);
 
         matches.forEach(match => {
-            const { team1, team2, result, team1Score, team2Score } = match;
+            const { team1, team2, team1Score, team2Score } = match;
+            const result = getMatchResult(match);
             
             // Skip matches without scores
             if (typeof team1Score === 'undefined' || typeof team2Score === 'undefined') {
@@ -855,7 +876,8 @@ StatisticsCalculators.register({
         });
 
         matches.forEach(match => {
-            const { team1, team2, team1Score, team2Score, result, timestamp } = match;
+            const { team1, team2, team1Score, team2Score, timestamp } = match;
+            const result = getMatchResult(match);
             
             // Skip matches without scores
             if (typeof team1Score === 'undefined' || typeof team2Score === 'undefined') {
@@ -1262,7 +1284,8 @@ StatisticsCalculators.register({
             for (const match of sortedMatches) {
                 if (gamesCount >= 5) break;
                 
-                const { team1, team2, result } = match;
+                const { team1, team2 } = match;
+                const result = getMatchResult(match);
                 const team1Players = Array.isArray(team1) ? team1 : [team1];
                 const team2Players = Array.isArray(team2) ? team2 : [team2];
                 
@@ -1786,9 +1809,10 @@ StatisticsCalculators.register({
         let wins = 0, losses = 0, draws = 0;
 
         matches.forEach(match => {
-            if (match.result === 'team1' || match.result === 'team2') {
+            const result = getMatchResult(match);
+            if (result === 'team1' || result === 'team2') {
                 wins++;
-            } else if (match.result === 'draw') {
+            } else if (result === 'draw') {
                 draws++;
             }
         });
