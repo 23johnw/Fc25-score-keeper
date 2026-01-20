@@ -192,6 +192,50 @@ body {
     background-color: rgba(33, 150, 243, 0.1);
 }
 
+.player-editable-item.absent {
+    opacity: 0.7;
+    background-color: rgba(255, 235, 59, 0.1);
+}
+
+.player-editable-item.absent .player-name-input {
+    text-decoration: line-through;
+    color: var(--text-secondary);
+}
+
+.presence-toggle {
+    display: flex;
+    align-items: center;
+    margin: 0 8px;
+    min-width: 90px;
+}
+
+.presence-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.presence-checkbox {
+    margin: 0;
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
+}
+
+.presence-text {
+    font-weight: 500;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.player-editable-item.absent .presence-text {
+    color: #ff9800;
+    font-weight: 600;
+}
+
 .drag-handle {
     width: 32px;
     height: 32px;
@@ -293,6 +337,14 @@ body.dark-mode .player-editable-item {
 
 body.dark-mode .player-editable-item.active {
     background-color: rgba(33, 150, 243, 0.2);
+}
+
+body.dark-mode .player-editable-item.absent {
+    background-color: rgba(255, 235, 59, 0.15);
+}
+
+body.dark-mode .player-editable-item.absent .presence-text {
+    color: #ffb74d;
 }
 
 /* Current Players List */

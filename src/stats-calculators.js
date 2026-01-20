@@ -2,6 +2,16 @@
 // Statistics Calculators - Modular System
 // ============================================================================
 
+// Helper function to check if a player was present in a match (Ghost Proxy system)
+function wasPlayerPresentInMatch(match, playerName) {
+    if (!match.playerPresence || typeof match.playerPresence !== 'object') {
+        // If no presence data, assume player was present (backwards compatibility)
+        return true;
+    }
+    const presence = match.playerPresence[playerName];
+    return presence !== false; // Default to true if not specified
+}
+
 class StatisticsCalculators {
     static registry = [];
 
@@ -248,33 +258,33 @@ StatisticsCalculators.register({
 
             if (result === 'team1') {
                 team1Players.forEach(p => {
-                    if (stats[p]) {
+                    if (stats[p] && wasPlayerPresentInMatch(match, p)) {
                         stats[p].wins++;
                         stats[p].games++;
                     }
                 });
                 team2Players.forEach(p => {
-                    if (stats[p]) {
+                    if (stats[p] && wasPlayerPresentInMatch(match, p)) {
                         stats[p].losses++;
                         stats[p].games++;
                     }
                 });
             } else if (result === 'team2') {
                 team2Players.forEach(p => {
-                    if (stats[p]) {
+                    if (stats[p] && wasPlayerPresentInMatch(match, p)) {
                         stats[p].wins++;
                         stats[p].games++;
                     }
                 });
                 team1Players.forEach(p => {
-                    if (stats[p]) {
+                    if (stats[p] && wasPlayerPresentInMatch(match, p)) {
                         stats[p].losses++;
                         stats[p].games++;
                     }
                 });
             } else if (result === 'draw') {
                 [...team1Players, ...team2Players].forEach(p => {
-                    if (stats[p]) {
+                    if (stats[p] && wasPlayerPresentInMatch(match, p)) {
                         stats[p].draws++;
                         stats[p].games++;
                     }
@@ -543,26 +553,26 @@ StatisticsCalculators.register({
 
             // Team 1 players
             team1Players.forEach(p => {
-                if (stats[p]) {
+                if (stats[p] && wasPlayerPresentInMatch(match, p)) {
                     stats[p].goals += team1Goals;
                     stats[p].fullTimeGoals += baseScore1;
                     if (hasExtraTime) {
                         stats[p].extraTimeGoals += team1ExtraGoals;
                     }
-                } else {
+                } else if (!stats[p]) {
                     warnUnknownPlayer(p, match);
                 }
             });
 
             // Team 2 players
             team2Players.forEach(p => {
-                if (stats[p]) {
+                if (stats[p] && wasPlayerPresentInMatch(match, p)) {
                     stats[p].goals += team2Goals;
                     stats[p].fullTimeGoals += baseScore2;
                     if (hasExtraTime) {
                         stats[p].extraTimeGoals += team2ExtraGoals;
                     }
-                } else {
+                } else if (!stats[p]) {
                     warnUnknownPlayer(p, match);
                 }
             });

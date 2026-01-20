@@ -12,10 +12,15 @@ class MatchRecorder {
         this.storage = storageManager;
         this.seasonManager = seasonManager;
         this.firebaseStore = null; // Will be set by app controller
+        this.playerManager = null; // Will be set by app controller
     }
 
     setFirebaseStore(firebaseStore) {
         this.firebaseStore = firebaseStore;
+    }
+
+    setPlayerManager(playerManager) {
+        this.playerManager = playerManager;
     }
 
     async recordMatch(team1, team2, team1Score, team2Score, team1ExtraTimeScore = null, team2ExtraTimeScore = null, team1PenaltiesScore = null, team2PenaltiesScore = null) {
@@ -43,13 +48,18 @@ class MatchRecorder {
         }
 
         const timestamp = new Date().toISOString();
+        
+        // Capture player presence at match time (for Ghost Proxy system)
+        const playerPresence = this.getPlayerPresenceSnapshot(team1, team2);
+        
         const match = {
             team1: team1,
             team2: team2,
             team1Score: team1Score,
             team2Score: team2Score,
             result: result, // Automatically determined from scores
-            timestamp
+            timestamp,
+            playerPresence: playerPresence // Track which players were present/absent
         };
 
         // Add extra time scores if provided
@@ -288,6 +298,25 @@ class MatchRecorder {
                 }
             }
         });
+    }
+
+    // Get player presence snapshot for a match
+    getPlayerPresenceSnapshot(team1, team2) {
+        const allPlayers = [...new Set([...team1, ...team2])];
+        const snapshot = {};
+        
+        if (this.playerManager) {
+            allPlayers.forEach(player => {
+                snapshot[player] = this.playerManager.isPlayerPresent(player);
+            });
+        } else {
+            // Default to all present if playerManager not available
+            allPlayers.forEach(player => {
+                snapshot[player] = true;
+            });
+        }
+        
+        return snapshot;
     }
 
     // Delete the most recently recorded match in the current season

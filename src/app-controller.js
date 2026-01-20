@@ -161,6 +161,8 @@ class AppController {
                     this.statisticsTracker.setFirebaseStore(this.firebaseStore);
                     this.playerManager.setFirebaseStore(this.firebaseStore);
                 }
+                // Always set playerManager on matchRecorder (needed for presence tracking)
+                this.matchRecorder.setPlayerManager(this.playerManager);
                 
                 console.log('Firebase initialized successfully');
                 if (this.isFirebaseMode) {
@@ -349,6 +351,17 @@ class AppController {
                     const side = select.value;
                     if (!isNaN(index) && side) {
                         this.handleInlineLockToggle(index, side);
+                    }
+                }
+                
+                // Handle presence checkbox
+                const checkbox = e.target.closest('.presence-checkbox');
+                if (checkbox) {
+                    const playerName = checkbox.dataset.player;
+                    const isPresent = checkbox.checked;
+                    if (playerName) {
+                        this.playerManager.setPlayerPresence(playerName, isPresent);
+                        this.updatePlayerPresenceDisplay(playerName, isPresent);
                     }
                 }
             });
@@ -839,6 +852,7 @@ class AppController {
             const trimmed = value.trim();
             const isSavedPlayer = isFilled && globalPlayers.includes(trimmed);
             const isLockedPlayer = isSavedPlayer && lockActive && lockState.player === trimmed;
+            const isPresent = isSavedPlayer ? this.playerManager.isPlayerPresent(trimmed) : true;
             const labels = this.lockLabels || {
                 home: 'Home',
                 away: 'Away',
@@ -853,7 +867,7 @@ class AppController {
             }
 
             return `
-            <li class="player-editable-item${isFilled ? ' active' : ''}" data-index="${index}">
+            <li class="player-editable-item${isFilled ? ' active' : ''}${isSavedPlayer && !isPresent ? ' absent' : ''}" data-index="${index}">
                 <div class="drag-handle" draggable="true" data-index="${index}">☰</div>
                 <input
                     type="text"
@@ -863,6 +877,15 @@ class AppController {
                     placeholder="Player ${index + 1}"
                     maxlength="20"
                 />
+                <div class="presence-toggle" data-player="${this.escapeHtml(trimmed)}" style="${!isSavedPlayer ? 'display:none' : ''}">
+                    <label class="presence-label" title="${isPresent ? 'Player is present - stats will count' : 'Player is absent - individual stats frozen, team stats continue'}">
+                        <input type="checkbox" 
+                               class="presence-checkbox" 
+                               data-player="${this.escapeHtml(trimmed)}"
+                               ${isPresent ? 'checked' : ''} />
+                        <span class="presence-text">${isPresent ? 'Present' : 'Absent'}</span>
+                    </label>
+                </div>
                 <select class="lock-select" data-index="${index}" ${!canSelect ? 'disabled' : ''}>
                     <option value="home" ${selectedValue === 'home' ? 'selected' : ''}>${this.escapeHtml(labels.home)}</option>
                     <option value="neutral" ${selectedValue === 'neutral' ? 'selected' : ''}>${this.escapeHtml(labels.neutral)}</option>
@@ -959,6 +982,20 @@ class AppController {
         }
         this.updatePlayerNameHistory();
         this.renderPlayerLockOptions();
+    }
+
+    updatePlayerPresenceDisplay(playerName, isPresent) {
+        const playerItems = document.querySelectorAll('.player-editable-item');
+        playerItems.forEach(item => {
+            const checkbox = item.querySelector(`.presence-checkbox[data-player="${playerName}"]`);
+            if (checkbox) {
+                const presenceText = item.querySelector('.presence-text');
+                if (presenceText) {
+                    presenceText.textContent = isPresent ? 'Present' : 'Absent';
+                }
+                item.classList.toggle('absent', !isPresent);
+            }
+        });
     }
 
     updateCurrentPlayersDisplay() {

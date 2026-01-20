@@ -182,5 +182,39 @@ class PlayerManager {
             };
         });
     }
+
+    // ============================================================================
+    // Player Presence Management (Ghost Proxy System)
+    // ============================================================================
+
+    getPlayerPresence() {
+        const data = this.storage.getData();
+        return data.playerPresence || {};
+    }
+
+    setPlayerPresence(playerName, isPresent) {
+        return this.storage.updateData(data => {
+            if (!data.playerPresence) {
+                data.playerPresence = {};
+            }
+            data.playerPresence[playerName] = isPresent;
+        });
+    }
+
+    isPlayerPresent(playerName) {
+        const presence = this.getPlayerPresence();
+        // Default to true for backwards compatibility
+        return presence[playerName] !== false;
+    }
+
+    getAllPlayerPresence() {
+        const presence = this.getPlayerPresence();
+        const players = this.getPlayers();
+        const result = {};
+        players.forEach(player => {
+            result[player] = this.isPlayerPresent(player);
+        });
+        return result;
+    }
 }
 

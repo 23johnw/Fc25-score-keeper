@@ -142,6 +142,8 @@ class StatisticsTracker {
 
         const stats = {};
         const calculators = StatisticsCalculators.getAll();
+        // Note: Calculators now check player presence internally (Ghost Proxy system)
+        // Team stats use all matches, individual stats only count matches where player was present
         const gamesPlayedMap = this.getGamesPlayed(matches);
         const maxGamesPlayed = Math.max(...Object.values(gamesPlayedMap || { 0: 0 }), 0);
         const pointsConfig = this.getPointsConfig();
@@ -160,7 +162,11 @@ class StatisticsTracker {
             const team1 = Array.isArray(match.team1) ? match.team1 : [match.team1];
             const team2 = Array.isArray(match.team2) ? match.team2 : [match.team2];
             [...team1, ...team2].forEach(player => {
-                games[player] = (games[player] || 0) + 1;
+                // Only count games where player was present (Ghost Proxy system)
+                const wasPresent = !match.playerPresence || match.playerPresence[player] !== false;
+                if (wasPresent) {
+                    games[player] = (games[player] || 0) + 1;
+                }
             });
         });
         return games;
