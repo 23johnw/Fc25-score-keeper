@@ -46,6 +46,7 @@ class StatisticsTracker {
 
     getTeamStats(matches) {
         const teamStats = {};
+        const pointsConfig = this.getPointsConfig();
 
         matches.forEach(match => {
             const teamAId = this.getTeamId(match.team1);
@@ -73,17 +74,17 @@ class StatisticsTracker {
 
             if (match.result === 'team1') {
                 teamA.won++;
-                teamA.points += 3;
+                teamA.points += pointsConfig.win;
                 teamB.lost++;
             } else if (match.result === 'team2') {
                 teamB.won++;
-                teamB.points += 3;
+                teamB.points += pointsConfig.win;
                 teamA.lost++;
             } else if (match.result === 'draw') {
                 teamA.drawn++;
                 teamB.drawn++;
-                teamA.points += 1;
-                teamB.points += 1;
+                teamA.points += pointsConfig.draw;
+                teamB.points += pointsConfig.draw;
             }
 
             teamA.gd = teamA.gf - teamA.ga;

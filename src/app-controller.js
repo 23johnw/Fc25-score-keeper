@@ -83,6 +83,9 @@ class AppController {
         const players = this.playerManager.getPlayers();
         this.loadPlayersIntoUI(players);
 
+        // Load settings into form fields (regardless of current screen)
+        this.loadSettingsIntoForm();
+
         // UI mode (session vs advanced) should be known before we decide default screen
         this.loadUiMode();
         this.applyUiMode();
@@ -3604,30 +3607,44 @@ class AppController {
         }
     }
 
-    loadSettingsScreen() {
-        // Load current settings into UI
+    loadSettingsIntoForm() {
+        // Load current settings into form fields (called during app init)
         const settings = this.settingsManager.getSettings();
-        
-        // Load labels
-        document.getElementById('homeLabelInput').value = settings.labels.home || 'Home';
-        document.getElementById('awayLabelInput').value = settings.labels.away || 'Away';
-        document.getElementById('neutralLabelInput').value = settings.labels.neutral || 'Neutral';
 
-        // Load points settings
+        // Load labels (only if elements exist)
+        const homeLabelInput = document.getElementById('homeLabelInput');
+        const awayLabelInput = document.getElementById('awayLabelInput');
+        const neutralLabelInput = document.getElementById('neutralLabelInput');
+        if (homeLabelInput) homeLabelInput.value = settings.labels.home || 'Home';
+        if (awayLabelInput) awayLabelInput.value = settings.labels.away || 'Away';
+        if (neutralLabelInput) neutralLabelInput.value = settings.labels.neutral || 'Neutral';
+
+        // Load points settings (only if elements exist)
         const points = this.settingsManager.getPointsPerResult();
-        document.getElementById('pointsWinInput').value = points.win;
-        document.getElementById('pointsDrawInput').value = points.draw;
-        document.getElementById('pointsLossInput').value = points.loss;
+        const pointsWinInput = document.getElementById('pointsWinInput');
+        const pointsDrawInput = document.getElementById('pointsDrawInput');
+        const pointsLossInput = document.getElementById('pointsLossInput');
+        if (pointsWinInput) pointsWinInput.value = points.win;
+        if (pointsDrawInput) pointsDrawInput.value = points.draw;
+        if (pointsLossInput) pointsLossInput.value = points.loss;
 
-        // Load dark mode
+        // Load dark mode (only if element exists)
         const darkModeSetting = document.getElementById('darkModeSetting');
         if (darkModeSetting) {
             darkModeSetting.checked = settings.darkMode || false;
         }
-        
+    }
+
+    loadSettingsScreen() {
+        // Load current settings into UI (called when settings screen is shown)
+        const settings = this.settingsManager.getSettings();
+
+        // Load basic settings into form
+        this.loadSettingsIntoForm();
+
         // Render player colors
         this.renderPlayerColors();
-        
+
         // Display app version - extract from service worker cache or use constant
         const versionDisplay = document.getElementById('appVersionDisplay');
         if (versionDisplay) {
