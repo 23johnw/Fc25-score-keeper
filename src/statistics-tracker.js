@@ -91,6 +91,9 @@ class StatisticsTracker {
             teamB.gd = teamB.gf - teamB.ga;
         });
 
+        // Aggregate subset teams into superset teams (Ghost Proxy system)
+        this.aggregateSubsetTeams(teamStats);
+
         return teamStats;
     }
 
@@ -98,6 +101,51 @@ class StatisticsTracker {
         // Create deterministic team ID from player names
         const sortedPlayers = [...team].sort();
         return `team_${sortedPlayers.join('_')}`;
+    }
+
+    // Aggregate subset teams into superset teams (Ghost Proxy system)
+    aggregateSubsetTeams(teamStats) {
+        const teamIds = Object.keys(teamStats);
+
+        // For each team, check if any other teams are subsets
+        teamIds.forEach(teamId => {
+            const teamData = teamStats[teamId];
+            if (!teamData) return; // Team might have been deleted
+
+            const teamPlayers = teamData.players;
+
+            // Find teams that are supersets of this team (contain all its players plus more)
+            const supersetTeams = teamIds.filter(otherId => {
+                if (otherId === teamId) return false;
+                const otherTeamData = teamStats[otherId];
+                if (!otherTeamData) return false;
+
+                const otherPlayers = otherTeamData.players;
+                // Check if otherPlayers contains all of teamPlayers
+                return teamPlayers.every(player => otherPlayers.includes(player)) &&
+                       otherPlayers.length > teamPlayers.length;
+            });
+
+            // If this team is a subset of another team, merge its stats
+            if (supersetTeams.length > 0) {
+                // Merge into the first superset team (usually the most complete one)
+                const targetTeamId = supersetTeams[0];
+                const targetTeam = teamStats[targetTeamId];
+
+                // Add stats from subset team to superset team
+                targetTeam.played += teamData.played;
+                targetTeam.won += teamData.won;
+                targetTeam.drawn += teamData.drawn;
+                targetTeam.lost += teamData.lost;
+                targetTeam.gf += teamData.gf;
+                targetTeam.ga += teamData.ga;
+                targetTeam.points += teamData.points;
+                targetTeam.gd = targetTeam.gf - targetTeam.ga;
+
+                // Remove the subset team
+                delete teamStats[teamId];
+            }
+        });
     }
 
     getPlayers() {
