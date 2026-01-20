@@ -300,6 +300,7 @@ window.renderTeamTable = function renderTeamTable() {
         <thead>
             <tr style="background: #4CAF50; color: white; position: sticky; top: 0; z-index: 10;">
                 <th style="padding: 12px 8px; text-align: left; min-width: 120px; max-width: 150px; font-size: 13px;">Team</th>
+                <th style="padding: 12px 8px; text-align: center; min-width: 50px; font-size: 13px; font-weight: bold;">Pts</th>
                 <th style="padding: 12px 6px; text-align: center; min-width: 35px; font-size: 13px;">P</th>
                 <th style="padding: 12px 6px; text-align: center; min-width: 35px; font-size: 13px;">W</th>
                 <th style="padding: 12px 6px; text-align: center; min-width: 35px; font-size: 13px;">D</th>
@@ -307,7 +308,6 @@ window.renderTeamTable = function renderTeamTable() {
                 <th style="padding: 12px 6px; text-align: center; min-width: 40px; font-size: 13px;">GF</th>
                 <th style="padding: 12px 6px; text-align: center; min-width: 40px; font-size: 13px;">GA</th>
                 <th style="padding: 12px 6px; text-align: center; min-width: 45px; font-size: 13px;">GD</th>
-                <th style="padding: 12px 8px; text-align: center; min-width: 50px; font-size: 13px; font-weight: bold;">Pts</th>
             </tr>
         </thead>
         <tbody>
@@ -315,6 +315,7 @@ window.renderTeamTable = function renderTeamTable() {
                 .map(([teamId, stats], index) => `
                     <tr style="border-bottom: 1px solid #e0e0e0; background: ${index % 2 === 0 ? '#ffffff' : '#f9f9f9'};">
                         <td style="font-weight: bold; font-size: 14px; padding: 10px 8px; line-height: 1.4; max-width: 150px; vertical-align: middle;" title="${stats.players.join(' & ')}">${formatTeamName(stats.players)}</td>
+                        <td style="text-align: center; padding: 10px 8px; font-weight: bold; font-size: 16px; color: #4CAF50;">${stats.points}</td>
                         <td style="text-align: center; padding: 10px 6px; font-size: 14px;">${stats.played}</td>
                         <td style="text-align: center; padding: 10px 6px; font-size: 14px;">${stats.won}</td>
                         <td style="text-align: center; padding: 10px 6px; font-size: 14px;">${stats.drawn}</td>
@@ -322,7 +323,6 @@ window.renderTeamTable = function renderTeamTable() {
                         <td style="text-align: center; padding: 10px 6px; font-size: 14px;">${stats.gf}</td>
                         <td style="text-align: center; padding: 10px 6px; font-size: 14px;">${stats.ga}</td>
                         <td style="text-align: center; padding: 10px 6px; font-size: 14px; font-weight: bold; ${stats.gd > 0 ? 'color: #2e7d32;' : stats.gd < 0 ? 'color: #c62828;' : 'color: #666;'}">${stats.gd > 0 ? '+' : ''}${stats.gd}</td>
-                        <td style="text-align: center; padding: 10px 8px; font-weight: bold; font-size: 16px; color: #4CAF50;">${stats.points}</td>
                     </tr>
                 `).join('')}
         </tbody>
