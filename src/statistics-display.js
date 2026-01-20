@@ -5,9 +5,38 @@
 // UI Toggle Implementation
 
 function setupToggleUI() {
+    // #region agent log
+    console.log('setupToggleUI called');
+    fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            location: 'src/statistics-display.js:setupToggleUI',
+            message: 'setupToggleUI executed',
+            timestamp: Date.now(),
+            sessionId: 'debug-session'
+        })
+    }).catch(() => {});
+    // #endregion
+
     const toggleButton = document.createElement('button');
     toggleButton.innerText = 'Player View';
     toggleButton.onclick = function() {
+        // #region agent log
+        console.log('Toggle button clicked, current text:', toggleButton.innerText);
+        fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                location: 'src/statistics-display.js:toggleButton.onclick',
+                message: 'Toggle button clicked',
+                data: { currentView: toggleButton.innerText },
+                timestamp: Date.now(),
+                sessionId: 'debug-session'
+            })
+        }).catch(() => {});
+        // #endregion
+
         if (toggleButton.innerText === 'Player View') {
             renderTeamTable();
             toggleButton.innerText = 'Team View';
@@ -20,12 +49,54 @@ function setupToggleUI() {
 }
 
 function renderPlayerTable() {
+    // #region agent log
+    console.log('renderPlayerTable called');
+    fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            location: 'src/statistics-display.js:renderPlayerTable',
+            message: 'renderPlayerTable executed',
+            timestamp: Date.now(),
+            sessionId: 'debug-session'
+        })
+    }).catch(() => {});
+    // #endregion
+
     // Logic to render player table
 }
 
 function renderTeamTable() {
+    // #region agent log
+    console.log('renderTeamTable called');
+    fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            location: 'src/statistics-display.js:renderTeamTable',
+            message: 'renderTeamTable executed',
+            timestamp: Date.now(),
+            sessionId: 'debug-session'
+        })
+    }).catch(() => {});
+    // #endregion
+
     // Logic to render team table
 }
+
+// #region agent log
+console.log('setupToggleUI called at end of script');
+fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+        location: 'src/statistics-display.js:setupToggleUI call',
+        message: 'setupToggleUI invoked at script end',
+        timestamp: Date.now(),
+        sessionId: 'debug-session'
+    })
+}).catch(() => {});
+// #endregion
 
 setupToggleUI();
 
