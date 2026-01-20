@@ -232,6 +232,27 @@ window.renderTeamTable = function renderTeamTable() {
     statsContainer.innerHTML = '';
     statsContainer.style.display = 'block';
 
+    // Helper function to format team name with "&" on shorter line
+    function formatTeamName(players) {
+        if (players.length === 1) {
+            return players[0];
+        }
+        if (players.length === 2) {
+            const [player1, player2] = players;
+            const len1 = player1.length;
+            const len2 = player2.length;
+            
+            // Put "&" on shorter line, default to top if equal
+            if (len1 <= len2) {
+                return `${player1} &<br>${player2}`;
+            } else {
+                return `${player1}<br>& ${player2}`;
+            }
+        }
+        // For 3+ players, just join them
+        return players.join(' &<br>');
+    }
+
     // Debug: Show team data before creating table
     const sortedTeams = Object.entries(teamStats)
         .sort(([,a], [,b]) => b.points - a.points || b.gd - a.gd || b.gf - a.gf);
@@ -278,7 +299,7 @@ window.renderTeamTable = function renderTeamTable() {
     table.innerHTML = `
         <thead>
             <tr style="background: #4CAF50; color: white; position: sticky; top: 0; z-index: 10;">
-                <th style="padding: 12px 8px; text-align: left; min-width: 120px; max-width: 150px; white-space: nowrap; font-size: 13px;">Team</th>
+                <th style="padding: 12px 8px; text-align: left; min-width: 120px; max-width: 150px; font-size: 13px;">Team</th>
                 <th style="padding: 12px 6px; text-align: center; min-width: 35px; font-size: 13px;">P</th>
                 <th style="padding: 12px 6px; text-align: center; min-width: 35px; font-size: 13px;">W</th>
                 <th style="padding: 12px 6px; text-align: center; min-width: 35px; font-size: 13px;">D</th>
@@ -293,7 +314,7 @@ window.renderTeamTable = function renderTeamTable() {
             ${sortedTeams
                 .map(([teamId, stats], index) => `
                     <tr style="border-bottom: 1px solid #e0e0e0; background: ${index % 2 === 0 ? '#ffffff' : '#f9f9f9'};">
-                        <td style="font-weight: bold; font-size: 14px; padding: 10px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;" title="${stats.players.join(' & ')}">${stats.players.join(' & ')}</td>
+                        <td style="font-weight: bold; font-size: 14px; padding: 10px 8px; line-height: 1.4; max-width: 150px; vertical-align: middle;" title="${stats.players.join(' & ')}">${formatTeamName(stats.players)}</td>
                         <td style="text-align: center; padding: 10px 6px; font-size: 14px;">${stats.played}</td>
                         <td style="text-align: center; padding: 10px 6px; font-size: 14px;">${stats.won}</td>
                         <td style="text-align: center; padding: 10px 6px; font-size: 14px;">${stats.drawn}</td>
