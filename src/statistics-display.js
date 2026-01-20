@@ -158,8 +158,9 @@ function renderTeamTable() {
 
     console.log('Found stats container:', statsContainer.id, 'for team view');
 
-    // Clear existing content
+    // Clear existing content completely
     statsContainer.innerHTML = '';
+    statsContainer.style.display = 'block';
 
     // Debug: Show team data before creating table
     const sortedTeams = Object.entries(teamStats)
@@ -168,38 +169,46 @@ function renderTeamTable() {
     console.log('Sorted teams for display:', sortedTeams);
     alert(`Top team: ${sortedTeams[0]?.[1]?.players?.join(' & ')} with ${sortedTeams[0]?.[1]?.points} points`);
 
-    // Create team table
+    // Create team table with prominent styling
     const teamTable = document.createElement('div');
-    teamTable.className = 'stat-card';
+    teamTable.className = 'stat-card team-stats-card';
+    teamTable.style.cssText = `
+        background: #f8f9fa;
+        border: 2px solid #4CAF50;
+        border-radius: 12px;
+        padding: 20px;
+        margin: 20px 0;
+        box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
+    `;
     teamTable.innerHTML = `
-        <h3>Team Statistics</h3>
-        <table class="stats-table">
+        <h3 style="color: #4CAF50; font-size: 24px; margin-bottom: 20px;">🏆 TEAM LEAGUE STANDINGS 🏆</h3>
+        <table class="stats-table" style="width: 100%; border-collapse: collapse;">
             <thead>
-                <tr>
-                    <th>Team</th>
-                    <th>P</th>
-                    <th>W</th>
-                    <th>D</th>
-                    <th>L</th>
-                    <th>GF</th>
-                    <th>GA</th>
-                    <th>GD</th>
-                    <th>Pts</th>
+                <tr style="background: #4CAF50; color: white;">
+                    <th style="padding: 15px; text-align: left;">Team</th>
+                    <th style="padding: 15px; text-align: center;">P</th>
+                    <th style="padding: 15px; text-align: center;">W</th>
+                    <th style="padding: 15px; text-align: center;">D</th>
+                    <th style="padding: 15px; text-align: center;">L</th>
+                    <th style="padding: 15px; text-align: center;">GF</th>
+                    <th style="padding: 15px; text-align: center;">GA</th>
+                    <th style="padding: 15px; text-align: center;">GD</th>
+                    <th style="padding: 15px; text-align: center;">Pts</th>
                 </tr>
             </thead>
             <tbody>
                 ${sortedTeams
                     .map(([teamId, stats]) => `
-                        <tr>
-                            <td>${stats.players.join(' & ')}</td>
-                            <td>${stats.played}</td>
-                            <td>${stats.won}</td>
-                            <td>${stats.drawn}</td>
-                            <td>${stats.lost}</td>
-                            <td>${stats.gf}</td>
-                            <td>${stats.ga}</td>
-                            <td>${stats.gd > 0 ? '+' : ''}${stats.gd}</td>
-                            <td>${stats.points}</td>
+                        <tr style="border-bottom: 1px solid #ddd;">
+                            <td style="font-weight: bold; font-size: 16px; padding: 12px;">${stats.players.join(' & ')}</td>
+                            <td style="text-align: center; padding: 12px;">${stats.played}</td>
+                            <td style="text-align: center; padding: 12px;">${stats.won}</td>
+                            <td style="text-align: center; padding: 12px;">${stats.drawn}</td>
+                            <td style="text-align: center; padding: 12px;">${stats.lost}</td>
+                            <td style="text-align: center; padding: 12px;">${stats.gf}</td>
+                            <td style="text-align: center; padding: 12px;">${stats.ga}</td>
+                            <td style="text-align: center; padding: 12px; ${stats.gd > 0 ? 'color: green;' : stats.gd < 0 ? 'color: red;' : ''}">${stats.gd > 0 ? '+' : ''}${stats.gd}</td>
+                            <td style="text-align: center; padding: 12px; font-weight: bold; font-size: 18px; color: #4CAF50;">${stats.points}</td>
                         </tr>
                     `).join('')}
             </tbody>
