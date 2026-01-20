@@ -60,33 +60,71 @@ function setupToggleUI() {
         const statsContainer = document.querySelector('#overallStatsDisplay') || document.querySelector('#seasonStatsDisplay') || document.querySelector('.stats-display');
 
         if (toggleButton.innerText === 'Switch to Team View') {
-            // Switch to team view - clear ALL stats containers first
+            // Switch to team view
             console.log('Switching to team view');
-            const allStatsContainers = document.querySelectorAll('#overallStatsDisplay, #seasonStatsDisplay, #todayStatsDisplay, #customStatsDisplay, .stats-display');
-            allStatsContainers.forEach(container => {
-                container.innerHTML = '';
-                container.style.display = 'block';
-            });
+            window.currentStatsView = 'team'; // Set view state first
+            
+            // Detect which stats tab is currently selected
+            const statsTabSelect = document.querySelector('#statsTabSelect');
+            const activeTab = statsTabSelect ? statsTabSelect.value : 'overall';
+            
+            // Clear only the active tab's container
+            let activeContainer = null;
+            if (activeTab === 'today') {
+                activeContainer = document.querySelector('#todayStatsDisplay');
+            } else if (activeTab === 'season') {
+                activeContainer = document.querySelector('#seasonStatsDisplay');
+            } else if (activeTab === 'overall') {
+                activeContainer = document.querySelector('#overallStatsDisplay');
+            } else if (activeTab === 'custom') {
+                activeContainer = document.querySelector('#customStatsDisplay');
+            }
+            
+            if (activeContainer) {
+                activeContainer.innerHTML = '';
+                activeContainer.style.display = 'block';
+            }
+            
             renderTeamTable();
             toggleButton.innerText = 'Switch to Player View';
             toggleButton.style.background = 'linear-gradient(135deg, #4CAF50, #388E3C)'; // Green for team view
-            // Store view state
-            window.currentStatsView = 'team';
         } else {
-            // Switch to player view - clear team view first
+            // Switch to player view - detect which stats tab is active and restore appropriate stats
             console.log('Switching to player view');
+            window.currentStatsView = 'player'; // Clear team view state first
+            
+            // Detect which stats tab is currently selected
+            const statsTabSelect = document.querySelector('#statsTabSelect');
+            const activeTab = statsTabSelect ? statsTabSelect.value : 'overall';
+            
+            // Clear all containers
             const allStatsContainers = document.querySelectorAll('#overallStatsDisplay, #seasonStatsDisplay, #todayStatsDisplay, #customStatsDisplay, .stats-display');
             allStatsContainers.forEach(container => {
                 container.innerHTML = '';
                 container.style.display = 'block';
             });
-            if (statsContainer && window.appController?.statisticsDisplay) {
-                window.appController.statisticsDisplay.displayOverallStats(statsContainer);
+            
+            // Restore stats based on active tab
+            if (window.appController?.statisticsDisplay) {
+                if (activeTab === 'today') {
+                    window.appController.statisticsDisplay.displayTodayStats(
+                        document.getElementById('todayStatsDisplay')
+                    );
+                } else if (activeTab === 'season') {
+                    const currentSeason = window.appController?.seasonManager?.getCurrentSeason() || 1;
+                    window.appController.statisticsDisplay.displaySeasonStats(
+                        currentSeason,
+                        document.getElementById('seasonStatsDisplay')
+                    );
+                } else if (activeTab === 'overall') {
+                    window.appController.statisticsDisplay.displayOverallStats(
+                        document.getElementById('overallStatsDisplay')
+                    );
+                }
             }
+            
             toggleButton.innerText = 'Switch to Team View';
             toggleButton.style.background = 'linear-gradient(135deg, #2196F3, #1976D2)'; // Blue for player view
-            // Store view state
-            window.currentStatsView = 'player';
         }
     };
     // Only add the button if we're on the stats page and it doesn't already exist
@@ -126,7 +164,8 @@ function renderPlayerTable() {
     }
 }
 
-function renderTeamTable() {
+// Make renderTeamTable globally accessible
+window.renderTeamTable = function renderTeamTable() {
     // #region agent log
     console.log('renderTeamTable called');
     fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
@@ -158,25 +197,36 @@ function renderTeamTable() {
         return;
     }
 
-    // Find ALL stats containers and use the first visible one
-    const allContainers = [
-        document.querySelector('#overallStatsDisplay'),
-        document.querySelector('#seasonStatsDisplay'),
-        document.querySelector('#todayStatsDisplay'),
-        document.querySelector('#customStatsDisplay'),
-        ...document.querySelectorAll('.stats-display')
-    ].filter(c => c !== null);
+    // Detect which stats tab is currently active
+    const statsTabSelect = document.querySelector('#statsTabSelect');
+    const activeTab = statsTabSelect ? statsTabSelect.value : 'overall';
+    
+    // Find the appropriate stats container based on active tab
+    let statsContainer = null;
+    if (activeTab === 'today') {
+        statsContainer = document.querySelector('#todayStatsDisplay');
+    } else if (activeTab === 'season') {
+        statsContainer = document.querySelector('#seasonStatsDisplay');
+    } else if (activeTab === 'overall') {
+        statsContainer = document.querySelector('#overallStatsDisplay');
+    } else if (activeTab === 'custom') {
+        statsContainer = document.querySelector('#customStatsDisplay');
+    }
+    
+    // Fallback to any stats display container
+    if (!statsContainer) {
+        statsContainer = document.querySelector('#overallStatsDisplay') || 
+                        document.querySelector('#seasonStatsDisplay') || 
+                        document.querySelector('#todayStatsDisplay') ||
+                        document.querySelector('.stats-display');
+    }
 
-    if (allContainers.length === 0) {
+    if (!statsContainer) {
         console.error('No stats container found for team view');
-        alert('ERROR: No stats container found!');
         return;
     }
 
-    // Use the first container (usually overallStatsDisplay)
-    const statsContainer = allContainers[0];
-    console.log('Found stats container:', statsContainer.id, 'for team view');
-    console.log('All containers:', allContainers.map(c => c.id));
+    console.log('Found stats container:', statsContainer.id, 'for team view (active tab:', activeTab, ')');
 
     // Clear existing content completely
     statsContainer.innerHTML = '';

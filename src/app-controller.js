@@ -2055,9 +2055,15 @@ class AppController {
     }
     
     switchStatsCategory(type, category) {
-        // Don't re-render if we're in team view
+        // If in team view, re-render team table for the active tab
         if (window.currentStatsView === 'team') {
-            console.log('Skipping stats category switch - team view is active');
+            console.log('Team view active - re-rendering team table for', type);
+            // Re-render team table in the appropriate container
+            setTimeout(() => {
+                if (window.renderTeamTable && typeof window.renderTeamTable === 'function') {
+                    window.renderTeamTable();
+                }
+            }, 50);
             return;
         }
 
