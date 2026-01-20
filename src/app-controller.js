@@ -3338,8 +3338,18 @@ class AppController {
 
                 const isLegacyBackup = !!(importedData.seasons && typeof importedData.seasons === 'object');
 
+                // Check if we can do Firebase import
+                const canDoFirebaseImport = this.isFirebaseMode && this.firebaseStore && this.firebaseManager && isLegacyBackup;
+
+                if (canDoFirebaseImport) {
+                    console.log('Firebase available, importing to shared league');
+                } else {
+                    // Firebase not available or not legacy backup - do local import
+                    console.log('Using local import mode');
+                }
+
                 // Firebase mode: import into shared league (merge, no deletes)
-                if (this.isFirebaseMode && this.firebaseStore && isLegacyBackup) {
+                if (canDoFirebaseImport) {
                     const allLegacyMatches = [];
                     Object.values(importedData.seasons || {}).forEach(season => {
                         (season.matches || []).forEach(m => allLegacyMatches.push(m));
@@ -3352,9 +3362,12 @@ class AppController {
                     );
 
                     if (wipeFirst) {
-                        if (!this.firebaseManager || !this.firebaseManager.getIsAdmin()) {
+                        if (this.firebaseManager && !this.firebaseManager.getIsAdmin()) {
                             alert('To wipe the shared league, you must unlock Admin first (PIN).');
                             return;
+                        } else if (!this.firebaseManager) {
+                            // Firebase not available, allow local wipe
+                            console.log('Firebase not available, allowing local data wipe');
                         }
                         if (!confirm('Final warning: this will DELETE ALL existing shared matches for everyone. Continue?')) {
                             return;
@@ -3377,6 +3390,11 @@ class AppController {
                     alert(`Import complete!\nImported: ${result.imported}\nSkipped: ${result.skipped}\n\nReloading...`);
                     location.reload();
                     return;
+                }
+
+                // Local mode fallback (when Firebase is broken or not available)
+                if (!canDoFirebaseImport) {
+                    console.log('Falling back to local import');
                 }
 
                 // Local mode (or non-legacy): replace local storage like before
