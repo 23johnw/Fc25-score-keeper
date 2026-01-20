@@ -70,7 +70,7 @@ function renderPlayerTable() {
     // #endregion
 
     // Use existing stats display for player view
-    const statsContainer = document.querySelector('.stats-container') || document.querySelector('#overallStatsDisplay') || document.querySelector('#seasonStatsDisplay');
+    const statsContainer = document.querySelector('#overallStatsDisplay') || document.querySelector('#seasonStatsDisplay') || document.querySelector('.stats-display');
     if (statsContainer && window.appController?.statisticsDisplay) {
         window.appController.statisticsDisplay.displayOverallStats(statsContainer);
     }
@@ -95,8 +95,8 @@ function renderTeamTable() {
     const matches = window.appController?.statisticsTracker?.getAllMatches() || [];
     const teamStats = window.appController?.statisticsTracker?.getTeamStats(matches) || {};
 
-    // Find the stats container
-    const statsContainer = document.querySelector('.stats-container') || document.querySelector('#statsContainer');
+    // Find the stats container - use the same container that displays overall stats
+    const statsContainer = document.querySelector('#overallStatsDisplay') || document.querySelector('#seasonStatsDisplay') || document.querySelector('.stats-display');
     if (!statsContainer) return;
 
     // Clear existing content
