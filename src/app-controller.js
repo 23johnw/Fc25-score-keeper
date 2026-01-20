@@ -447,17 +447,6 @@ class AppController {
         document.querySelectorAll('.mode-btn').forEach(btn => {
             btn.addEventListener('click', (e) => this.switchStatsMode(e.target.dataset.mode));
         });
-        const pointsSettingsBtn = document.getElementById('pointsSettingsBtn');
-        if (pointsSettingsBtn) {
-            pointsSettingsBtn.addEventListener('click', () => this.openPointsSettingsModal());
-        }
-        document.addEventListener('click', (e) => {
-            const trigger = e.target.closest('#pointsSettingsBtn');
-            if (trigger) {
-                e.preventDefault();
-                this.openPointsSettingsModal();
-            }
-        });
         document.getElementById('newSeasonBtn').addEventListener('click', () => this.startNewSeason());
         document.getElementById('exportDataBtn').addEventListener('click', () => this.exportData());
         document.getElementById('importDataBtn').addEventListener('click', () => this.importData());
@@ -561,14 +550,6 @@ class AppController {
         const cancelPointsSettingsBtn = document.getElementById('cancelPointsSettingsBtn');
         if (cancelPointsSettingsBtn) {
             cancelPointsSettingsBtn.addEventListener('click', () => this.closePointsSettingsModal());
-        }
-        const pointsModal = document.getElementById('pointsSettingsModal');
-        if (pointsModal) {
-            pointsModal.addEventListener('click', (e) => {
-                if (e.target === pointsModal) {
-                    this.closePointsSettingsModal();
-                }
-            });
         }
 
         // Edit match modal
@@ -3631,7 +3612,13 @@ class AppController {
         document.getElementById('homeLabelInput').value = settings.labels.home || 'Home';
         document.getElementById('awayLabelInput').value = settings.labels.away || 'Away';
         document.getElementById('neutralLabelInput').value = settings.labels.neutral || 'Neutral';
-        
+
+        // Load points settings
+        const points = this.settingsManager.getPointsPerResult();
+        document.getElementById('pointsWinInput').value = points.win;
+        document.getElementById('pointsDrawInput').value = points.draw;
+        document.getElementById('pointsLossInput').value = points.loss;
+
         // Load dark mode
         const darkModeSetting = document.getElementById('darkModeSetting');
         if (darkModeSetting) {
@@ -3726,56 +3713,6 @@ class AppController {
         });
     }
 
-    openPointsSettingsModal() {
-        const modal = document.getElementById('pointsSettingsModal');
-        if (!modal) return;
-        const winInput = document.getElementById('pointsWinInput');
-        const drawInput = document.getElementById('pointsDrawInput');
-        const lossInput = document.getElementById('pointsLossInput');
-        const points = this.settingsManager.getPointsPerResult();
-        if (winInput) winInput.value = points.win;
-        if (drawInput) drawInput.value = points.draw;
-        if (lossInput) lossInput.value = points.loss;
-        modal.style.display = 'flex';
-        if (winInput) {
-            setTimeout(() => winInput.focus(), 50);
-        }
-        const escapeHandler = (e) => {
-            if (e.key === 'Escape') {
-                this.closePointsSettingsModal();
-                document.removeEventListener('keydown', escapeHandler);
-            }
-        };
-        document.addEventListener('keydown', escapeHandler);
-    }
-
-    closePointsSettingsModal() {
-        const modal = document.getElementById('pointsSettingsModal');
-        if (modal) {
-            modal.style.display = 'none';
-        }
-    }
-
-    savePointsSettings() {
-        const winInput = document.getElementById('pointsWinInput');
-        const drawInput = document.getElementById('pointsDrawInput');
-        const lossInput = document.getElementById('pointsLossInput');
-        const parseVal = (input, fallback) => {
-            if (!input) return fallback;
-            const num = Number(input.value);
-            return Number.isFinite(num) ? num : fallback;
-        };
-        const defaults = this.settingsManager.getDefaultSettings().pointsPerResult;
-        const next = {
-            win: parseVal(winInput, defaults.win),
-            draw: parseVal(drawInput, defaults.draw),
-            loss: parseVal(lossInput, defaults.loss)
-        };
-        this.settingsManager.setPointsPerResult(next);
-        this.closePointsSettingsModal();
-        this.toastManager.show('Points settings updated', 'success');
-        this.refreshCurrentStatsWithDateFilter();
-    }
 
     saveSettings() {
         // Save labels
@@ -3786,10 +3723,16 @@ class AppController {
         this.settingsManager.setLabel('home', homeLabel);
         this.settingsManager.setLabel('away', awayLabel);
         this.settingsManager.setLabel('neutral', neutralLabel);
-        
+
+        // Save points settings
+        const winPoints = parseFloat(document.getElementById('pointsWinInput').value) || 1;
+        const drawPoints = parseFloat(document.getElementById('pointsDrawInput').value) || 1;
+        const lossPoints = parseFloat(document.getElementById('pointsLossInput').value) || 0;
+        this.settingsManager.setPointsPerResult({ win: winPoints, draw: drawPoints, loss: lossPoints });
+
         // Update lock labels in app
         this.updateLockLabels();
-        
+
         // Refresh UI that uses labels
         this.renderPlayerLockOptions();
         
