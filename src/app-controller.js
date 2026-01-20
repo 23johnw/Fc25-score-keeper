@@ -2055,6 +2055,12 @@ class AppController {
     }
     
     switchStatsCategory(type, category) {
+        // Don't re-render if we're in team view
+        if (window.currentStatsView === 'team') {
+            console.log('Skipping stats category switch - team view is active');
+            return;
+        }
+
         // Store current category for this type
         if (!this.currentStatsState) {
             this.currentStatsState = {};

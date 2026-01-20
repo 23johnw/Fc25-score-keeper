@@ -60,19 +60,33 @@ function setupToggleUI() {
         const statsContainer = document.querySelector('#overallStatsDisplay') || document.querySelector('#seasonStatsDisplay') || document.querySelector('.stats-display');
 
         if (toggleButton.innerText === 'Switch to Team View') {
-            // Switch to team view
-            console.log('Switching to team view, container:', statsContainer?.id);
+            // Switch to team view - clear ALL stats containers first
+            console.log('Switching to team view');
+            const allStatsContainers = document.querySelectorAll('#overallStatsDisplay, #seasonStatsDisplay, #todayStatsDisplay, #customStatsDisplay, .stats-display');
+            allStatsContainers.forEach(container => {
+                container.innerHTML = '';
+                container.style.display = 'block';
+            });
             renderTeamTable();
             toggleButton.innerText = 'Switch to Player View';
             toggleButton.style.background = 'linear-gradient(135deg, #4CAF50, #388E3C)'; // Green for team view
+            // Store view state
+            window.currentStatsView = 'team';
         } else {
-            // Switch to player view - use existing displayOverallStats or similar
-            console.log('Switching to player view, container:', statsContainer?.id);
+            // Switch to player view - clear team view first
+            console.log('Switching to player view');
+            const allStatsContainers = document.querySelectorAll('#overallStatsDisplay, #seasonStatsDisplay, #todayStatsDisplay, #customStatsDisplay, .stats-display');
+            allStatsContainers.forEach(container => {
+                container.innerHTML = '';
+                container.style.display = 'block';
+            });
             if (statsContainer && window.appController?.statisticsDisplay) {
                 window.appController.statisticsDisplay.displayOverallStats(statsContainer);
             }
             toggleButton.innerText = 'Switch to Team View';
             toggleButton.style.background = 'linear-gradient(135deg, #2196F3, #1976D2)'; // Blue for player view
+            // Store view state
+            window.currentStatsView = 'player';
         }
     };
     // Only add the button if we're on the stats page and it doesn't already exist
@@ -81,7 +95,6 @@ function setupToggleUI() {
         if (statsContainer && !document.querySelector('#stats-view-toggle')) {
             document.body.appendChild(toggleButton);
             console.log('Stats toggle button added to page');
-            alert('Team/Player toggle button added to stats page!'); // Temporary alert
         }
     };
 
@@ -116,7 +129,6 @@ function renderPlayerTable() {
 function renderTeamTable() {
     // #region agent log
     console.log('renderTeamTable called');
-    alert('Team view activated!'); // Temporary alert to confirm function is called
     fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -140,23 +152,31 @@ function renderTeamTable() {
         sampleMatch: matches[0]
     });
 
-    // Debug: Show what we're about to display
-    alert(`Found ${matches.length} matches, ${Object.keys(teamStats).length} teams`);
-
     if (Object.keys(teamStats).length === 0) {
         statsContainer.innerHTML = '<div class="empty-state"><p>No team data available. Play some matches first!</p></div>';
         console.log('No team stats available');
         return;
     }
 
-    // Find the stats container - use the same container that displays overall stats
-    const statsContainer = document.querySelector('#overallStatsDisplay') || document.querySelector('#seasonStatsDisplay') || document.querySelector('.stats-display');
-    if (!statsContainer) {
+    // Find ALL stats containers and use the first visible one
+    const allContainers = [
+        document.querySelector('#overallStatsDisplay'),
+        document.querySelector('#seasonStatsDisplay'),
+        document.querySelector('#todayStatsDisplay'),
+        document.querySelector('#customStatsDisplay'),
+        ...document.querySelectorAll('.stats-display')
+    ].filter(c => c !== null);
+
+    if (allContainers.length === 0) {
         console.error('No stats container found for team view');
+        alert('ERROR: No stats container found!');
         return;
     }
 
+    // Use the first container (usually overallStatsDisplay)
+    const statsContainer = allContainers[0];
     console.log('Found stats container:', statsContainer.id, 'for team view');
+    console.log('All containers:', allContainers.map(c => c.id));
 
     // Clear existing content completely
     statsContainer.innerHTML = '';
@@ -167,7 +187,7 @@ function renderTeamTable() {
         .sort(([,a], [,b]) => b.points - a.points || b.gd - a.gd || b.gf - a.gf);
 
     console.log('Sorted teams for display:', sortedTeams);
-    alert(`Top team: ${sortedTeams[0]?.[1]?.players?.join(' & ')} with ${sortedTeams[0]?.[1]?.points} points`);
+    console.log(`Top team: ${sortedTeams[0]?.[1]?.players?.join(' & ')} with ${sortedTeams[0]?.[1]?.points} points`);
 
     // Create team table with prominent styling
     const teamTable = document.createElement('div');
@@ -217,7 +237,15 @@ function renderTeamTable() {
 
     statsContainer.appendChild(teamTable);
     console.log('Team table appended to container:', statsContainer.id);
-    alert('Team table should now be visible in the stats area!');
+    
+    // Force a visual update
+    statsContainer.style.display = 'block';
+    statsContainer.style.visibility = 'visible';
+    teamTable.style.display = 'block';
+    teamTable.style.visibility = 'visible';
+    
+    // Scroll to the table
+    teamTable.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // #region agent log
