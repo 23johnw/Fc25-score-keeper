@@ -47,20 +47,114 @@
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <h1>FC 25 Score Tracker</h1>
             <div style="display: flex; gap: 0.5rem;">
+                <button id="goToSessionBtn" class="btn btn-secondary" style="display:none; padding: 0.4rem 0.7rem; font-size: 0.9rem;" title="Back to Session">Session</button>
                 <button id="refreshAppBtn" class="dark-mode-toggle" title="Check for Updates" style="font-size: 1rem;">🔄</button>
                 <button id="darkModeToggle" class="dark-mode-toggle" title="Toggle Dark Mode">🌙</button>
             </div>
         </div>
         <div style="background: #4CAF50; color: white; padding: 0.5rem 1rem; border-radius: 8px; margin: 0.5rem 0; text-align: center; font-weight: bold; font-size: 0.9rem;">
-            <span id="appVersionBanner">UPDATE TEST - loading…</span> ✅ - Compact History Enabled
+            <span id="appVersionBanner">Loading version…</span>
         </div>
         <div class="season-info" id="seasonInfo" style="display: none;">
             <span>Season <span id="currentSeasonNumber">1</span></span>
         </div>
     </header>
 
+    <!-- Session Wizard Screen -->
+    <section id="sessionScreen" class="screen active">
+        <div class="screen-content">
+            <!-- Session Splash (default) -->
+            <div id="sessionSplash" class="session-splash">
+                <div class="session-splash-inner">
+                    <h2>Session</h2>
+                    <p class="screen-description">Tap Start to begin a guided session</p>
+                    <button id="sessionStartBtn" class="btn btn-primary session-start-btn">Start</button>
+                </div>
+                <a href="#" id="sessionAdvancedModeBtn" class="session-advanced-link">Advanced</a>
+            </div>
+
+            <!-- Stepper Header -->
+            <div class="session-stepper" id="sessionStepper" style="display:none;">
+                <div class="step-indicator" data-step="players">
+                    <div class="step-number">1</div>
+                    <div class="step-label">Players</div>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step-indicator" data-step="teams">
+                    <div class="step-number">2</div>
+                    <div class="step-label">Teams</div>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step-indicator" data-step="match">
+                    <div class="step-number">3</div>
+                    <div class="step-label">Match</div>
+                </div>
+            </div>
+
+            <!-- Step Content -->
+            <div class="session-step-content" id="sessionWizardContent" style="display:none;">
+                <!-- Step 1: Players -->
+                <div class="session-step" data-step="players" style="display: block;">
+                    <h2>Add Players</h2>
+                    <p class="screen-description">Enter player names to start your session</p>
+
+                    <div class="session-player-editor">
+                        <div class="session-player-list" id="sessionPlayerList">
+                            <!-- Dynamic player inputs will be added here -->
+                        </div>
+                        <div class="session-player-actions">
+                            <button id="sessionAddPlayerBtn" class="btn btn-secondary btn-small">+ Add Player</button>
+                            <button id="startNewSessionBtn" class="btn btn-secondary btn-small">Start New Session</button>
+                        </div>
+                    </div>
+
+                    <div class="session-validation" id="sessionPlayersValidation" style="display: none;">
+                        <p class="validation-error">Please add at least 2 players to continue</p>
+                    </div>
+                </div>
+
+                <!-- Step 2: Teams -->
+                <div class="session-step" data-step="teams" style="display: none;">
+                    <h2>Choose Teams</h2>
+                    <p class="screen-description">Select how you want to play</p>
+
+                    <div class="session-team-options" id="sessionTeamOptions">
+                        <!-- Team structure options will be populated here -->
+                    </div>
+
+                    <div class="session-selected-teams" id="sessionSelectedTeams" style="display: none;">
+                        <h3>Selected Matches</h3>
+                        <div id="sessionMatchPreview" class="session-match-preview"></div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Match -->
+                <div class="session-step" data-step="match" style="display: none;">
+                    <h2>Record Match</h2>
+                    <p class="screen-description">Enter the final score</p>
+
+                    <div class="session-current-match" id="sessionCurrentMatch">
+                        <!-- Current match display will be populated here -->
+                    </div>
+
+                    <div class="session-next-match-cta" id="sessionNextMatchCTA" style="display: none;">
+                        <h3>Match Complete!</h3>
+                        <p>Ready for the next match?</p>
+                        <button id="sessionNextMatchBtn" class="btn btn-primary">Next Match</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Bar -->
+            <div class="session-actions" id="sessionWizardActions" style="display:none;">
+                <a href="#" id="sessionAdvancedLink" class="session-advanced-link">Advanced Options</a>
+                <button id="sessionContinueBtn" class="btn btn-primary session-continue-btn">Continue</button>
+            </div>
+        </div>
+    </section>
+
     <!-- Player Management Screen -->
-    <section id="playerScreen" class="screen active">
+    <section id="playerScreen" class="screen">
         <div class="screen-content">
             <h2>Add Players</h2>
             <p class="screen-description">Enter 1-4 player names to get started</p>
@@ -71,7 +165,11 @@
                         <h3>Players</h3>
                         <p class="screen-description">Tap a name to edit. Drag to reorder. Max 4 players.</p>
                     </div>
-                    <button id="addPlayerBtn" class="btn btn-secondary">Add Player</button>
+                    <div class="player-header-actions">
+                        <button id="addPlayerBtn" class="btn btn-secondary">Add Player</button>
+                        <button id="savePlayersBtn" class="btn btn-primary">Save Players</button>
+                        <button id="startNewSessionBtn" class="btn btn-secondary">Start New Session</button>
+                    </div>
                 </div>
                 <ul id="playerEditableList" class="player-editable-list"></ul>
             </div>
@@ -96,10 +194,6 @@
                 <p class="player-lock-hint" id="playerLockUnsavedHint" style="display: none;">Save player changes to update lock options.</p>
             </div>
 
-            <div class="button-group">
-                <button id="savePlayersBtn" class="btn btn-primary">Save Players</button>
-                <button id="startNewSessionBtn" class="btn btn-secondary" style="display: none;">Start New Session</button>
-            </div>
         </div>
     </section>
 
@@ -158,12 +252,12 @@
                 <h3>Enter Scores</h3>
                 <div class="score-input-container">
                     <div class="score-input-group">
-                        <label id="team1ScoreLabel">Team 1 Score</label>
+                        <label id="team1ScoreLabel" for="team1Score">Team 1 Score</label>
                         <input type="number" id="team1Score" min="0" max="99" value="0" class="score-input">
                     </div>
                     <span class="score-separator">-</span>
                     <div class="score-input-group">
-                        <label id="team2ScoreLabel">Team 2 Score</label>
+                        <label id="team2ScoreLabel" for="team2Score">Team 2 Score</label>
                         <input type="number" id="team2Score" min="0" max="99" value="0" class="score-input">
                     </div>
                 </div>
@@ -177,12 +271,12 @@
                     <p class="score-hint" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0.5rem;">Enter the total score after extra time (full time + extra time goals)</p>
                     <div class="score-input-container" id="extraTimeScores" style="display: none; margin-top: 0.75rem;">
                         <div class="score-input-group">
-                            <label>Team 1 (Total)</label>
+                            <label for="team1ExtraTimeScore">Team 1 (Total)</label>
                             <input type="number" id="team1ExtraTimeScore" min="0" max="99" value="0" class="score-input">
                         </div>
                         <span class="score-separator">-</span>
                         <div class="score-input-group">
-                            <label>Team 2 (Total)</label>
+                            <label for="team2ExtraTimeScore">Team 2 (Total)</label>
                             <input type="number" id="team2ExtraTimeScore" min="0" max="99" value="0" class="score-input">
                         </div>
                     </div>
@@ -197,12 +291,12 @@
                     <p class="score-hint" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0.5rem;">Enter only the penalties scored (e.g., 5-4)</p>
                     <div class="score-input-container" id="penaltiesScores" style="display: none; margin-top: 0.75rem;">
                         <div class="score-input-group">
-                            <label>Team 1 (Pens)</label>
+                            <label for="team1PenaltiesScore">Team 1 (Pens)</label>
                             <input type="number" id="team1PenaltiesScore" min="0" max="20" value="0" class="score-input">
                         </div>
                         <span class="score-separator">-</span>
                         <div class="score-input-group">
-                            <label>Team 2 (Pens)</label>
+                            <label for="team2PenaltiesScore">Team 2 (Pens)</label>
                             <input type="number" id="team2PenaltiesScore" min="0" max="20" value="0" class="score-input">
                         </div>
                     </div>
@@ -341,6 +435,7 @@
                     <span class="date-label">📅 To</span>
                     <input type="date" id="historyDateTo" class="date-input" title="To Date">
                 </label>
+                <label for="historySearch" class="sr-only">Search players</label>
                 <input type="text" id="historySearch" placeholder="Search players..." class="search-input">
                 <button id="clearHistoryFiltersBtn" class="btn btn-secondary clear-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Clear</button>
             </div>
@@ -354,6 +449,24 @@
         </div>
     </section>
 
+    <!-- Admin PIN Entry Modal -->
+    <div id="adminPinModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 400px;">
+            <h3 id="adminPinModalTitle">Enter Admin PIN</h3>
+            <p id="adminPinModalMessage" style="margin: 0.5rem 0 1rem 0; color: var(--text-secondary);">Please enter your 4-digit PIN to continue</p>
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                <div>
+                    <label for="adminPinModalInput" style="display: block; margin-bottom: 0.5rem; font-weight: 600;">PIN</label>
+                    <input type="password" id="adminPinModalInput" class="settings-input" placeholder="0000" maxlength="4" inputmode="numeric" pattern="[0-9]*" autocomplete="off" style="text-align: center; font-size: 1.5rem; letter-spacing: 0.5rem;">
+                </div>
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button id="adminPinModalCancel" class="btn btn-secondary">Cancel</button>
+                    <button id="adminPinModalSubmit" class="btn btn-primary">Submit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Edit Match Modal -->
     <div id="editMatchModal" class="modal" style="display: none;">
         <div class="modal-content">
@@ -363,12 +476,12 @@
             </div>
             <div class="score-input-container">
                 <div class="score-input-group">
-                    <label>Team 1 Score</label>
+                    <label for="editTeam1Score">Team 1 Score</label>
                     <input type="number" id="editTeam1Score" min="0" max="99" value="0" class="score-input">
                 </div>
                 <span class="score-separator">-</span>
                 <div class="score-input-group">
-                    <label>Team 2 Score</label>
+                    <label for="editTeam2Score">Team 2 Score</label>
                     <input type="number" id="editTeam2Score" min="0" max="99" value="0" class="score-input">
                 </div>
             </div>
@@ -381,15 +494,15 @@
                 </label>
                 <p class="score-hint" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0.5rem;">Enter the total score after extra time (full time + extra time goals)</p>
                 <div class="score-input-container" id="editExtraTimeScores" style="display: none; margin-top: 0.75rem;">
-                    <div class="score-input-group">
-                        <label>Team 1 (Total)</label>
-                        <input type="number" id="editTeam1ExtraTimeScore" min="0" max="99" value="0" class="score-input">
-                    </div>
-                    <span class="score-separator">-</span>
-                    <div class="score-input-group">
-                        <label>Team 2 (Total)</label>
-                        <input type="number" id="editTeam2ExtraTimeScore" min="0" max="99" value="0" class="score-input">
-                    </div>
+                        <div class="score-input-group">
+                            <label for="editTeam1ExtraTimeScore">Team 1 (Total)</label>
+                            <input type="number" id="editTeam1ExtraTimeScore" min="0" max="99" value="0" class="score-input">
+                        </div>
+                        <span class="score-separator">-</span>
+                        <div class="score-input-group">
+                            <label for="editTeam2ExtraTimeScore">Team 2 (Total)</label>
+                            <input type="number" id="editTeam2ExtraTimeScore" min="0" max="99" value="0" class="score-input">
+                        </div>
                 </div>
             </div>
             
@@ -401,15 +514,15 @@
                 </label>
                 <p class="score-hint" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0.5rem;">Enter only the penalties scored (e.g., 5-4)</p>
                 <div class="score-input-container" id="editPenaltiesScores" style="display: none; margin-top: 0.75rem;">
-                    <div class="score-input-group">
-                        <label>Team 1 (Pens)</label>
-                        <input type="number" id="editTeam1PenaltiesScore" min="0" max="20" value="0" class="score-input">
-                    </div>
-                    <span class="score-separator">-</span>
-                    <div class="score-input-group">
-                        <label>Team 2 (Pens)</label>
-                        <input type="number" id="editTeam2PenaltiesScore" min="0" max="20" value="0" class="score-input">
-                    </div>
+                        <div class="score-input-group">
+                            <label for="editTeam1PenaltiesScore">Team 1 (Pens)</label>
+                            <input type="number" id="editTeam1PenaltiesScore" min="0" max="20" value="0" class="score-input">
+                        </div>
+                        <span class="score-separator">-</span>
+                        <div class="score-input-group">
+                            <label for="editTeam2PenaltiesScore">Team 2 (Pens)</label>
+                            <input type="number" id="editTeam2PenaltiesScore" min="0" max="20" value="0" class="score-input">
+                        </div>
                 </div>
             </div>
             
@@ -499,6 +612,43 @@
             <!-- Data Management Tab -->
             <div id="dataSettingsTab" class="settings-tab-content">
                 <div class="settings-section">
+                    <h3>Shared League</h3>
+                    <p class="settings-description">Share this link with friends to play together</p>
+                    <div class="settings-group">
+                        <label for="shareUrlInput">Share URL:</label>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <input type="text" id="shareUrlInput" class="settings-input" readonly style="flex: 1;">
+                            <button id="copyShareUrlBtn" class="btn btn-secondary" style="padding: 0.5rem;">📋</button>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-group" style="margin-top: 1.5rem;">
+                        <h4>Admin Access</h4>
+                        <div id="adminStatus" class="admin-status">
+                            <p id="adminStatusText">Admin locked</p>
+                            <div class="pin-row">
+                                <label for="adminPinInput" class="sr-only">Admin PIN</label>
+                                <input id="adminPinInput" class="settings-input pin-input" inputmode="numeric" pattern="\\d{4}" maxlength="4" placeholder="4-digit PIN" />
+                                <button id="adminUnlockBtn" class="btn btn-primary">Unlock</button>
+                            </div>
+                            <div class="pin-row" id="adminPinSetupRow" style="display:none;">
+                                <label for="adminPinConfirmInput" class="sr-only">Confirm Admin PIN</label>
+                                <input id="adminPinConfirmInput" class="settings-input pin-input" inputmode="numeric" pattern="\\d{4}" maxlength="4" placeholder="Confirm PIN" />
+                                <button id="adminSetPinBtn" class="btn btn-secondary">Set PIN</button>
+                            </div>
+                            <button id="adminLockBtn" class="btn btn-secondary" style="margin-top: 0.5rem; display:none;">Lock</button>
+                            <button id="adminResetPinBtn" class="btn btn-secondary" style="margin-top: 0.5rem; display:none;">Reset PIN</button>
+                            <p id="adminHint" class="settings-description" style="margin-top: 0.5rem; font-size: 0.85rem;">
+                                Enter PIN to unlock admin actions.
+                            </p>
+                        </div>
+                        <p class="settings-description" style="margin-top: 0.5rem; font-size: 0.85rem;">
+                            Admin can edit/delete any match. Others can only edit matches from today.
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="settings-section" style="margin-top: 2rem;">
                     <h3>Data Management</h3>
                     <div class="button-group">
                         <button id="exportDataSettingsBtn" class="btn btn-primary">Export All Data</button>
@@ -530,6 +680,9 @@
 
     <!-- Navigation -->
     <nav class="bottom-nav">
+        <button class="nav-btn active" data-screen="sessionScreen">
+            <span>Session</span>
+        </button>
         <button class="nav-btn" data-screen="playerScreen">
             <span>Players</span>
         </button>
@@ -556,22 +709,52 @@
     <!-- jsPDF library for PDF export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
+    <!-- Firebase SDK v9 (compat) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
+    
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCvulsS4GT1haQKbj3NTSb1sflP0nSp6pY",
+            authDomain: "fc---score-keeper.firebaseapp.com",
+            projectId: "fc---score-keeper",
+            storageBucket: "fc---score-keeper.firebasestorage.app",
+            messagingSenderId: "990570140768",
+            appId: "1:990570140768:web:9e04c7b541d6ec99e05f05",
+            measurementId: "G-PG7RECYTW5"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        
+        console.log('Firebase initialized with compat library');
+        window.firebaseReady = true;
+    </script>
+    
+    <!-- Simple Firebase integration -->
+    <script src="src/firebase-simple.js?v=20260104e"></script>
+    
     <!-- Application scripts (split from app.js) -->
-    <script src="src/constants.js"></script>
-    <script src="src/persistence.js"></script>
-    <script src="src/settings.js"></script>
-    <script src="src/players.js"></script>
-    <script src="src/team-generator.js"></script>
-    <script src="src/stats-calculators.js"></script>
-    <script src="src/statistics-tracker.js"></script>
-    <script src="src/toast.js"></script>
-    <script src="src/statistics-display.js"></script>
-    <script src="src/match.js"></script>
-    <script src="src/season.js"></script>
-    <script src="src/share.js"></script>
-    <script src="src/touch.js"></script>
-    <script src="src/app-controller.js"></script>
-    <script src="src/main.js"></script>
+    <script src="src/constants.js?v=20260104e"></script>
+    <script src="src/persistence.js?v=20260104e"></script>
+    <script src="src/settings.js?v=20260104e"></script>
+    <script src="src/players.js?v=20260104e"></script>
+    <script src="src/team-generator.js?v=20260104e"></script>
+    <script src="src/stats-calculators.js?v=20260104e"></script>
+    <script src="src/statistics-tracker.js?v=20260104e"></script>
+    <script src="src/toast.js?v=20260104e"></script>
+    <script src="src/statistics-display.js?v=20260104e"></script>
+    <script src="src/match.js?v=20260104e"></script>
+    <script src="src/season.js?v=20260104e"></script>
+    <script src="src/share.js?v=20260104e"></script>
+    <script src="src/touch.js?v=20260104e"></script>
+    <script src="src/app-controller.js?v=20260104e"></script>
+    <script src="src/main.js?v=20260104e"></script>
 </body>
 </html>
 

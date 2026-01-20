@@ -7,8 +7,10 @@ document.addEventListener('DOMContentLoaded', () => {
 // Register service worker for PWA with update checking
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/Fc25-score-keeper/service-worker.js', {
-            scope: '/Fc25-score-keeper/',
+        // Support both Firebase Hosting root (/) and GitHub Pages subpath (/Fc25-score-keeper/)
+        const basePath = window.location.pathname.includes('/Fc25-score-keeper/') ? '/Fc25-score-keeper/' : '/';
+        navigator.serviceWorker.register(`${basePath}service-worker.js`, {
+            scope: basePath,
             updateViaCache: 'none' // Always check for updates
         })
             .then(reg => {

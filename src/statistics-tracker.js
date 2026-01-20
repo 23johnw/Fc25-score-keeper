@@ -7,15 +7,33 @@ class StatisticsTracker {
         this.storage = storageManager;
         this.settingsManager = settingsManager;
         this.statsMode = 'raw'; // raw | perGame | projected
+        this.firebaseStore = null; // Will be set by app controller
+    }
+
+    setFirebaseStore(firebaseStore) {
+        this.firebaseStore = firebaseStore;
     }
 
     getSeasonMatches(seasonNumber) {
+        // If Firebase mode, return all Firebase matches (no season concept in Firebase yet)
+        if (this.firebaseStore) {
+            return this.firebaseStore.getMatches();
+        }
+        
         const data = this.storage.getData();
         const season = data.seasons[seasonNumber];
         return season ? season.matches || [] : [];
     }
 
     getAllMatches() {
+        // If Firebase mode, get matches from Firebase
+        if (this.firebaseStore) {
+            const matches = this.firebaseStore.getMatches();
+            console.log('StatisticsTracker.getAllMatches() from Firebase:', matches.length, 'matches');
+            return matches;
+        }
+        
+        // Otherwise use local storage
         const data = this.storage.getData();
         const allMatches = [];
         Object.values(data.seasons).forEach(season => {
@@ -39,14 +57,26 @@ class StatisticsTracker {
         };
 
         // Include any players found in recorded matches (even if not in current players list)
-        Object.values(data.seasons || {}).forEach(season => {
-            (season.matches || []).forEach(match => {
+        if (this.firebaseStore) {
+            // Get players from Firebase matches
+            const matches = this.firebaseStore.getMatches();
+            matches.forEach(match => {
                 const team1 = Array.isArray(match.team1) ? match.team1 : [match.team1];
                 const team2 = Array.isArray(match.team2) ? match.team2 : [match.team2];
                 team1.forEach(addPlayer);
                 team2.forEach(addPlayer);
             });
-        });
+        } else {
+            // Get players from local storage matches
+            Object.values(data.seasons || {}).forEach(season => {
+                (season.matches || []).forEach(match => {
+                    const team1 = Array.isArray(match.team1) ? match.team1 : [match.team1];
+                    const team2 = Array.isArray(match.team2) ? match.team2 : [match.team2];
+                    team1.forEach(addPlayer);
+                    team2.forEach(addPlayer);
+                });
+            });
+        }
 
         return players;
     }

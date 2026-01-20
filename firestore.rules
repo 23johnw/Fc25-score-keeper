@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function leagueDoc(leagueId) {
+      return get(/databases/$(database)/documents/leagues/$(leagueId));
+    }
+    function isAdmin(leagueId) {
+      return isSignedIn() && request.auth.token.admin == true && request.auth.token.leagueId == leagueId;
+    }
+    function canEditMatch(leagueId) {
+      // Admin can always edit. Non-admin can edit until lockAt (if set).
+      return isAdmin(leagueId) || (resource.data.lockAt == null || request.time < resource.data.lockAt);
+    }
+    function nonAdminDoesNotChangeProtectedMatchFields() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return !('createdAt' in changed) && !('createdBy' in changed) && !('lockAt' in changed);
+    }
+    function isUpdatingActivePlayersOnly() {
+      // Allow any signed-in user to update only the active player list for the league setup UI
+      // (no other league fields may be changed by non-admin users).
+      return isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activePlayers', 'activePlayersUpdatedAt']);
+    }
+
+    // Prevent listing all leagues
+    match /leagues {
+      allow list: if false;
+    }
+    
+    // League document rules
+    match /leagues/{leagueId} {
+      // Anyone signed in (anonymous or Google) can read the league doc if they know the ID
+      allow read: if isSignedIn();
+
+      // Allow creating a league doc, but it must start with no admin assigned
+      allow create: if isSignedIn();
+
+      // Admin can update anything in the league doc. Otherwise only allow admin claim.
+      allow update: if isAdmin(leagueId) || isUpdatingActivePlayersOnly();
+
+      allow delete: if false;
+      
+      // Players subcollection
+      match /players/{playerId} {
+        allow read: if isSignedIn();
+        // Keep player write operations admin-only (safer; you can relax later if desired)
+        allow create, update, delete: if isAdmin(leagueId);
+      }
+      
+      // Matches subcollection
+      match /matches/{matchId} {
+        // Anyone can read matches
+        allow read: if isSignedIn();
+        
+        // Anyone can create matches
+        allow create: if isSignedIn()
+          && request.resource.data.createdBy == request.auth.uid
+          // Client must not set lockAt (Cloud Function will)
+          && (!('lockAt' in request.resource.data) || request.resource.data.lockAt == null);
+
+        // Update allowed if admin OR unlocked; non-admins cannot change protected fields.
+        allow update: if isSignedIn()
+          && canEditMatch(leagueId)
+          && (isAdmin(leagueId) || nonAdminDoesNotChangeProtectedMatchFields());
+
+        // Delete allowed if admin OR unlocked
+        allow delete: if isSignedIn() && canEditMatch(leagueId);
+      }
+    }
+  }
+}

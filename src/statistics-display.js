@@ -2,6 +2,34 @@
 // StatisticsDisplay - Render Statistics
 // ============================================================================
 
+// UI Toggle Implementation
+
+function setupToggleUI() {
+    const toggleButton = document.createElement('button');
+    toggleButton.innerText = 'Player View';
+    toggleButton.onclick = function() {
+        if (toggleButton.innerText === 'Player View') {
+            renderTeamTable();
+            toggleButton.innerText = 'Team View';
+        } else {
+            renderPlayerTable();
+            toggleButton.innerText = 'Player View';
+        }
+    };
+    document.body.appendChild(toggleButton);
+}
+
+function renderPlayerTable() {
+    // Logic to render player table
+}
+
+function renderTeamTable() {
+    // Logic to render team table
+}
+
+setupToggleUI();
+
+
 class StatisticsDisplay {
     constructor(statisticsTracker, settingsManager = null) {
         this.tracker = statisticsTracker;

@@ -9,13 +9,29 @@ class AppController {
         this.toastManager = new ToastManager();
         this.playerManager = new PlayerManager(this.storage);
         this.teamGenerator = new TeamGenerator();
+
+        // Session wizard state
+        this.sessionWizardStep = 'players'; // 'players' | 'teams' | 'match'
+        this.sessionPlayers = [];
+        this.sessionSelectedStructure = null;
+        this.sessionSelectedStructureIndex = null;
+        this.sessionAvailableStructures = [];
+        this.sessionStarted = false;
+        this.uiMode = 'session'; // 'session' | 'advanced'
         this.seasonManager = new SeasonManager(this.storage);
         this.matchRecorder = new MatchRecorder(this.storage, this.seasonManager);
         this.statisticsTracker = new StatisticsTracker(this.storage, this.settingsManager);
         this.statisticsDisplay = new StatisticsDisplay(this.statisticsTracker, this.settingsManager);
         this.shareManager = new ShareManager(this.storage, this.statisticsTracker, this.seasonManager);
         
-        this.currentScreen = 'playerScreen';
+        // Firebase integration
+        this.firebaseManager = null;
+        this.firebaseStore = null;
+        this.isFirebaseMode = false;
+        this.isAdmin = false;
+        this.adminUnlockedThisSession = false; // Track if admin was unlocked in current session
+
+        this.currentScreen = null;
         this.selectedStructureIndex = null;
         this.selectedStructure = null;
         this.selectedAllStructures = false;
@@ -50,19 +66,41 @@ class AppController {
         };
     }
 
-    initializeApp() {
+    async initializeApp() {
+
+        // Initialize Firebase first
+        await this.initializeFirebase();
+
+        // Retry Firebase initialization after a delay if it failed
+        if (!this.isFirebaseMode) {
+            setTimeout(async () => {
+                console.log('Retrying Firebase initialization...');
+                await this.initializeFirebase();
+            }, 2000);
+        }
+
         // Load existing players
         const players = this.playerManager.getPlayers();
         this.loadPlayersIntoUI(players);
 
+        // UI mode (session vs advanced) should be known before we decide default screen
+        this.loadUiMode();
+        this.applyUiMode();
+
         // Try to restore saved game state
         this.restoreSavedGameState();
 
-        // If no saved state or insufficient players, show appropriate screen
-        if (!this.currentScreen || players.length < 2) {
-            this.showScreen(players.length >= 2 ? 'teamScreen' : 'playerScreen');
+        // Default screen selection:
+        // - Session mode: always land on Session splash (no tabs)
+        // - Advanced mode: restore saved screen, otherwise Players
+        if (this.uiMode === 'session') {
+            // Always show session screen in session mode, ignore saved state
+            this.currentScreen = null;
+            this.showScreen('sessionScreen');
+        } else if (!this.currentScreen) {
+            this.showScreen('playerScreen');
         }
-
+        
         this.updateSeasonInfo();
         this.updatePlayerNameHistory(); // Add this line
         this.renderPlayerLockOptions();
@@ -71,7 +109,202 @@ class AppController {
         this.updatePlayedDates();
         this.initializeByDatePanel();
         this.updateCustomFilterSummary([]);
+
+        // Update share URL in settings
+        this.updateShareUrl();
         this.renderCustomStatsSection();
+
+        this.initializeEventListeners();
+        
+        // Display app version banner
+        const bannerVersion = document.getElementById('appVersionBanner');
+        if (bannerVersion) {
+            // Set version immediately (synchronously)
+            bannerVersion.textContent = 'Version 1.80.0';
+            // Then try to update from cache (async)
+            this.displayAppVersion(bannerVersion).catch(err => {
+                console.error('Error displaying app version:', err);
+            });
+        }
+    }
+
+    async initializeFirebase() {
+        try {
+            // Wait for Firebase modules to load
+            let attempts = 0;
+            while (window.firebaseReady === undefined && attempts < 50) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                attempts++;
+            }
+            
+            if (window.firebaseReady === false || !window.firebaseManager || !window.firebaseStore) {
+                console.log('Firebase modules not available, using local storage mode');
+                this.toastManager.info('Using local storage mode');
+                return;
+            }
+            
+            this.firebaseManager = window.firebaseManager;
+            this.firebaseStore = window.firebaseStore;
+            
+            // Make this available globally for Firebase callbacks
+            window.appController = this;
+            
+            // Initialize Firebase
+            const authOk = await this.firebaseManager.initialize();
+            if (authOk) {
+                const leagueOk = await this.firebaseStore.initializeLeague();
+                this.isFirebaseMode = !!leagueOk;
+                
+                // Set Firebase store on other managers
+                if (this.isFirebaseMode) {
+                    this.matchRecorder.setFirebaseStore(this.firebaseStore);
+                    this.statisticsTracker.setFirebaseStore(this.firebaseStore);
+                    this.playerManager.setFirebaseStore(this.firebaseStore);
+                }
+                
+                console.log('Firebase initialized successfully');
+                if (this.isFirebaseMode) {
+                    this.toastManager.success('Connected to shared league! 🔥');
+                } else {
+                    this.toastManager.info('Using local storage mode');
+                }
+                
+                // Update UI to show Firebase is ready
+                this.updateAdminUI();
+                this.updateShareUrl();
+            } else {
+                console.warn('Firebase initialization failed, using local storage');
+                this.toastManager.info('Using local storage mode');
+            }
+        } catch (error) {
+            console.error('Firebase setup error:', error);
+            console.log('Falling back to local storage');
+            this.toastManager.info('Using local storage mode');
+        }
+    }
+
+    onAuthStateChanged(user, isAdmin) {
+        console.log('Auth state changed - isAdmin:', isAdmin, 'session unlocked:', this.adminUnlockedThisSession);
+
+        // Only grant admin status if it was unlocked in THIS session
+        // This prevents admin status from persisting across browser refreshes
+        const wasAdminBefore = this.isAdmin;
+        this.isAdmin = isAdmin && this.adminUnlockedThisSession;
+
+        if (wasAdminBefore && !this.isAdmin) {
+            console.log('Admin status cleared on page load (session-only)');
+        }
+
+        this.updateAdminUI();
+
+        // In compat mode, firebaseStore may not have claimAdmin; admin claim is handled in firebase-simple.js
+        if (this.isAdmin && this.firebaseStore && typeof this.firebaseStore.claimAdmin === 'function') {
+            this.firebaseStore.claimAdmin(user);
+        }
+    }
+
+    onDataChanged(type, data) {
+        // Handle real-time data updates from Firebase
+        switch (type) {
+            case 'matches':
+                this.onMatchesChanged(data);
+                break;
+            case 'players':
+                this.onPlayersChanged(data);
+                break;
+            case 'activePlayers':
+                this.onActivePlayersChanged(data);
+                break;
+            case 'settings':
+                this.onSettingsChanged(data);
+                break;
+        }
+    }
+
+    onMatchesChanged(matches) {
+        // Update UI when matches change
+        console.log('Firebase matches changed:', matches.length, 'matches');
+        if (this.currentScreen === 'historyScreen') {
+            this.loadMatchHistory();
+        }
+        if (this.currentScreen === 'statsScreen') {
+            this.renderStatsForCurrentTab();
+        }
+    }
+
+    renderStatsForCurrentTab() {
+        // Re-render stats for the currently active tab
+        const activeTabBtn = document.querySelector('#statsTabSelect');
+        const currentTab = activeTabBtn ? activeTabBtn.value : 'today';
+        console.log('Refreshing stats for tab:', currentTab);
+        this.switchStatsTab(currentTab);
+    }
+
+    onPlayersChanged(players) {
+        // Update UI when players change
+        // For now, we'll keep using local player management
+        // but this could be extended to sync players too
+    }
+
+    onActivePlayersChanged(players) {
+        // Update UI if on player screen
+        if (this.currentScreen === 'playerScreen') {
+            const currentPlayers = this.playerManager.getPlayers();
+            this.loadPlayersIntoUI(currentPlayers);
+        }
+    }
+
+    onSettingsChanged(settings) {
+        // Update UI when settings change
+        this.settingsManager.updateFromFirebase(settings);
+        this.updateLockLabels();
+    }
+
+    updateAdminUI() {
+        const adminStatus = document.getElementById('adminStatus');
+        const adminStatusText = document.getElementById('adminStatusText');
+        const adminPinInput = document.getElementById('adminPinInput');
+        const adminPinConfirmInput = document.getElementById('adminPinConfirmInput');
+        const adminUnlockBtn = document.getElementById('adminUnlockBtn');
+        const adminSetPinBtn = document.getElementById('adminSetPinBtn');
+        const adminPinSetupRow = document.getElementById('adminPinSetupRow');
+        const adminLockBtn = document.getElementById('adminLockBtn');
+        const adminResetPinBtn = document.getElementById('adminResetPinBtn');
+        
+        if (adminStatus && adminStatusText && adminPinInput && adminUnlockBtn && adminSetPinBtn && adminPinSetupRow && adminLockBtn && adminResetPinBtn) {
+            if (this.isAdmin) {
+                adminStatus.classList.add('admin-active');
+                adminStatusText.textContent = 'Admin unlocked';
+                adminPinInput.value = '';
+                if (adminPinConfirmInput) adminPinConfirmInput.value = '';
+                adminPinInput.style.display = 'none';
+                adminUnlockBtn.style.display = 'none';
+                adminPinSetupRow.style.display = 'none';
+                adminLockBtn.style.display = 'block';
+                // “Hidden” reset (shown only when already admin; can be hidden further later)
+                adminResetPinBtn.style.display = 'block';
+            } else {
+                adminStatus.classList.remove('admin-active');
+                adminStatusText.textContent = 'Admin locked';
+                adminLockBtn.style.display = 'none';
+                adminResetPinBtn.style.display = 'none';
+                adminPinInput.style.display = 'block';
+                adminUnlockBtn.style.display = 'inline-flex';
+            }
+        }
+    }
+
+    updateShareUrl() {
+        const shareUrlInput = document.getElementById('shareUrlInput');
+        if (shareUrlInput) {
+            if (this.isFirebaseMode) {
+                shareUrlInput.value = 'https://fc---score-keeper.web.app';
+                shareUrlInput.disabled = false;
+            } else {
+                shareUrlInput.value = 'Local storage mode - no sharing available';
+                shareUrlInput.disabled = true;
+            }
+        }
     }
 
     initializeEventListeners() {
@@ -79,7 +312,6 @@ class AppController {
         const saveBtn = document.getElementById('savePlayersBtn');
         if (saveBtn) {
             saveBtn.addEventListener('click', () => {
-                console.log('Save button clicked'); // Debug log
                 this.savePlayers();
             });
         } else {
@@ -287,6 +519,21 @@ class AppController {
         document.getElementById('exportDataSettingsBtn').addEventListener('click', () => this.exportData());
         document.getElementById('importDataSettingsBtn').addEventListener('click', () => this.importData());
         document.getElementById('clearAllDataBtn').addEventListener('click', () => this.confirmClearAllData());
+        
+        // Admin PIN buttons
+        const adminUnlockBtn = document.getElementById('adminUnlockBtn');
+        if (adminUnlockBtn) adminUnlockBtn.addEventListener('click', () => this.unlockAdminWithPin());
+        const adminSetPinBtn = document.getElementById('adminSetPinBtn');
+        if (adminSetPinBtn) adminSetPinBtn.addEventListener('click', () => this.setAdminPin());
+        const adminLockBtn = document.getElementById('adminLockBtn');
+        if (adminLockBtn) adminLockBtn.addEventListener('click', () => this.lockAdmin());
+        const adminResetPinBtn = document.getElementById('adminResetPinBtn');
+        if (adminResetPinBtn) adminResetPinBtn.addEventListener('click', () => this.resetAdminPin());
+        const copyShareUrlBtn = document.getElementById('copyShareUrlBtn');
+        if (copyShareUrlBtn) {
+            copyShareUrlBtn.addEventListener('click', () => this.copyShareUrl());
+        }
+        
         const darkModeSetting = document.getElementById('darkModeSetting');
         if (darkModeSetting) {
             darkModeSetting.addEventListener('change', (e) => {
@@ -340,7 +587,14 @@ class AppController {
         // Dark mode toggle
         const darkModeToggle = document.getElementById('darkModeToggle');
         if (darkModeToggle) {
-            darkModeToggle.addEventListener('click', () => this.toggleDarkMode());
+            // Remove any existing listeners first
+            const newToggle = darkModeToggle.cloneNode(true);
+            darkModeToggle.parentNode.replaceChild(newToggle, darkModeToggle);
+            // Re-attach listener
+            document.getElementById('darkModeToggle').addEventListener('click', () => {
+                console.log('Dark mode button clicked');
+                this.toggleDarkMode();
+            });
             this.initializeDarkMode();
         }
         
@@ -354,18 +608,66 @@ class AppController {
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const screen = e.target.closest('.nav-btn').dataset.screen;
-                const screenOrder = ['homeScreen', 'playerScreen', 'teamScreen', 'sequenceScreen', 'gameScreen', 'statsScreen', 'historyScreen', 'settingsScreen'];
+                const screenOrder = ['sessionScreen', 'homeScreen', 'playerScreen', 'teamScreen', 'sequenceScreen', 'gameScreen', 'statsScreen', 'historyScreen', 'settingsScreen'];
                 const currentIndex = screenOrder.indexOf(this.currentScreen);
                 const targetIndex = screenOrder.indexOf(screen);
                 const direction = targetIndex > currentIndex ? 'forward' : 'back';
                 this.showScreen(screen, direction);
             });
         });
+
+        // Session wizard
+        const sessionContinueBtn = document.getElementById('sessionContinueBtn');
+        if (sessionContinueBtn) {
+            sessionContinueBtn.addEventListener('click', () => this.sessionContinue());
+        }
+
+        const sessionAdvancedLink = document.getElementById('sessionAdvancedLink');
+        if (sessionAdvancedLink) {
+            sessionAdvancedLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.sessionAdvanced();
+            });
+        }
+
+        const sessionAddPlayerBtn = document.getElementById('sessionAddPlayerBtn');
+        if (sessionAddPlayerBtn) {
+            sessionAddPlayerBtn.addEventListener('click', () => this.addNewSessionPlayerInput());
+        }
+
+        const sessionNextMatchBtn = document.getElementById('sessionNextMatchBtn');
+        if (sessionNextMatchBtn) {
+            sessionNextMatchBtn.addEventListener('click', () => this.sessionNextMatch());
+        }
+
+        const sessionStartBtn = document.getElementById('sessionStartBtn');
+        if (sessionStartBtn) {
+            sessionStartBtn.addEventListener('click', () => this.startSessionWizard());
+        }
+
+        const sessionAdvancedModeBtn = document.getElementById('sessionAdvancedModeBtn');
+        if (sessionAdvancedModeBtn) {
+            sessionAdvancedModeBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.setUiMode('advanced');
+                // Jump to the classic players screen to make it obvious
+                this.showScreen('playerScreen');
+            });
+        }
+
+        const goToSessionBtn = document.getElementById('goToSessionBtn');
+        if (goToSessionBtn) {
+            goToSessionBtn.addEventListener('click', () => {
+                this.setUiMode('session');
+                this.sessionStarted = false;
+                this.showScreen('sessionScreen');
+            });
+        }
     }
 
     showScreen(screenId, direction = 'forward') {
         // Determine animation direction
-        const screenOrder = ['homeScreen', 'playerScreen', 'teamScreen', 'sequenceScreen', 'gameScreen', 'statsScreen', 'historyScreen', 'settingsScreen'];
+        const screenOrder = ['sessionScreen', 'homeScreen', 'playerScreen', 'teamScreen', 'sequenceScreen', 'gameScreen', 'statsScreen', 'historyScreen', 'settingsScreen'];
         const currentIndex = this.currentScreen ? screenOrder.indexOf(this.currentScreen) : -1;
         const targetIndex = screenOrder.indexOf(screenId);
         
@@ -405,7 +707,17 @@ class AppController {
         });
 
         // Load screen-specific data
-        if (screenId === 'teamScreen') {
+        if (screenId === 'sessionScreen') {
+            // Session screen now starts with a splash, unless the wizard was started
+            if (this.uiMode === 'advanced' || !this.sessionStarted) {
+                this.applyUiMode();
+            } else {
+                this.loadSessionWizard();
+            }
+
+            // Hide back to session button on session screen
+            this.updateBackToSessionButton();
+        } else if (screenId === 'teamScreen') {
             this.loadTeamCombinations();
         } else if (screenId === 'sequenceScreen') {
             this.loadSequenceList();
@@ -417,6 +729,9 @@ class AppController {
             setTimeout(() => {
                 this.initializeStatsTabSwipes();
             }, 100);
+
+            // Show/hide back to session button
+            this.updateBackToSessionButton();
         } else if (screenId === 'playerScreen') {
             // Reload players to ensure UI is in sync
             const players = this.playerManager.getPlayers();
@@ -432,6 +747,9 @@ class AppController {
                 document.getElementById('matchHistoryList').style.display = this.currentHistoryView === 'list' ? 'flex' : 'none';
                 document.getElementById('matchHistoryTimeline').style.display = this.currentHistoryView === 'timeline' ? 'block' : 'none';
             }
+
+            // Show/hide back to session button
+            this.updateBackToSessionButton();
             this.loadMatchHistory();
         } else if (screenId === 'settingsScreen') {
             this.loadSettingsScreen();
@@ -795,9 +1113,7 @@ class AppController {
         }
     }
 
-    savePlayers() {
-        console.log('savePlayers called'); // Debug log
-        
+    async savePlayers() {
         const rawPlayers = this.playerEditorValues
             .map(name => (typeof name === 'string' ? name.trim() : ''))
             .filter(name => name.length > 0);
@@ -808,8 +1124,6 @@ class AppController {
             this.toastManager.error('Duplicate player names detected. Please ensure each player has a unique name.', 'Validation Error');
             return;
         }
-
-        console.log('Players extracted:', players); // Debug log
 
         if (players.length < 2) {
             this.toastManager.warning('Please enter at least 2 players', 'Player Requirement');
@@ -822,8 +1136,8 @@ class AppController {
                 this.playerManager.addToHistory(player);
             });
             
-            if (this.playerManager.setPlayers(players)) {
-                console.log('Players saved successfully');
+            const saved = await this.playerManager.setPlayers(players);
+            if (saved) {
                 this.playerEditorValues = [...players];
                 if (this.playerEditorValues.length === 1) {
                     this.playerEditorValues.push('');
@@ -837,7 +1151,6 @@ class AppController {
                 this.showScreen('teamScreen');
                 this.toastManager.success('Players saved successfully!');
             } else {
-                console.error('Failed to save players');
                 this.toastManager.error('Error saving players');
             }
         } catch (error) {
@@ -1097,7 +1410,7 @@ class AppController {
         };
         this.selectedStructureIndex = null; // Clear individual selection
         this.selectedAllStructures = true;
-
+        
         this.loadTeamCombinations();
         document.getElementById('confirmSequenceBtn').disabled = false;
         this.saveCurrentGameState(); // Save the state
@@ -1231,7 +1544,7 @@ class AppController {
     }
 
     // Match Recording
-    recordScore() {
+    async recordScore() {
         const team1Score = parseInt(document.getElementById('team1Score').value) || 0;
         const team2Score = parseInt(document.getElementById('team2Score').value) || 0;
 
@@ -1259,7 +1572,8 @@ class AppController {
 
         const { team1, team2 } = this.currentMatch;
         const matchIndex = this.currentGameIndex;
-        const savedMatch = this.matchRecorder.recordMatch(
+        
+        const savedMatch = await this.matchRecorder.recordMatch(
             team1, 
             team2, 
             team1Score, 
@@ -1279,10 +1593,10 @@ class AppController {
             document.getElementById('team2Score').value = 0;
             this.updatePlayedDates();
             this.renderCustomStatsSection();
-
+            
             this.currentGameIndex++;
             this.saveCurrentGameState(); // Save the state after recording match
-
+            
             if (this.selectedStructure && this.currentGameIndex < this.selectedStructure.matches.length) {
                 this.showCurrentMatch();
             } else {
@@ -1582,6 +1896,8 @@ class AppController {
         if (select) {
             select.value = tab;
         }
+        
+        console.log('Switching to stats tab:', tab);
 
         const seasonStats = document.getElementById('seasonStats');
         const overallStats = document.getElementById('overallStats');
@@ -1802,7 +2118,29 @@ class AppController {
         return;
     }
 
-    startNewSeason() {
+    async startNewSeason() {
+        if (!this.isAdmin) {
+            const pin = await this.showPinModal('Enter Admin PIN', 'Enter admin PIN to start a new season:');
+            if (!pin) {
+                return; // User cancelled
+            }
+
+            try {
+                await this.firebaseManager.verifyPin(pin);
+                this.isAdmin = this.firebaseManager.getIsAdmin();
+                this.updateAdminUI();
+
+                if (!this.isAdmin) {
+                    this.toastManager.error('Incorrect PIN');
+                    return;
+                }
+            } catch (error) {
+                console.error('PIN verification error:', error);
+                this.toastManager.error('PIN verification failed');
+                return;
+            }
+        }
+
         if (confirm('Start a new season? This will reset season statistics but keep overall statistics.')) {
             if (this.seasonManager.startNewSeason()) {
                 this.updateSeasonInfo();
@@ -1820,7 +2158,29 @@ class AppController {
         document.getElementById('seasonInfo').style.display = 'block';
     }
 
-    clearAllStatistics() {
+    async clearAllStatistics() {
+        if (!this.isAdmin) {
+            const pin = await this.showPinModal('Enter Admin PIN', 'Enter admin PIN to clear all statistics:');
+            if (!pin) {
+                return; // User cancelled
+            }
+
+            try {
+                await this.firebaseManager.verifyPin(pin.trim());
+                this.isAdmin = this.firebaseManager.getIsAdmin();
+                this.updateAdminUI();
+
+                if (!this.isAdmin) {
+                    this.toastManager.error('Incorrect PIN');
+                    return;
+                }
+            } catch (error) {
+                console.error('PIN verification error:', error);
+                this.toastManager.error('PIN verification failed');
+                return;
+            }
+        }
+
         if (confirm('WARNING: This will delete ALL statistics, all seasons, and all match history. This cannot be undone. Continue?')) {
             if (this.storage.clearAllStatistics()) {
                 alert('All statistics cleared. Players are kept.');
@@ -2231,10 +2591,10 @@ class AppController {
             activeFilters.push(`Season: ${filter === 'today' ? 'Today' : 'Current'}`);
         }
         if (dateFrom) {
-            activeFilters.push(`From: ${new Date(dateFrom).toLocaleDateString()}`);
+            activeFilters.push(`From: ${new Date(dateFrom).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}`);
         }
         if (dateTo) {
-            activeFilters.push(`To: ${new Date(dateTo).toLocaleDateString()}`);
+            activeFilters.push(`To: ${new Date(dateTo).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}`);
         }
         if (search) {
             activeFilters.push(`Search: "${search}"`);
@@ -2287,7 +2647,7 @@ class AppController {
             }
             
             const date = new Date(match.timestamp);
-            const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const dateStr = date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
             const hasExtra = match.team1ExtraTimeScore !== undefined && match.team2ExtraTimeScore !== undefined;
             const hasPens = match.team1PenaltiesScore !== undefined && match.team2PenaltiesScore !== undefined;
@@ -2343,7 +2703,7 @@ class AppController {
             if (deleteBtn) {
                 const timestamp = deleteBtn.dataset.timestamp;
                 this.touchSwipeHandler.attachSwipeToDelete(item, () => {
-                    this.deleteMatch(timestamp);
+                    this.confirmDeleteMatch(timestamp);
                 });
             }
         });
@@ -2354,7 +2714,7 @@ class AppController {
         const matchesByDate = {};
         matches.forEach(match => {
             const date = new Date(match.timestamp);
-            const dateKey = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+            const dateKey = date.toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
             if (!matchesByDate[dateKey]) {
                 matchesByDate[dateKey] = [];
             }
@@ -2557,7 +2917,7 @@ class AppController {
             if (deleteBtn) {
                 const timestamp = deleteBtn.dataset.timestamp;
                 this.touchSwipeHandler.attachSwipeToDelete(item, () => {
-                    this.deleteMatch(timestamp);
+                    this.confirmDeleteMatch(timestamp);
                 });
             }
         });
@@ -2581,9 +2941,7 @@ class AppController {
         container.querySelectorAll('.match-history-btn.delete').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                if (confirm('Delete this match? This cannot be undone.')) {
-                    this.deleteMatch(btn.dataset.timestamp);
-                }
+                this.confirmDeleteMatch(btn.dataset.timestamp);
             });
         });
     }
@@ -2616,12 +2974,66 @@ class AppController {
         this.loadMatchHistory();
     }
 
-    editMatch(timestamp) {
+    async editMatch(timestamp) {
+        // Check if match can be edited (admin can always edit, or match is not locked)
+        const matchDate = new Date(timestamp);
+        const today = new Date();
+
+        // Get start of today in local timezone
+        const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+        // Get start of match day in local timezone
+        const startOfMatchDay = new Date(matchDate.getFullYear(), matchDate.getMonth(), matchDate.getDate());
+
+        const isTodayMatch = startOfMatchDay.getTime() === startOfToday.getTime();
+
+
+        // If match is from previous day(s) - require admin PIN
+        if (!isTodayMatch && !this.isAdmin) {
+            const pin = await this.showPinModal('Enter Admin PIN', 'This match is from a previous day. Enter admin PIN to edit:');
+            if (!pin) {
+                return; // User cancelled
+            }
+
+            try {
+                await this.firebaseManager.verifyPin(pin.trim());
+                this.isAdmin = this.firebaseManager.getIsAdmin();
+                this.updateAdminUI();
+
+                if (!this.isAdmin) {
+                    this.toastManager.error('Incorrect PIN');
+                    return;
+                }
+
+                this.toastManager.success('Admin access granted for this action');
+            } catch (error) {
+                console.error('PIN verification error:', error);
+                this.toastManager.error('PIN verification failed');
+                return;
+            }
+        }
+
+        // Now open the edit modal
+        let match = null;
+        if (this.isFirebaseMode && this.firebaseStore) {
+            // In Firebase mode, find match in Firebase cache
+            const firebaseMatches = this.firebaseStore.getMatches();
+            console.log('Looking for match in Firebase cache, total matches:', firebaseMatches.length, 'timestamp:', timestamp);
+            match = firebaseMatches.find(m => m.timestamp === timestamp);
+            if (!match) {
+                console.error('Match not found in Firebase cache:', timestamp);
+                console.log('Available timestamps:', firebaseMatches.map(m => m.timestamp));
+                return;
+            }
+            console.log('Found Firebase match:', match);
+        } else {
+            // Local storage mode
         const matchInfo = this.matchRecorder.findMatch(timestamp);
         if (!matchInfo) return;
 
         const data = this.storage.getData();
-        const match = data.seasons[matchInfo.season].matches[matchInfo.index];
+            match = data.seasons[matchInfo.season].matches[matchInfo.index];
+        }
         
         this.editingMatchTimestamp = timestamp;
 
@@ -2675,8 +3087,54 @@ class AppController {
         document.getElementById('editMatchModal').style.display = 'flex';
     }
 
-    saveEditMatch() {
+
+    async saveEditMatch() {
         if (!this.editingMatchTimestamp) return;
+
+        // Check if match is from today (same day)
+        const matchDate = new Date(this.editingMatchTimestamp);
+        const today = new Date();
+
+        // Get start of today in local timezone
+        const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+        // Get start of match day in local timezone
+        const startOfMatchDay = new Date(matchDate.getFullYear(), matchDate.getMonth(), matchDate.getDate());
+
+        const isTodayMatch = startOfMatchDay.getTime() === startOfToday.getTime();
+
+        console.log('Edit check - timestamp:', this.editingMatchTimestamp);
+        console.log('  matchDate:', matchDate, 'startOfMatchDay:', startOfMatchDay);
+        console.log('  today:', today, 'startOfToday:', startOfToday);
+        console.log('  isTodayMatch:', isTodayMatch, '(same day check)');
+
+        // If match is from today, allow editing directly
+        if (isTodayMatch || this.isAdmin) {
+            // Continue with normal edit logic
+        } else {
+            // Match is from previous day(s) - require admin PIN
+            const pin = await this.showPinModal('Enter Admin PIN', 'This match is from a previous day. Enter admin PIN to edit:');
+            if (!pin) {
+                return; // User cancelled
+            }
+
+            try {
+                await this.firebaseManager.verifyPin(pin.trim());
+                this.isAdmin = this.firebaseManager.getIsAdmin();
+                this.updateAdminUI();
+
+                if (!this.isAdmin) {
+                    this.toastManager.error('Incorrect PIN');
+                    return;
+                }
+
+                this.toastManager.success('Admin access granted for this action');
+            } catch (error) {
+                console.error('PIN verification error:', error);
+                this.toastManager.error('PIN verification failed');
+                return;
+            }
+        }
 
         const team1Score = parseInt(document.getElementById('editTeam1Score').value) || 0;
         const team2Score = parseInt(document.getElementById('editTeam2Score').value) || 0;
@@ -2724,15 +3182,60 @@ class AppController {
         }
     }
 
-    confirmDeleteMatch() {
-        if (!this.editingMatchTimestamp) return;
+    async confirmDeleteMatch(timestamp = null) {
+        // Use provided timestamp or fall back to editingMatchTimestamp
+        const matchTimestamp = timestamp || this.editingMatchTimestamp;
+        if (!matchTimestamp) return;
         
+        // Check if match is from today (same day)
+        const matchDate = new Date(matchTimestamp);
+        const today = new Date();
+
+        // Get start of today in local timezone
+        const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+        // Get start of match day in local timezone
+        const startOfMatchDay = new Date(matchDate.getFullYear(), matchDate.getMonth(), matchDate.getDate());
+
+        const isTodayMatch = startOfMatchDay.getTime() === startOfToday.getTime();
+
+
+        // If match is from today, allow deletion directly
+        if (isTodayMatch || this.isAdmin) {
         if (confirm('Delete this match? This cannot be undone.')) {
-            this.deleteMatch(this.editingMatchTimestamp);
+                this.deleteMatch(matchTimestamp);
+            }
+            return;
+        }
+
+        // Match is from previous day(s) - require admin PIN
+        const pin = await this.showPinModal('Enter Admin PIN', 'This match is from a previous day. Enter admin PIN to delete:');
+        if (!pin) {
+            return; // User cancelled
+        }
+
+        try {
+            await this.firebaseManager.verifyPin(pin.trim());
+            this.isAdmin = this.firebaseManager.getIsAdmin();
+            this.updateAdminUI();
+
+            if (this.isAdmin) {
+                this.toastManager.success('Admin access granted for this action');
+                if (confirm('Delete this match? This cannot be undone.')) {
+                    this.deleteMatch(matchTimestamp);
+                }
+            } else {
+                this.toastManager.error('Incorrect PIN');
+            }
+        } catch (error) {
+            console.error('PIN verification error:', error);
+            this.toastManager.error('PIN verification failed');
         }
     }
 
     deleteMatch(timestamp) {
+        console.log('Attempting to delete match with timestamp:', timestamp, 'isAdmin:', this.isAdmin);
+
         if (this.matchRecorder.deleteMatch(timestamp)) {
             // Haptic feedback
             this.vibrate([100, 50, 100]);
@@ -2755,8 +3258,31 @@ class AppController {
         this.editingMatchTimestamp = null;
     }
 
+    // Helper method to redirect to admin unlock with context
+
     // Export/Import Data
-    exportData() {
+    async exportData() {
+        if (!this.isAdmin) {
+            const pin = await this.showPinModal('Enter Admin PIN', 'Enter admin PIN to export data:');
+            if (!pin) {
+                return; // User cancelled
+            }
+
+            try {
+                await this.firebaseManager.verifyPin(pin.trim());
+                this.isAdmin = this.firebaseManager.getIsAdmin();
+                this.updateAdminUI();
+
+                if (!this.isAdmin) {
+                    this.toastManager.error('Incorrect PIN');
+                    return;
+                }
+            } catch (error) {
+                console.error('PIN verification error:', error);
+                this.toastManager.error('PIN verification failed');
+                return;
+            }
+        }
         const data = this.storage.getData();
         const json = JSON.stringify(data, null, 2);
         const blob = new Blob([json], { type: 'application/json' });
@@ -2771,7 +3297,28 @@ class AppController {
         alert('Data exported successfully!');
     }
 
-    importData() {
+    async importData() {
+        if (!this.isAdmin) {
+            const pin = await this.showPinModal('Enter Admin PIN', 'Enter admin PIN to import data:');
+            if (!pin) {
+                return; // User cancelled
+            }
+
+            try {
+                await this.firebaseManager.verifyPin(pin.trim());
+                this.isAdmin = this.firebaseManager.getIsAdmin();
+                this.updateAdminUI();
+
+                if (!this.isAdmin) {
+                    this.toastManager.error('Incorrect PIN');
+                    return;
+                }
+            } catch (error) {
+                console.error('PIN verification error:', error);
+                this.toastManager.error('PIN verification failed');
+                return;
+            }
+        }
         document.getElementById('importFileInput').click();
     }
 
@@ -2780,7 +3327,7 @@ class AppController {
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
             try {
                 const importedData = JSON.parse(e.target.result);
                 
@@ -2789,7 +3336,51 @@ class AppController {
                     throw new Error('Invalid data format');
                 }
 
-                if (confirm('This will replace ALL your current data. Continue?')) {
+                const isLegacyBackup = !!(importedData.seasons && typeof importedData.seasons === 'object');
+
+                // Firebase mode: import into shared league (merge, no deletes)
+                if (this.isFirebaseMode && this.firebaseStore && isLegacyBackup) {
+                    const allLegacyMatches = [];
+                    Object.values(importedData.seasons || {}).forEach(season => {
+                        (season.matches || []).forEach(m => allLegacyMatches.push(m));
+                    });
+
+                    const wipeFirst = confirm(
+                        `Before importing, do you want to WIPE the shared league first?\n\n` +
+                        `Choose OK = WIPE then import (clean slate)\n` +
+                        `Choose Cancel = MERGE import (skip duplicates by timestamp)`
+                    );
+
+                    if (wipeFirst) {
+                        if (!this.firebaseManager || !this.firebaseManager.getIsAdmin()) {
+                            alert('To wipe the shared league, you must unlock Admin first (PIN).');
+                            return;
+                        }
+                        if (!confirm('Final warning: this will DELETE ALL existing shared matches for everyone. Continue?')) {
+                            return;
+                        }
+                        await this.firebaseStore.wipeLeagueData();
+                    } else {
+                        if (!confirm(
+                            `Import legacy backup into the SHARED league (merge)?\n\n` +
+                            `- This will ADD matches (skip duplicates by timestamp)\n` +
+                            `- Set active players to: ${importedData.players.join(', ')}\n\n` +
+                            `Continue?`
+                        )) {
+                            return;
+                        }
+                    }
+
+                    const result = await this.firebaseStore.importLegacyMatches(allLegacyMatches);
+                    await this.firebaseStore.saveActivePlayers(importedData.players);
+
+                    alert(`Import complete!\nImported: ${result.imported}\nSkipped: ${result.skipped}\n\nReloading...`);
+                    location.reload();
+                    return;
+                }
+
+                // Local mode (or non-legacy): replace local storage like before
+                if (confirm('This will replace ALL your current LOCAL data on this device. Continue?')) {
                     this.storage.updateData(data => {
                         Object.assign(data, importedData);
                     });
@@ -2806,18 +3397,48 @@ class AppController {
 
     // Dark Mode
     initializeDarkMode() {
-        const isDark = localStorage.getItem('darkMode') === 'true';
+        // Check settings manager first, then localStorage for backwards compatibility
+        let isDark = false;
+        if (this.settingsManager) {
+            isDark = this.settingsManager.isDarkMode();
+        } else {
+            isDark = localStorage.getItem('darkMode') === 'true';
+        }
+        
         if (isDark) {
             document.body.classList.add('dark-mode');
-            document.getElementById('darkModeToggle').textContent = '☀️';
+        }
+        
+        // Update toggle button icon
+        const toggleBtn = document.getElementById('darkModeToggle');
+        if (toggleBtn) {
+            toggleBtn.textContent = isDark ? '☀️' : '🌙';
         }
     }
 
     toggleDarkMode() {
+        console.log('toggleDarkMode called');
         document.body.classList.toggle('dark-mode');
         const isDark = document.body.classList.contains('dark-mode');
-        localStorage.setItem('darkMode', isDark);
-        document.getElementById('darkModeToggle').textContent = isDark ? '☀️' : '🌙';
+        console.log('Dark mode is now:', isDark);
+        
+        // Update both localStorage and settings manager for consistency
+        localStorage.setItem('darkMode', isDark ? 'true' : 'false');
+        if (this.settingsManager) {
+            this.settingsManager.setDarkMode(isDark);
+        }
+        
+        // Update toggle button icon
+        const toggleBtn = document.getElementById('darkModeToggle');
+        if (toggleBtn) {
+            toggleBtn.textContent = isDark ? '☀️' : '🌙';
+        }
+        
+        // Update settings checkbox if it exists
+        const darkModeSetting = document.getElementById('darkModeSetting');
+        if (darkModeSetting) {
+            darkModeSetting.checked = isDark;
+        }
     }
 
     // Check for app updates
@@ -2959,23 +3580,30 @@ class AppController {
         }
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
-            this.displayAppVersion(bannerVersion);
+            // Set version immediately (synchronously)
+            bannerVersion.textContent = 'Version 1.80.0';
+            // Then try to update from cache (async)
+            this.displayAppVersion(bannerVersion).catch(err => {
+                console.error('Error displaying app version:', err);
+            });
         }
     }
 
     async displayAppVersion(versionDisplayElement) {
-        // First, try to get version from active cache name
+        if (!versionDisplayElement) return;
+        
+        // Try to get version from active cache name
         if ('caches' in window) {
             try {
                 const cacheNames = await caches.keys();
                 // Find the cache name that matches our pattern: fc25-score-tracker-vXX
                 const cacheName = cacheNames.find(name => name.startsWith('fc25-score-tracker-v'));
                 if (cacheName) {
-                    // Extract version number (e.g., "v19" -> "19")
+                    // Extract version number (e.g., "v72" -> "72")
                     const versionMatch = cacheName.match(/v(\d+)/);
                     if (versionMatch) {
                         const cacheVersion = versionMatch[1];
-                        // Format as version number (e.g., "1.19.0")
+                        // Format as version number (e.g., "1.72.0")
                         versionDisplayElement.textContent = `Version 1.${cacheVersion}.0`;
                         return;
                     }
@@ -2985,11 +3613,9 @@ class AppController {
             }
         }
         
-        // Fallback to constant version
+        // Fallback to constant version if cache lookup failed
         if (typeof APP_VERSION !== 'undefined') {
             versionDisplayElement.textContent = `Version ${APP_VERSION}`;
-        } else {
-            versionDisplayElement.textContent = 'Version unknown';
         }
     }
 
@@ -3111,11 +3737,70 @@ class AppController {
         }
     }
 
-    confirmClearAllData() {
-        if (confirm('Are you sure you want to clear ALL data? This cannot be undone!\n\nThis will delete:\n- All matches\n- All statistics\n- All settings\n- All player data')) {
+    async confirmClearAllData() {
+        if (!this.isAdmin) {
+            const pin = await this.showPinModal('Enter Admin PIN', 'Enter admin PIN to clear all data:');
+            if (!pin) {
+                return; // User cancelled
+            }
+
+            try {
+                await this.firebaseManager.verifyPin(pin.trim());
+                this.isAdmin = this.firebaseManager.getIsAdmin();
+                this.updateAdminUI();
+
+                if (!this.isAdmin) {
+                    this.toastManager.error('Incorrect PIN');
+                    return;
+                }
+            } catch (error) {
+                console.error('PIN verification error:', error);
+                this.toastManager.error('PIN verification failed');
+                return;
+            }
+        }
+
+        const firebaseNote = this.isFirebaseMode ? '\n\n⚠️ This will also delete ALL Firebase data (shared across all browsers)!' : '';
+        if (confirm('Are you sure you want to clear ALL data? This cannot be undone!\n\nThis will delete:\n- All matches\n- All statistics\n- All settings\n- All player data' + firebaseNote)) {
             if (confirm('This is your last chance. Are you absolutely sure?')) {
+                
+                
+                // If Firebase mode, clear Firebase data first
+                if (this.isFirebaseMode && this.firebaseStore) {
+                    try {
+                        if (!this.firebaseManager || !this.firebaseManager.getIsAdmin()) {
+                            alert('To wipe the shared league, you must unlock Admin first (PIN).');
+                            return;
+                        }
+
+                        const result = await this.firebaseStore.wipeLeagueData();
+                        console.log('Wiped league data:', result);
+                        
+                    } catch (error) {
+                        console.error('Error clearing Firebase:', error);
+                        alert('Error clearing Firebase data: ' + error.message);
+                        return;
+                    }
+                }
+                
+                // Clear local storage
                 this.storage.clearAll();
                 this.settingsManager.resetAll();
+                
+                // Also clear any other localStorage keys that might exist
+                const keysToRemove = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && (key.includes('fc25') || key.includes('score') || key.includes('player'))) {
+                        keysToRemove.push(key);
+                    }
+                }
+                keysToRemove.forEach(key => {
+                    localStorage.removeItem(key);
+                });
+                
+                // Small delay to ensure everything is saved
+                await new Promise(resolve => setTimeout(resolve, 500));
                 location.reload();
             }
         }
@@ -3195,6 +3880,1011 @@ class AppController {
             } catch (e) {
                 // Vibration not supported or failed
             }
+        }
+    }
+
+    // Admin PIN Methods
+    /**
+     * Show a custom PIN entry modal (replaces browser prompt for better compatibility)
+     * @param {string} title - Title for the modal
+     * @param {string} message - Message to display
+     * @returns {Promise<string|null>} - Returns the PIN if entered, null if cancelled
+     */
+    showPinModal(title = 'Enter Admin PIN', message = 'Please enter your 4-digit PIN to continue') {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('adminPinModal');
+            const titleEl = document.getElementById('adminPinModalTitle');
+            const messageEl = document.getElementById('adminPinModalMessage');
+            const inputEl = document.getElementById('adminPinModalInput');
+            const submitBtn = document.getElementById('adminPinModalSubmit');
+            const cancelBtn = document.getElementById('adminPinModalCancel');
+
+            if (!modal || !titleEl || !messageEl || !inputEl || !submitBtn || !cancelBtn) {
+                console.error('PIN modal elements not found', {
+                    modal: !!modal,
+                    titleEl: !!titleEl,
+                    messageEl: !!messageEl,
+                    inputEl: !!inputEl,
+                    submitBtn: !!submitBtn,
+                    cancelBtn: !!cancelBtn
+                });
+                // Fallback: try to create modal dynamically if it doesn't exist
+                if (!modal) {
+                    console.error('Modal HTML not found in DOM - please refresh the page to get the latest version');
+                    resolve(null);
+                    return;
+                }
+                resolve(null);
+                return;
+            }
+
+            // Set title and message
+            titleEl.textContent = title;
+            messageEl.textContent = message;
+
+            // Reset input
+            inputEl.value = '';
+            inputEl.classList.remove('error');
+
+            // Show modal
+            modal.style.display = 'flex';
+
+            // Focus input after a short delay to ensure modal is visible
+            setTimeout(() => {
+                inputEl.focus();
+            }, 100);
+
+            // Cleanup function
+            const cleanup = () => {
+                modal.style.display = 'none';
+                inputEl.value = '';
+                inputEl.classList.remove('error');
+                submitBtn.removeEventListener('click', submitHandler);
+                cancelBtn.removeEventListener('click', cancelHandler);
+                inputEl.removeEventListener('keydown', keyHandler);
+            };
+
+            // Submit handler
+            const submitHandler = () => {
+                const pin = inputEl.value.trim();
+                if (!/^\d{4}$/.test(pin)) {
+                    inputEl.classList.add('error');
+                    this.toastManager.error('Please enter a valid 4-digit PIN');
+                    inputEl.focus();
+                    return;
+                }
+                cleanup();
+                resolve(pin);
+            };
+
+            // Cancel handler
+            const cancelHandler = () => {
+                cleanup();
+                resolve(null);
+            };
+
+            // Key handler (Enter to submit, Escape to cancel)
+            const keyHandler = (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    submitHandler();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cancelHandler();
+                }
+            };
+
+            // Attach event listeners
+            submitBtn.addEventListener('click', submitHandler);
+            cancelBtn.addEventListener('click', cancelHandler);
+            inputEl.addEventListener('keydown', keyHandler);
+
+            // Close on backdrop click
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    cancelHandler();
+                }
+            });
+        });
+    }
+
+    async unlockAdminWithPin() {
+        if (!this.firebaseManager) {
+            this.toastManager.error('Firebase not initialized');
+            return;
+        }
+        const pin = (document.getElementById('adminPinInput')?.value || '').trim();
+        if (!/^\d{4}$/.test(pin)) {
+            this.toastManager.error('Enter a 4-digit PIN');
+            return;
+        }
+
+        try {
+            await this.firebaseManager.verifyPin(pin);
+            this.adminUnlockedThisSession = true; // Mark admin as unlocked in this session
+            this.isAdmin = this.firebaseManager.getIsAdmin();
+            this.updateAdminUI();
+            this.toastManager.success('Admin unlocked');
+        } catch (error) {
+            const msg = (error?.message || '').toLowerCase();
+            if (msg.includes('pin not set')) {
+                const row = document.getElementById('adminPinSetupRow');
+                if (row) row.style.display = 'flex';
+                this.toastManager.info('Set a PIN first');
+                return;
+            }
+            this.toastManager.error('Incorrect PIN');
+        }
+    }
+
+    async setAdminPin() {
+        if (!this.firebaseManager) {
+            this.toastManager.error('Firebase not initialized');
+            return;
+        }
+        const pin = (document.getElementById('adminPinInput')?.value || '').trim();
+        const confirmPin = (document.getElementById('adminPinConfirmInput')?.value || '').trim();
+        if (!/^\d{4}$/.test(pin) || pin !== confirmPin) {
+            this.toastManager.error('PINs must match and be 4 digits');
+            return;
+        }
+
+        try {
+            await this.firebaseManager.setPin(pin);
+            this.adminUnlockedThisSession = true; // Mark admin as unlocked in this session
+            this.isAdmin = this.firebaseManager.getIsAdmin();
+            this.updateAdminUI();
+            this.toastManager.success('PIN set. Admin unlocked');
+        } catch (error) {
+            this.toastManager.error('Could not set PIN (already set?)');
+        }
+    }
+
+    async lockAdmin() {
+        try {
+            if (this.firebaseManager) {
+                await this.firebaseManager.clearAdmin();
+
+                // Update local state immediately
+                this.adminUnlockedThisSession = false; // Clear session flag
+                this.isAdmin = false;
+                this.updateAdminUI();
+
+                this.toastManager.success('Admin locked successfully');
+            } else {
+                // Fallback for local mode
+                this.adminUnlockedThisSession = false; // Clear session flag
+                this.isAdmin = false;
+                this.updateAdminUI();
+                this.toastManager.info('Admin locked');
+            }
+        } catch (error) {
+            console.error('Error locking admin:', error);
+            this.toastManager.error('Failed to lock admin: ' + (error.message || 'Unknown error'));
+        }
+    }
+
+    async resetAdminPin() {
+        if (!this.firebaseManager || !this.isAdmin) return;
+        const newPin = await this.showPinModal('Reset Admin PIN', 'Enter a NEW 4-digit PIN:');
+        if (!newPin) {
+            return; // User cancelled
+        }
+
+        try {
+            await this.firebaseManager.resetPin(newPin);
+            this.isAdmin = this.firebaseManager.getIsAdmin();
+            this.updateAdminUI();
+            this.toastManager.success('PIN reset');
+        } catch (error) {
+            this.toastManager.error('Could not reset PIN');
+        }
+    }
+
+    copyShareUrl() {
+        const shareUrlInput = document.getElementById('shareUrlInput');
+        if (shareUrlInput) {
+            shareUrlInput.select();
+            shareUrlInput.setSelectionRange(0, 99999); // For mobile devices
+            
+            try {
+                document.execCommand('copy');
+                this.toastManager.success('Share URL copied to clipboard');
+            } catch (err) {
+                // Fallback for modern browsers
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(shareUrlInput.value).then(() => {
+                        this.toastManager.success('Share URL copied to clipboard');
+                    }).catch(() => {
+                        this.toastManager.error('Failed to copy URL');
+                    });
+                } else {
+                    this.toastManager.error('Failed to copy URL');
+                }
+            }
+        }
+    }
+
+    loadSettingsScreen() {
+        // Update admin UI when settings screen loads
+        this.updateAdminUI();
+        this.updateShareUrl();
+        
+        // Show/hide Firebase-specific UI
+        const sharedLeagueSection = document.querySelector('.settings-section h3');
+        if (sharedLeagueSection && sharedLeagueSection.textContent === 'Shared League') {
+            const section = sharedLeagueSection.parentElement;
+            if (this.isFirebaseMode) {
+                section.style.display = 'block';
+            } else {
+                section.style.display = 'none';
+            }
+        }
+        
+        // Load other settings as needed
+        const darkModeSetting = document.getElementById('darkModeSetting');
+        if (darkModeSetting) {
+            darkModeSetting.checked = this.settingsManager.isDarkMode();
+        }
+    }
+
+    // ===== SESSION WIZARD METHODS =====
+
+    loadUiMode() {
+        try {
+            const saved = this.storage.loadData('uiMode');
+            if (saved === 'advanced' || saved === 'session') {
+                this.uiMode = saved;
+            } else {
+                this.uiMode = 'session';
+            }
+        } catch (e) {
+            this.uiMode = 'session';
+        }
+    }
+
+    setUiMode(mode) {
+        if (mode !== 'advanced' && mode !== 'session') return;
+        this.uiMode = mode;
+        try {
+            this.storage.saveData('uiMode', mode);
+        } catch (e) {
+            // ignore
+        }
+        this.applyUiMode();
+    }
+
+    applyUiMode() {
+        const bottomNav = document.querySelector('.bottom-nav');
+        const navButtons = document.querySelectorAll('.bottom-nav .nav-btn');
+        navButtons.forEach(btn => {
+            const screen = btn.dataset.screen;
+            if (!screen) return;
+
+            if (this.uiMode === 'session') {
+                // Show Session, Stats, and History tabs in session mode
+                const allowedScreens = ['sessionScreen', 'statsScreen', 'historyScreen'];
+                btn.style.display = allowedScreens.includes(screen) ? 'inline-flex' : 'none';
+            } else {
+                // Show all tabs in advanced mode
+                btn.style.display = 'inline-flex';
+            }
+        });
+
+        // In session mode, show bottom nav with Session/Stats/History tabs
+        if (bottomNav) {
+            bottomNav.style.display = 'flex';
+        }
+
+        // Header "Session" quick-return button only in advanced mode or session mode on stats/history
+        const goToSessionBtn = document.getElementById('goToSessionBtn');
+        if (goToSessionBtn) {
+            const shouldShow = this.uiMode === 'advanced' ||
+                              (this.uiMode === 'session' &&
+                               (this.currentScreen === 'statsScreen' || this.currentScreen === 'historyScreen'));
+            goToSessionBtn.style.display = shouldShow ? 'inline-flex' : 'none';
+
+            // Save session state when leaving session screen
+            if (this.uiMode === 'session' && this.currentScreen !== 'sessionScreen') {
+                this.saveSessionState();
+            }
+        }
+    }
+
+    updateBackToSessionButton() {
+        // This method is now handled above in applyUiMode
+    }
+
+    saveSessionState() {
+        if (this.uiMode !== 'session') return;
+
+        const sessionState = {
+            wizardStep: this.sessionWizardStep,
+            players: [...this.sessionPlayers],
+            selectedStructureIndex: this.sessionSelectedStructureIndex,
+            selectedStructure: this.sessionSelectedStructure,
+            availableStructures: this.sessionAvailableStructures,
+            started: this.sessionStarted
+        };
+
+        try {
+            this.storage.saveData('sessionState', sessionState);
+        } catch (e) {
+            console.warn('Could not save session state:', e);
+        }
+    }
+
+    restoreSessionState() {
+        if (this.uiMode !== 'session') return;
+
+        try {
+            const savedState = this.storage.loadData('sessionState');
+            if (savedState) {
+                this.sessionWizardStep = savedState.wizardStep || 'players';
+                this.sessionPlayers = Array.isArray(savedState.players) ? [...savedState.players] : [];
+                this.sessionSelectedStructureIndex = savedState.selectedStructureIndex || null;
+                this.sessionSelectedStructure = savedState.selectedStructure || null;
+                this.sessionAvailableStructures = Array.isArray(savedState.availableStructures) ? [...savedState.availableStructures] : [];
+                this.sessionStarted = savedState.started || false;
+            }
+        } catch (e) {
+            console.warn('Could not restore session state:', e);
+        }
+    }
+
+    startSessionWizard() {
+        this.sessionStarted = true;
+        const splash = document.getElementById('sessionSplash');
+        const stepper = document.getElementById('sessionStepper');
+        const wizard = document.getElementById('sessionWizardContent');
+        const actions = document.getElementById('sessionWizardActions');
+
+        if (splash) splash.style.display = 'none';
+        if (stepper) stepper.style.display = 'flex';
+        if (wizard) wizard.style.display = 'block';
+        if (actions) actions.style.display = 'flex';
+
+        this.loadSessionWizard();
+    }
+
+    loadSessionWizard() {
+        // Ensure wizard UI is visible when loading
+        const stepper = document.getElementById('sessionStepper');
+        const wizard = document.getElementById('sessionWizardContent');
+        const actions = document.getElementById('sessionWizardActions');
+        if (stepper) stepper.style.display = 'flex';
+        if (wizard) wizard.style.display = 'block';
+        if (actions) actions.style.display = 'flex';
+
+        // Restore previous session state if available
+        this.restoreSessionState();
+
+        // Only reset if we don't have saved state
+        if (!this.sessionStarted) {
+            this.resetSessionWizard();
+        }
+
+        this.renderCurrentSessionStep();
+        this.updateSessionStepper();
+
+        // Save state after loading
+        this.saveSessionState();
+    }
+
+    resetSessionWizard() {
+        this.sessionWizardStep = 'players';
+        // Pre-populate with existing players from advanced mode
+        this.sessionPlayers = [...this.playerManager.getPlayers()];
+        this.sessionSelectedStructure = null;
+        this.sessionSelectedStructureIndex = null;
+        this.sessionAvailableStructures = [];
+
+        // Reset UI
+        document.querySelectorAll('.session-step').forEach(step => {
+            step.style.display = 'none';
+        });
+        document.querySelectorAll('.step-indicator').forEach(indicator => {
+            indicator.classList.remove('active', 'completed');
+        });
+        document.getElementById('sessionPlayersValidation').style.display = 'none';
+        document.getElementById('sessionSelectedTeams').style.display = 'none';
+        document.getElementById('sessionNextMatchCTA').style.display = 'none';
+    }
+
+    updateSessionStepper() {
+        // Update step indicators
+        const steps = ['players', 'teams', 'match'];
+        const currentIndex = steps.indexOf(this.sessionWizardStep);
+
+        steps.forEach((step, index) => {
+            const indicator = document.querySelector(`.step-indicator[data-step="${step}"]`);
+            if (indicator) {
+                indicator.classList.remove('active', 'completed');
+                if (index === currentIndex) {
+                    indicator.classList.add('active');
+                } else if (index < currentIndex) {
+                    indicator.classList.add('completed');
+                }
+            }
+        });
+
+        // Show current step content
+        document.querySelectorAll('.session-step').forEach(step => {
+            step.style.display = 'none';
+        });
+        const currentStep = document.querySelector(`.session-step[data-step="${this.sessionWizardStep}"]`);
+        if (currentStep) {
+            currentStep.style.display = 'block';
+        }
+
+        // Update continue button text and behavior
+        this.updateSessionContinueButton();
+    }
+
+    updateSessionContinueButton() {
+        const continueBtn = document.getElementById('sessionContinueBtn');
+        if (!continueBtn) return;
+
+        let text = 'Continue';
+        let disabled = false;
+
+        switch (this.sessionWizardStep) {
+            case 'players':
+                text = this.sessionPlayers.length >= 2 ? 'Continue' : 'Add Players';
+                disabled = this.sessionPlayers.length < 2;
+                break;
+            case 'teams':
+                text = this.sessionSelectedStructureIndex !== null ? 'Start Playing' : 'Select Teams';
+                disabled = this.sessionSelectedStructureIndex === null;
+                break;
+            case 'match':
+                text = 'Submit Score';
+                disabled = false;
+                break;
+        }
+
+        continueBtn.textContent = text;
+        continueBtn.disabled = disabled;
+        continueBtn.style.opacity = disabled ? '0.5' : '1';
+    }
+
+    // Step 1: Players
+    renderSessionPlayersStep() {
+        const playerList = document.getElementById('sessionPlayerList');
+        if (!playerList) return;
+
+        playerList.innerHTML = '';
+
+        // Add existing players
+        this.sessionPlayers.forEach((player, index) => {
+            this.addSessionPlayerInput(player, index);
+        });
+
+        // Add empty input for new player
+        this.addSessionPlayerInput('', this.sessionPlayers.length);
+
+        this.updateSessionContinueButton();
+    }
+
+    addSessionPlayerInput(value, index) {
+        const playerList = document.getElementById('sessionPlayerList');
+        const playerItem = document.createElement('div');
+        playerItem.className = 'session-player-item';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'session-player-input';
+        input.placeholder = `Player ${index + 1}`;
+        input.value = value;
+        input.dataset.index = index;
+
+        input.addEventListener('input', (e) => {
+            this.updateSessionPlayer(index, e.target.value);
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                this.addNewSessionPlayerInput();
+            }
+        });
+
+        playerItem.appendChild(input);
+
+        // Add remove button (except for the last empty input)
+        if (index < this.sessionPlayers.length) {
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'session-remove-player';
+            removeBtn.textContent = '×';
+            removeBtn.addEventListener('click', () => {
+                this.removeSessionPlayer(index);
+            });
+            playerItem.appendChild(removeBtn);
+        }
+
+        playerList.appendChild(playerItem);
+    }
+
+    updateSessionPlayer(index, value) {
+        if (value.trim()) {
+            if (index >= this.sessionPlayers.length) {
+                this.sessionPlayers.push(value.trim());
+                this.addNewSessionPlayerInput();
+            } else {
+                this.sessionPlayers[index] = value.trim();
+            }
+        } else if (index < this.sessionPlayers.length) {
+            this.sessionPlayers.splice(index, 1);
+            this.renderSessionPlayersStep();
+        }
+
+        this.updateSessionContinueButton();
+        this.saveSessionState();
+    }
+
+    removeSessionPlayer(index) {
+        this.sessionPlayers.splice(index, 1);
+        this.renderSessionPlayersStep();
+    }
+
+    addNewSessionPlayerInput() {
+        this.addSessionPlayerInput('', this.sessionPlayers.length);
+    }
+
+    // Step 2: Teams
+    renderSessionTeamsStep() {
+        const teamOptions = document.getElementById('sessionTeamOptions');
+        if (!teamOptions) return;
+
+        teamOptions.innerHTML = '';
+
+        // Add randomize button at the top
+        const randomizeBtn = document.createElement('button');
+        randomizeBtn.id = 'sessionRandomizeBtn';
+        randomizeBtn.className = 'btn btn-secondary';
+        randomizeBtn.textContent = 'Randomize Order';
+        randomizeBtn.style.marginBottom = '1rem';
+        randomizeBtn.onclick = () => {
+            this.randomizeSessionStructures();
+        };
+        teamOptions.appendChild(randomizeBtn);
+
+        // Add description
+        const description = document.createElement('p');
+        description.className = 'screen-description';
+        description.textContent = 'Select the order you want to play these matches';
+        description.style.marginBottom = '1rem';
+        teamOptions.appendChild(description);
+
+        // Generate round structures using the same logic as advanced mode
+        const players = this.sessionPlayers;
+        if (!players || players.length < 2) {
+            teamOptions.innerHTML += '<div class="empty-state"><p>Need at least 2 players to generate team structures.</p></div>';
+            return;
+        }
+
+        // Only generate structures if we don't have them already (preserves randomization)
+        if (!this.sessionAvailableStructures || this.sessionAvailableStructures.length === 0) {
+            const lockState = {}; // Session wizard doesn't have player locks
+            const structures = this.teamGenerator.generateRoundStructures(players, lockState);
+
+            if (structures.length === 0) {
+                teamOptions.innerHTML += '<div class="empty-state"><p>Unable to generate round structures.</p></div>';
+                return;
+            }
+
+            // Store structures for selection
+            this.sessionAvailableStructures = structures;
+        }
+
+        // Render structures like the advanced team combinations screen
+        const structuresHTML = this.sessionAvailableStructures.map((structure, structureIndex) => {
+            const isSelected = this.sessionSelectedStructureIndex === structureIndex;
+
+            const matchesHTML = structure.matches.map((match, matchIndex) => {
+                const team1Name = this.teamGenerator.formatTeamName(match.team1);
+                const team2Name = this.teamGenerator.formatTeamName(match.team2);
+                return `
+                    <div class="structure-match">
+                        <div class="match-round-label">Round ${matchIndex + 1}</div>
+                        <div class="team-display">
+                            <div class="team-players">
+                                ${match.team1.map(p => this.formatPlayerNameWithColor(p)).join('')}
+                            </div>
+                            <span class="vs">VS</span>
+                            <div class="team-players">
+                                ${match.team2.map(p => this.formatPlayerNameWithColor(p)).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="round-structure-card ${isSelected ? 'selected' : ''}" data-index="${structureIndex}">
+                    <div class="structure-header">
+                        <h3>Round Structure ${structureIndex + 1}</h3>
+                        <button class="select-structure-btn" data-index="${structureIndex}">Select</button>
+                    </div>
+                    <div class="structure-matches">
+                        ${matchesHTML}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        teamOptions.insertAdjacentHTML('beforeend', structuresHTML);
+
+        // Add click handlers for structure selection
+        teamOptions.addEventListener('click', (e) => {
+            const selectBtn = e.target.closest('.select-structure-btn');
+            if (selectBtn) {
+                const index = parseInt(selectBtn.dataset.index);
+                if (!isNaN(index)) {
+                    this.selectSessionStructureIndex(index);
+                }
+            }
+        });
+    }
+
+    selectSessionStructure(structureId) {
+        // Update UI selection
+        document.querySelectorAll('.session-team-option').forEach(option => {
+            option.classList.remove('selected');
+        });
+        document.querySelector(`.session-team-option[data-structure="${structureId}"]`).classList.add('selected');
+
+        this.sessionSelectedStructure = structureId;
+        this.renderSessionSelectedTeams();
+
+        // Auto-advance to match step
+        this.saveSessionPlayers();
+    }
+
+    randomizeSessionStructures() {
+        // Randomly select one structure and advance to match step
+        if (this.sessionAvailableStructures && this.sessionAvailableStructures.length > 0) {
+            const randomIndex = Math.floor(Math.random() * this.sessionAvailableStructures.length);
+            this.selectSessionStructureIndex(randomIndex);
+        }
+    }
+
+    renderCurrentSessionStep() {
+        switch (this.sessionWizardStep) {
+            case 'players':
+                this.renderSessionPlayersStep();
+                break;
+            case 'teams':
+                this.renderSessionTeamsStep();
+                break;
+            case 'match':
+                this.renderSessionMatchStep();
+                break;
+            default:
+                this.renderSessionPlayersStep();
+        }
+    }
+
+    selectSessionStructureIndex(index) {
+        if (!this.sessionAvailableStructures || index < 0 || index >= this.sessionAvailableStructures.length) {
+            return;
+        }
+
+        // Update selection
+        this.sessionSelectedStructureIndex = index;
+        this.sessionSelectedStructure = this.sessionAvailableStructures[index];
+
+        // Update UI
+        document.querySelectorAll('.round-structure-card').forEach(card => {
+            card.classList.remove('selected');
+        });
+        document.querySelector(`.round-structure-card[data-index="${index}"]`).classList.add('selected');
+
+        this.renderSessionSelectedTeams();
+        this.saveSessionState();
+
+        // Auto-advance to match step
+        this.saveSessionPlayers();
+    }
+
+    renderSessionSelectedTeams() {
+        const selectedTeams = document.getElementById('sessionSelectedTeams');
+        const matchPreview = document.getElementById('sessionMatchPreview');
+
+        if (!this.sessionSelectedStructure || !selectedTeams || !matchPreview) return;
+
+        selectedTeams.style.display = 'block';
+        matchPreview.innerHTML = '';
+
+        // Display the selected round structure matches
+        const matches = this.sessionSelectedStructure.matches || [];
+
+        matches.forEach((match, index) => {
+            const matchItem = document.createElement('div');
+            matchItem.className = 'session-match-item';
+
+            const team1Display = match.team1.map(p => this.formatPlayerNameWithColor(p)).join('');
+            const team2Display = match.team2.map(p => this.formatPlayerNameWithColor(p)).join('');
+
+            matchItem.innerHTML = `
+                <div class="match-round-label">Round ${index + 1}</div>
+                <div class="team-display">
+                    <div class="team-players">${team1Display}</div>
+                    <span class="vs">VS</span>
+                    <div class="team-players">${team2Display}</div>
+                </div>
+            `;
+            matchPreview.appendChild(matchItem);
+        });
+    }
+
+    // Step 3: Match
+    renderSessionMatchStep() {
+        const currentMatch = document.getElementById('sessionCurrentMatch');
+        if (!currentMatch) return;
+
+        // Check if we have a selected structure and current match
+        if (!this.selectedStructure || !this.selectedStructure.matches || this.currentGameIndex >= this.selectedStructure.matches.length) {
+            currentMatch.innerHTML = '<p>No match available</p>';
+            return;
+        }
+
+        const match = this.selectedStructure.matches[this.currentGameIndex];
+        const team1Name = this.teamGenerator.formatTeamName(match.team1);
+        const team2Name = this.teamGenerator.formatTeamName(match.team2);
+        const team1Display = this.formatTeamWithColors(match.team1);
+        const team2Display = this.formatTeamWithColors(match.team2);
+
+        // Store current match for score recording
+        this.currentMatch = match;
+
+        currentMatch.innerHTML = `
+            <div class="session-match-display">
+                <div class="match-info">
+                    <div class="game-counter">
+                        <span>${this.currentGameIndex + 1}</span> / <span>${this.selectedStructure.matches.length}</span>
+                    </div>
+                    <div class="match-teams">
+                        <div class="team-display">
+                            <div class="team-players">${team1Display}</div>
+                            <span class="vs">VS</span>
+                            <div class="team-players">${team2Display}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="match-result">
+                    <h3>Enter Scores</h3>
+                    <div class="score-input-container">
+                        <div class="score-input-group">
+                            <label for="sessionTeam1Score">${team1Name} Score (Full Time)</label>
+                            <input type="number" id="sessionTeam1Score" min="0" max="99" value="0" class="score-input">
+                        </div>
+                        <span class="score-separator">-</span>
+                        <div class="score-input-group">
+                            <label for="sessionTeam2Score">${team2Name} Score (Full Time)</label>
+                            <input type="number" id="sessionTeam2Score" min="0" max="99" value="0" class="score-input">
+                        </div>
+                    </div>
+                    
+                    <!-- Extra Time Section -->
+                    <div class="extra-time-section" id="sessionExtraTimeSection" style="display: block; margin-top: 1rem;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="sessionWentToExtraTime" class="checkbox-input">
+                            <span>Went to Extra Time</span>
+                        </label>
+                        <p class="score-hint" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0.5rem;">Enter the total score after extra time (full time + extra time goals)</p>
+                        <div class="score-input-container" id="sessionExtraTimeScores" style="display: none; margin-top: 0.75rem;">
+                            <div class="score-input-group">
+                                <label for="sessionTeam1ExtraTimeScore">Team 1 (Total)</label>
+                                <input type="number" id="sessionTeam1ExtraTimeScore" min="0" max="99" value="0" class="score-input">
+                            </div>
+                            <span class="score-separator">-</span>
+                            <div class="score-input-group">
+                                <label for="sessionTeam2ExtraTimeScore">Team 2 (Total)</label>
+                                <input type="number" id="sessionTeam2ExtraTimeScore" min="0" max="99" value="0" class="score-input">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Penalties Section -->
+                    <div class="penalties-section" id="sessionPenaltiesSection" style="display: block; margin-top: 1rem;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="sessionWentToPenalties" class="checkbox-input">
+                            <span>Went to Penalties</span>
+                        </label>
+                        <p class="score-hint" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0.5rem;">Enter only the penalties scored (e.g., 5-4)</p>
+                        <div class="score-input-container" id="sessionPenaltiesScores" style="display: none; margin-top: 0.75rem;">
+                            <div class="score-input-group">
+                                <label for="sessionTeam1PenaltiesScore">Team 1 (Pens)</label>
+                                <input type="number" id="sessionTeam1PenaltiesScore" min="0" max="20" value="0" class="score-input">
+                            </div>
+                            <span class="score-separator">-</span>
+                            <div class="score-input-group">
+                                <label for="sessionTeam2PenaltiesScore">Team 2 (Pens)</label>
+                                <input type="number" id="sessionTeam2PenaltiesScore" min="0" max="20" value="0" class="score-input">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Attach event listeners for extra time and penalties checkboxes
+        const extraTimeCheckbox = document.getElementById('sessionWentToExtraTime');
+        const penaltiesCheckbox = document.getElementById('sessionWentToPenalties');
+        
+        if (extraTimeCheckbox) {
+            extraTimeCheckbox.addEventListener('change', (e) => {
+                const extraTimeScores = document.getElementById('sessionExtraTimeScores');
+                if (extraTimeScores) {
+                    extraTimeScores.style.display = e.target.checked ? 'flex' : 'none';
+                    if (e.target.checked) {
+                        // Auto-fill with current full time scores as starting point
+                        const currentTeam1Score = parseInt(document.getElementById('sessionTeam1Score').value) || 0;
+                        const currentTeam2Score = parseInt(document.getElementById('sessionTeam2Score').value) || 0;
+                        document.getElementById('sessionTeam1ExtraTimeScore').value = currentTeam1Score;
+                        document.getElementById('sessionTeam2ExtraTimeScore').value = currentTeam2Score;
+                    }
+                }
+            });
+        }
+        
+        if (penaltiesCheckbox) {
+            penaltiesCheckbox.addEventListener('change', (e) => {
+                const penaltiesScores = document.getElementById('sessionPenaltiesScores');
+                if (penaltiesScores) {
+                    penaltiesScores.style.display = e.target.checked ? 'flex' : 'none';
+                }
+            });
+        }
+    }
+
+    // Navigation
+    sessionContinue() {
+        switch (this.sessionWizardStep) {
+            case 'players':
+                if (this.sessionPlayers.length >= 2) {
+                    this.sessionWizardStep = 'teams';
+                    this.renderSessionTeamsStep();
+                    this.updateSessionStepper();
+                } else {
+                    document.getElementById('sessionPlayersValidation').style.display = 'block';
+                }
+                break;
+            case 'teams':
+                if (this.sessionSelectedStructure) {
+                    // Save players and start the session
+                    this.saveSessionPlayers();
+                }
+                break;
+            case 'match':
+                this.submitSessionScore();
+                break;
+        }
+    }
+
+    saveSessionPlayers() {
+        // Set players in player manager
+        this.playerManager.setPlayers(this.sessionPlayers);
+
+        // Generate teams and start games
+        this.selectStructure(this.sessionSelectedStructure);
+        this.startGames();
+
+        // Advance to match step
+        this.sessionWizardStep = 'match';
+        this.renderSessionMatchStep();
+        this.updateSessionStepper();
+    }
+
+    async submitSessionScore() {
+        if (!this.currentMatch) {
+            this.toastManager.error('No match selected');
+            return;
+        }
+
+        const team1Score = parseInt(document.getElementById('sessionTeam1Score').value) || 0;
+        const team2Score = parseInt(document.getElementById('sessionTeam2Score').value) || 0;
+
+        // Get extra time scores if applicable
+        const wentToExtraTime = document.getElementById('sessionWentToExtraTime')?.checked || false;
+        let team1ExtraTimeScore = null;
+        let team2ExtraTimeScore = null;
+        if (wentToExtraTime) {
+            team1ExtraTimeScore = parseInt(document.getElementById('sessionTeam1ExtraTimeScore').value) || 0;
+            team2ExtraTimeScore = parseInt(document.getElementById('sessionTeam2ExtraTimeScore').value) || 0;
+        }
+
+        // Get penalties scores if applicable
+        const wentToPenalties = document.getElementById('sessionWentToPenalties')?.checked || false;
+        let team1PenaltiesScore = null;
+        let team2PenaltiesScore = null;
+        if (wentToPenalties) {
+            team1PenaltiesScore = parseInt(document.getElementById('sessionTeam1PenaltiesScore').value) || 0;
+            team2PenaltiesScore = parseInt(document.getElementById('sessionTeam2PenaltiesScore').value) || 0;
+        }
+
+        const { team1, team2 } = this.currentMatch;
+        const matchIndex = this.currentGameIndex;
+        
+        const savedMatch = await this.matchRecorder.recordMatch(
+            team1, 
+            team2, 
+            team1Score, 
+            team2Score,
+            team1ExtraTimeScore,
+            team2ExtraTimeScore,
+            team1PenaltiesScore,
+            team2PenaltiesScore
+        );
+        
+        if (savedMatch) {
+            // Track last recorded match for undo
+            this.lastRecordedMatch = { match: savedMatch, gameIndex: matchIndex };
+
+            // Update played dates and stats
+            this.updatePlayedDates();
+            this.renderCustomStatsSection();
+
+            // Advance to next match or show completion
+            this.currentGameIndex++;
+            
+            if (this.selectedStructure && this.currentGameIndex < this.selectedStructure.matches.length) {
+                // More matches to play - show next match CTA (button already exists in HTML)
+                document.getElementById('sessionNextMatchCTA').style.display = 'block';
+            } else {
+                // All matches complete - show completion message
+                this.toastManager.success('All matches completed!', 'Session Complete');
+                const cta = document.getElementById('sessionNextMatchCTA');
+                if (cta) {
+                    cta.innerHTML = `
+                        <h3>Session Complete!</h3>
+                        <p>All matches have been recorded.</p>
+                        <button id="sessionNextMatchBtn" class="btn btn-primary">Start New Session</button>
+                    `;
+                    cta.style.display = 'block';
+                    // Re-attach event listener for the new button
+                    const btn = document.getElementById('sessionNextMatchBtn');
+                    if (btn) {
+                        btn.addEventListener('click', () => this.sessionNextMatch());
+                    }
+                }
+                
+                // Reset to first match for replay if needed
+                this.currentGameIndex = 0;
+            }
+        } else {
+            this.toastManager.error('Error recording match result');
+        }
+    }
+
+    sessionNextMatch() {
+        // Hide CTA
+        document.getElementById('sessionNextMatchCTA').style.display = 'none';
+
+        // Check if we're at the end and should start a new session
+        if (this.currentGameIndex >= this.selectedStructure.matches.length) {
+            // Start a new session
+            this.startSessionWizard();
+            return;
+        }
+
+        // Reset and show next match
+        this.renderSessionMatchStep();
+    }
+
+    sessionAdvanced() {
+        // Navigate to the corresponding advanced screen
+        switch (this.sessionWizardStep) {
+            case 'players':
+                this.showScreen('playerScreen');
+                break;
+            case 'teams':
+                this.showScreen('teamScreen');
+                break;
+            case 'match':
+                this.showScreen('matchScreen');
+                break;
         }
     }
 }

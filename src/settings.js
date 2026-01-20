@@ -137,5 +137,11 @@ class SettingsManager {
         this.settings = this.getDefaultSettings();
         return this.saveSettings();
     }
+
+    // Update settings from Firebase
+    updateFromFirebase(firebaseSettings) {
+        this.settings = { ...this.getDefaultSettings(), ...firebaseSettings };
+        // Don't save to localStorage when updating from Firebase to avoid conflicts
+    }
 }
 

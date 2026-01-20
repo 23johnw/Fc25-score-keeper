@@ -2,9 +2,39 @@
 // TeamGenerator - Generate Round Structures
 // ============================================================================
 
+// Team Data Model
+type TeamStats = {
+    played: number,
+    won: number,
+    drawn: number,
+    lost: number,
+    gf: number,
+    ga: number,
+    gd: number,
+    points: number
+};
+type Team = {
+    id: string,
+    players: string[],
+    stats: TeamStats,
+    optional: {
+        history?: string[],
+        form?: string,
+        streaks?: string
+    }
+};
+
 class TeamGenerator {
     // Generate all possible round structures where each structure is a complete set of matches
     generateRoundStructures(players, lock = { player: null, side: 'neutral' }) {
+        const teamIds = players.map((p1, i1) => players.map((p2, i2) => i2 > i1 ? `team_${p1}_${p2}` : null)).flat().filter(Boolean);
+        const teamIdDict = {};
+        teamIds.forEach(id => teamIdDict[id] = {played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, gd: 0, points: 0});
+
+    // Handle solo play - counts for team stats
+    function handleSoloPlay(player) {
+        return teamIds.includes(`team_${player}`) ? 'team' : 'player';
+    }
         const count = players.length;
         const structures = [];
 

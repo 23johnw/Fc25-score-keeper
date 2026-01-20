@@ -1,10 +1,16 @@
-const CACHE_NAME = 'fc25-score-tracker-v70';
-const BASE_PATH = '/Fc25-score-keeper';
+const CACHE_NAME = 'fc25-score-tracker-v80';
+
+// Determine base path from the SW scope.
+// - Firebase Hosting scope is usually "/"  -> BASE_PATH = ""
+// - GitHub Pages scope might be "/Fc25-score-keeper/" -> BASE_PATH = "/Fc25-score-keeper"
+const SCOPE_PATH = new URL(self.registration.scope).pathname.replace(/\/$/, '');
+const BASE_PATH = SCOPE_PATH === '/' ? '' : SCOPE_PATH;
+
 const urlsToCache = [
   `${BASE_PATH}/`,
   `${BASE_PATH}/index.html`,
   `${BASE_PATH}/styles.css`,
-  // Split application scripts
+  // Split application scripts (same-origin only)
   `${BASE_PATH}/src/constants.js`,
   `${BASE_PATH}/src/persistence.js`,
   `${BASE_PATH}/src/settings.js`,
@@ -20,6 +26,7 @@ const urlsToCache = [
   `${BASE_PATH}/src/touch.js`,
   `${BASE_PATH}/src/app-controller.js`,
   `${BASE_PATH}/src/main.js`,
+  `${BASE_PATH}/src/firebase-simple.js`,
   // Legacy single-bundle (kept for compatibility)
   `${BASE_PATH}/app.js`,
   `${BASE_PATH}/manifest.json`,
@@ -33,8 +40,8 @@ self.addEventListener('install', (event) => {
     caches.open(CACHE_NAME)
       .then((cache) => {
         console.log('Opened cache:', CACHE_NAME);
-        // Fetch fresh versions with cache busting
-        return Promise.all(urlsToCache.map(url => {
+        // Fetch fresh versions with cache busting (same-origin URLs only)
+        return Promise.all(urlsToCache.map((url) => {
           return fetch(url + '?v=' + CACHE_NAME + '&t=' + Date.now(), { cache: 'no-store' })
             .then(response => {
               if (response.ok) {
@@ -80,9 +87,12 @@ self.addEventListener('activate', (event) => {
 // Fetch event - network first for app files, cache for offline
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  const isAppFile = url.pathname.endsWith('.js') || 
+  const isSameOrigin = url.origin === self.location.origin;
+  const isAppFile = isSameOrigin && (
+    url.pathname.endsWith('.js') ||
                     url.pathname.endsWith('.css') || 
-                    url.pathname.endsWith('.html');
+    url.pathname.endsWith('.html')
+  );
   
   if (isAppFile) {
     // Network first strategy for app files to get latest updates
@@ -107,12 +117,11 @@ self.addEventListener('fetch', (event) => {
         })
     );
   } else {
-    // Cache first for other assets (icons, etc.)
+    // For cross-origin requests (Firebase/Google/CDNs), do not interfere.
+    // For same-origin non-app assets (icons, etc.), cache-first is fine.
     event.respondWith(
-      caches.match(event.request)
-        .then((response) => {
-          return response || fetch(event.request);
-        })
+      (isSameOrigin ? caches.match(event.request) : Promise.resolve(null))
+        .then((response) => response || fetch(event.request))
         .catch(() => {
           // If both fail, return offline page for navigation requests
           if (event.request.mode === 'navigate') {

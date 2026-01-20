@@ -1,0 +1,14 @@
+node_modules/
+npm-debug.log
+firebase-debug.log
+firebase-debug.*.log
+*.local
+*.log
+*.pid
+*.seed
+*.pid.lock
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
