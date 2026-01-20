@@ -140,6 +140,9 @@ function renderTeamTable() {
         sampleMatch: matches[0]
     });
 
+    // Debug: Show what we're about to display
+    alert(`Found ${matches.length} matches, ${Object.keys(teamStats).length} teams`);
+
     if (Object.keys(teamStats).length === 0) {
         statsContainer.innerHTML = '<div class="empty-state"><p>No team data available. Play some matches first!</p></div>';
         console.log('No team stats available');
@@ -157,6 +160,13 @@ function renderTeamTable() {
 
     // Clear existing content
     statsContainer.innerHTML = '';
+
+    // Debug: Show team data before creating table
+    const sortedTeams = Object.entries(teamStats)
+        .sort(([,a], [,b]) => b.points - a.points || b.gd - a.gd || b.gf - a.gf);
+
+    console.log('Sorted teams for display:', sortedTeams);
+    alert(`Top team: ${sortedTeams[0]?.[1]?.players?.join(' & ')} with ${sortedTeams[0]?.[1]?.points} points`);
 
     // Create team table
     const teamTable = document.createElement('div');
@@ -178,8 +188,7 @@ function renderTeamTable() {
                 </tr>
             </thead>
             <tbody>
-                ${Object.entries(teamStats)
-                    .sort(([,a], [,b]) => b.points - a.points || b.gd - a.gd || b.gf - a.gf)
+                ${sortedTeams
                     .map(([teamId, stats]) => `
                         <tr>
                             <td>${stats.players.join(' & ')}</td>
@@ -198,6 +207,8 @@ function renderTeamTable() {
     `;
 
     statsContainer.appendChild(teamTable);
+    console.log('Team table appended to container:', statsContainer.id);
+    alert('Team table should now be visible in the stats area!');
 }
 
 // #region agent log
