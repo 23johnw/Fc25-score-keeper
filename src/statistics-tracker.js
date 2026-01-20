@@ -44,6 +44,61 @@ class StatisticsTracker {
         return allMatches;
     }
 
+    getTeamStats(matches) {
+        const teamStats = {};
+
+        matches.forEach(match => {
+            const teamAId = this.getTeamId(match.team1);
+            const teamBId = this.getTeamId(match.team2);
+
+            // Initialize team stats if not exists
+            if (!teamStats[teamAId]) {
+                teamStats[teamAId] = { played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, gd: 0, points: 0, players: match.team1 };
+            }
+            if (!teamStats[teamBId]) {
+                teamStats[teamBId] = { played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, gd: 0, points: 0, players: match.team2 };
+            }
+
+            // Update stats
+            const teamA = teamStats[teamAId];
+            const teamB = teamStats[teamBId];
+
+            teamA.played++;
+            teamB.played++;
+
+            teamA.gf += match.team1Score || 0;
+            teamA.ga += match.team2Score || 0;
+            teamB.gf += match.team2Score || 0;
+            teamB.ga += match.team1Score || 0;
+
+            if (match.result === 'team1') {
+                teamA.won++;
+                teamA.points += 3;
+                teamB.lost++;
+            } else if (match.result === 'team2') {
+                teamB.won++;
+                teamB.points += 3;
+                teamA.lost++;
+            } else if (match.result === 'draw') {
+                teamA.drawn++;
+                teamB.drawn++;
+                teamA.points += 1;
+                teamB.points += 1;
+            }
+
+            teamA.gd = teamA.gf - teamA.ga;
+            teamB.gd = teamB.gf - teamB.ga;
+        });
+
+        return teamStats;
+    }
+
+    getTeamId(team) {
+        // Create deterministic team ID from player names
+        const sortedPlayers = [...team].sort();
+        return `team_${sortedPlayers.join('_')}`;
+    }
+
     getPlayers() {
         const data = this.storage.getData();
         const players = Array.isArray(data.players) ? [...data.players] : [];

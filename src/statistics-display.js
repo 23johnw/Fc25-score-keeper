@@ -37,11 +37,17 @@ function setupToggleUI() {
         }).catch(() => {});
         // #endregion
 
+        const statsContainer = document.querySelector('.stats-container') || document.querySelector('#overallStatsDisplay') || document.querySelector('#seasonStatsDisplay');
+
         if (toggleButton.innerText === 'Player View') {
+            // Switch to team view
             renderTeamTable();
             toggleButton.innerText = 'Team View';
         } else {
-            renderPlayerTable();
+            // Switch to player view - use existing displayOverallStats or similar
+            if (statsContainer && window.appController?.statisticsDisplay) {
+                window.appController.statisticsDisplay.displayOverallStats(statsContainer);
+            }
             toggleButton.innerText = 'Player View';
         }
     };
@@ -63,7 +69,11 @@ function renderPlayerTable() {
     }).catch(() => {});
     // #endregion
 
-    // Logic to render player table
+    // Use existing stats display for player view
+    const statsContainer = document.querySelector('.stats-container') || document.querySelector('#overallStatsDisplay') || document.querySelector('#seasonStatsDisplay');
+    if (statsContainer && window.appController?.statisticsDisplay) {
+        window.appController.statisticsDisplay.displayOverallStats(statsContainer);
+    }
 }
 
 function renderTeamTable() {
@@ -81,7 +91,57 @@ function renderTeamTable() {
     }).catch(() => {});
     // #endregion
 
-    // Logic to render team table
+    // Get all matches and calculate team stats
+    const matches = window.appController?.statisticsTracker?.getAllMatches() || [];
+    const teamStats = window.appController?.statisticsTracker?.getTeamStats(matches) || {};
+
+    // Find the stats container
+    const statsContainer = document.querySelector('.stats-container') || document.querySelector('#statsContainer');
+    if (!statsContainer) return;
+
+    // Clear existing content
+    statsContainer.innerHTML = '';
+
+    // Create team table
+    const teamTable = document.createElement('div');
+    teamTable.className = 'stat-card';
+    teamTable.innerHTML = `
+        <h3>Team Statistics</h3>
+        <table class="stats-table">
+            <thead>
+                <tr>
+                    <th>Team</th>
+                    <th>P</th>
+                    <th>W</th>
+                    <th>D</th>
+                    <th>L</th>
+                    <th>GF</th>
+                    <th>GA</th>
+                    <th>GD</th>
+                    <th>Pts</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${Object.entries(teamStats)
+                    .sort(([,a], [,b]) => b.points - a.points || b.gd - a.gd || b.gf - a.gf)
+                    .map(([teamId, stats]) => `
+                        <tr>
+                            <td>${stats.players.join(' & ')}</td>
+                            <td>${stats.played}</td>
+                            <td>${stats.won}</td>
+                            <td>${stats.drawn}</td>
+                            <td>${stats.lost}</td>
+                            <td>${stats.gf}</td>
+                            <td>${stats.ga}</td>
+                            <td>${stats.gd > 0 ? '+' : ''}${stats.gd}</td>
+                            <td>${stats.points}</td>
+                        </tr>
+                    `).join('')}
+            </tbody>
+        </table>
+    `;
+
+    statsContainer.appendChild(teamTable);
 }
 
 // #region agent log
