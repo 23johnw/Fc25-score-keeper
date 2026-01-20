@@ -2160,20 +2160,12 @@ class AppController {
                 return; // User cancelled
             }
 
-            try {
-                await this.firebaseManager.verifyPin(pin);
-                this.isAdmin = this.firebaseManager.getIsAdmin();
-                this.updateAdminUI();
-
-                if (!this.isAdmin) {
-                    this.toastManager.error('Incorrect PIN');
-                    return;
-                }
-            } catch (error) {
-                console.error('PIN verification error:', error);
-                this.toastManager.error('PIN verification failed');
+            const isValid = await this.verifyPinAndGrantAdmin(pin);
+            if (!isValid) {
+                this.toastManager.error('Incorrect PIN');
                 return;
             }
+            this.updateAdminUI();
         }
 
         if (confirm('Start a new season? This will reset season statistics but keep overall statistics.')) {
@@ -2200,20 +2192,12 @@ class AppController {
                 return; // User cancelled
             }
 
-            try {
-                await this.firebaseManager.verifyPin(pin.trim());
-                this.isAdmin = this.firebaseManager.getIsAdmin();
-                this.updateAdminUI();
-
-                if (!this.isAdmin) {
-                    this.toastManager.error('Incorrect PIN');
-                    return;
-                }
-            } catch (error) {
-                console.error('PIN verification error:', error);
-                this.toastManager.error('PIN verification failed');
+            const isValid = await this.verifyPinAndGrantAdmin(pin.trim());
+            if (!isValid) {
+                this.toastManager.error('Incorrect PIN');
                 return;
             }
+            this.updateAdminUI();
         }
 
         if (confirm('WARNING: This will delete ALL statistics, all seasons, and all match history. This cannot be undone. Continue?')) {
@@ -3030,22 +3014,13 @@ class AppController {
                 return; // User cancelled
             }
 
-            try {
-                await this.firebaseManager.verifyPin(pin.trim());
-                this.isAdmin = this.firebaseManager.getIsAdmin();
-                this.updateAdminUI();
-
-                if (!this.isAdmin) {
-                    this.toastManager.error('Incorrect PIN');
-                    return;
-                }
-
-                this.toastManager.success('Admin access granted for this action');
-            } catch (error) {
-                console.error('PIN verification error:', error);
-                this.toastManager.error('PIN verification failed');
+            const isValid = await this.verifyPinAndGrantAdmin(pin.trim());
+            if (!isValid) {
+                this.toastManager.error('Incorrect PIN');
                 return;
             }
+            this.updateAdminUI();
+            this.toastManager.success('Admin access granted for this action');
         }
 
         // Now open the edit modal
@@ -3153,22 +3128,13 @@ class AppController {
                 return; // User cancelled
             }
 
-            try {
-                await this.firebaseManager.verifyPin(pin.trim());
-                this.isAdmin = this.firebaseManager.getIsAdmin();
-                this.updateAdminUI();
-
-                if (!this.isAdmin) {
-                    this.toastManager.error('Incorrect PIN');
-                    return;
-                }
-
-                this.toastManager.success('Admin access granted for this action');
-            } catch (error) {
-                console.error('PIN verification error:', error);
-                this.toastManager.error('PIN verification failed');
+            const isValid = await this.verifyPinAndGrantAdmin(pin.trim());
+            if (!isValid) {
+                this.toastManager.error('Incorrect PIN');
                 return;
             }
+            this.updateAdminUI();
+            this.toastManager.success('Admin access granted for this action');
         }
 
         const team1Score = parseInt(document.getElementById('editTeam1Score').value) || 0;
@@ -3249,22 +3215,15 @@ class AppController {
             return; // User cancelled
         }
 
-        try {
-            await this.firebaseManager.verifyPin(pin.trim());
-            this.isAdmin = this.firebaseManager.getIsAdmin();
+        const isValid = await this.verifyPinAndGrantAdmin(pin.trim());
+        if (isValid) {
             this.updateAdminUI();
-
-            if (this.isAdmin) {
-                this.toastManager.success('Admin access granted for this action');
-                if (confirm('Delete this match? This cannot be undone.')) {
-                    this.deleteMatch(matchTimestamp);
-                }
-            } else {
-                this.toastManager.error('Incorrect PIN');
+            this.toastManager.success('Admin access granted for this action');
+            if (confirm('Delete this match? This cannot be undone.')) {
+                this.deleteMatch(matchTimestamp);
             }
-        } catch (error) {
-            console.error('PIN verification error:', error);
-            this.toastManager.error('PIN verification failed');
+        } else {
+            this.toastManager.error('Incorrect PIN');
         }
     }
 
@@ -3303,20 +3262,12 @@ class AppController {
                 return; // User cancelled
             }
 
-            try {
-                await this.firebaseManager.verifyPin(pin.trim());
-                this.isAdmin = this.firebaseManager.getIsAdmin();
-                this.updateAdminUI();
-
-                if (!this.isAdmin) {
-                    this.toastManager.error('Incorrect PIN');
-                    return;
-                }
-            } catch (error) {
-                console.error('PIN verification error:', error);
-                this.toastManager.error('PIN verification failed');
+            const isValid = await this.verifyPinAndGrantAdmin(pin.trim());
+            if (!isValid) {
+                this.toastManager.error('Incorrect PIN');
                 return;
             }
+            this.updateAdminUI();
         }
         const data = this.storage.getData();
         const json = JSON.stringify(data, null, 2);
@@ -3339,20 +3290,12 @@ class AppController {
                 return; // User cancelled
             }
 
-            try {
-                await this.firebaseManager.verifyPin(pin.trim());
-                this.isAdmin = this.firebaseManager.getIsAdmin();
-                this.updateAdminUI();
-
-                if (!this.isAdmin) {
-                    this.toastManager.error('Incorrect PIN');
-                    return;
-                }
-            } catch (error) {
-                console.error('PIN verification error:', error);
-                this.toastManager.error('PIN verification failed');
+            const isValid = await this.verifyPinAndGrantAdmin(pin.trim());
+            if (!isValid) {
+                this.toastManager.error('Incorrect PIN');
                 return;
             }
+            this.updateAdminUI();
         }
         document.getElementById('importFileInput').click();
     }
@@ -3773,20 +3716,12 @@ class AppController {
                 return; // User cancelled
             }
 
-            try {
-                await this.firebaseManager.verifyPin(pin.trim());
-                this.isAdmin = this.firebaseManager.getIsAdmin();
-                this.updateAdminUI();
-
-                if (!this.isAdmin) {
-                    this.toastManager.error('Incorrect PIN');
-                    return;
-                }
-            } catch (error) {
-                console.error('PIN verification error:', error);
-                this.toastManager.error('PIN verification failed');
+            const isValid = await this.verifyPinAndGrantAdmin(pin.trim());
+            if (!isValid) {
+                this.toastManager.error('Incorrect PIN');
                 return;
             }
+            this.updateAdminUI();
         }
 
         const firebaseNote = this.isFirebaseMode ? '\n\n⚠️ This will also delete ALL Firebase data (shared across all browsers)!' : '';
@@ -4017,40 +3952,65 @@ class AppController {
         });
     }
 
-    async unlockAdminWithPin() {
-        if (!this.firebaseManager) {
-            this.toastManager.error('Firebase not initialized');
-            return;
+    /**
+     * Verify PIN and grant admin access
+     * @param {string} pin - The PIN to verify
+     * @returns {Promise<boolean>} - True if PIN is valid and admin granted
+     */
+    async verifyPinAndGrantAdmin(pin) {
+        if (!pin || !/^\d{4}$/.test(pin)) {
+            return false;
         }
+
+        if (this.isFirebaseMode && this.firebaseManager) {
+            // Firebase mode: verify PIN with Firebase
+            try {
+                await this.firebaseManager.verifyPin(pin);
+                this.isAdmin = this.firebaseManager.getIsAdmin();
+                return this.isAdmin;
+            } catch (error) {
+                console.error('Firebase PIN verification error:', error);
+                return false;
+            }
+        } else {
+            // Local mode: check against stored PIN
+            const storedPin = this.storage.getData().adminPin;
+            if (storedPin && pin === storedPin) {
+                this.isAdmin = true;
+                return true;
+            }
+            return false;
+        }
+    }
+
+    async unlockAdminWithPin() {
         const pin = (document.getElementById('adminPinInput')?.value || '').trim();
         if (!/^\d{4}$/.test(pin)) {
             this.toastManager.error('Enter a 4-digit PIN');
             return;
         }
 
-        try {
-            await this.firebaseManager.verifyPin(pin);
+        const isValid = await this.verifyPinAndGrantAdmin(pin);
+        if (isValid) {
             this.adminUnlockedThisSession = true; // Mark admin as unlocked in this session
-            this.isAdmin = this.firebaseManager.getIsAdmin();
             this.updateAdminUI();
-            this.toastManager.success('Admin unlocked');
-        } catch (error) {
-            const msg = (error?.message || '').toLowerCase();
-            if (msg.includes('pin not set')) {
-                const row = document.getElementById('adminPinSetupRow');
-                if (row) row.style.display = 'flex';
-                this.toastManager.info('Set a PIN first');
-                return;
+            this.toastManager.success(`Admin unlocked${this.isFirebaseMode ? '' : ' (local mode)'}`);
+        } else {
+            if (!this.isFirebaseMode) {
+                const storedPin = this.storage.getData().adminPin;
+                if (!storedPin) {
+                    // No PIN set yet, show setup row
+                    const row = document.getElementById('adminPinSetupRow');
+                    if (row) row.style.display = 'flex';
+                    this.toastManager.info('Set a PIN first (local mode)');
+                    return;
+                }
             }
             this.toastManager.error('Incorrect PIN');
         }
     }
 
     async setAdminPin() {
-        if (!this.firebaseManager) {
-            this.toastManager.error('Firebase not initialized');
-            return;
-        }
         const pin = (document.getElementById('adminPinInput')?.value || '').trim();
         const confirmPin = (document.getElementById('adminPinConfirmInput')?.value || '').trim();
         if (!/^\d{4}$/.test(pin) || pin !== confirmPin) {
@@ -4058,14 +4018,26 @@ class AppController {
             return;
         }
 
-        try {
-            await this.firebaseManager.setPin(pin);
-            this.adminUnlockedThisSession = true; // Mark admin as unlocked in this session
-            this.isAdmin = this.firebaseManager.getIsAdmin();
+        if (this.isFirebaseMode && this.firebaseManager) {
+            // Firebase mode: set PIN in Firebase
+            try {
+                await this.firebaseManager.setPin(pin);
+                this.adminUnlockedThisSession = true; // Mark admin as unlocked in this session
+                this.isAdmin = this.firebaseManager.getIsAdmin();
+                this.updateAdminUI();
+                this.toastManager.success('PIN set. Admin unlocked');
+            } catch (error) {
+                this.toastManager.error('Could not set PIN (already set?)');
+            }
+        } else {
+            // Local mode: store PIN in localStorage
+            this.storage.updateData(data => {
+                data.adminPin = pin;
+            });
+            this.adminUnlockedThisSession = true;
+            this.isAdmin = true;
             this.updateAdminUI();
-            this.toastManager.success('PIN set. Admin unlocked');
-        } catch (error) {
-            this.toastManager.error('Could not set PIN (already set?)');
+            this.toastManager.success('PIN set. Admin unlocked (local mode)');
         }
     }
 
