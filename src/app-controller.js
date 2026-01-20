@@ -877,20 +877,22 @@ class AppController {
                     placeholder="Player ${index + 1}"
                     maxlength="20"
                 />
-                <div class="presence-toggle" data-player="${this.escapeHtml(trimmed)}" style="${!isSavedPlayer ? 'display:none' : ''}">
-                    <label class="presence-label" title="${isPresent ? 'Player is present - stats will count' : 'Player is absent - individual stats frozen, team stats continue'}">
-                        <input type="checkbox" 
-                               class="presence-checkbox" 
-                               data-player="${this.escapeHtml(trimmed)}"
-                               ${isPresent ? 'checked' : ''} />
-                        <span class="presence-text">${isPresent ? 'Present' : 'Absent'}</span>
-                    </label>
+                <div class="player-controls">
+                    <div class="presence-toggle" data-player="${this.escapeHtml(trimmed)}" style="${!isSavedPlayer ? 'display:none' : ''}">
+                        <label class="presence-label" title="${isPresent ? 'Player is present - stats will count' : 'Player is absent - individual stats frozen, team stats continue'}">
+                            <input type="checkbox"
+                                   class="presence-checkbox"
+                                   data-player="${this.escapeHtml(trimmed)}"
+                                   ${isPresent ? 'checked' : ''} />
+                            <span class="presence-text">${isPresent ? 'Present' : 'Absent'}</span>
+                        </label>
+                    </div>
+                    <select class="lock-select" data-index="${index}" ${!canSelect ? 'disabled' : ''}>
+                        <option value="home" ${selectedValue === 'home' ? 'selected' : ''}>${this.escapeHtml(labels.home)}</option>
+                        <option value="neutral" ${selectedValue === 'neutral' ? 'selected' : ''}>${this.escapeHtml(labels.neutral)}</option>
+                        <option value="away" ${selectedValue === 'away' ? 'selected' : ''}>${this.escapeHtml(labels.away)}</option>
+                    </select>
                 </div>
-                <select class="lock-select" data-index="${index}" ${!canSelect ? 'disabled' : ''}>
-                    <option value="home" ${selectedValue === 'home' ? 'selected' : ''}>${this.escapeHtml(labels.home)}</option>
-                    <option value="neutral" ${selectedValue === 'neutral' ? 'selected' : ''}>${this.escapeHtml(labels.neutral)}</option>
-                    <option value="away" ${selectedValue === 'away' ? 'selected' : ''}>${this.escapeHtml(labels.away)}</option>
-                </select>
                 <div class="player-actions">
                     <button class="delete-player-btn" data-index="${index}" title="Remove player">×</button>
                 </div>
