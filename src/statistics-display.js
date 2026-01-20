@@ -24,18 +24,18 @@ function setupToggleUI() {
     toggleButton.id = 'stats-view-toggle';
     toggleButton.style.cssText = `
         position: fixed;
-        top: 80px;
+        top: 120px;
         right: 20px;
-        z-index: 1000;
-        padding: 12px 20px;
+        z-index: 10000;
+        padding: 15px 25px;
         background: linear-gradient(135deg, #2196F3, #1976D2);
         color: white;
-        border: none;
-        border-radius: 25px;
-        font-size: 14px;
+        border: 2px solid white;
+        border-radius: 30px;
+        font-size: 16px;
         font-weight: bold;
         cursor: pointer;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.4);
         transition: all 0.3s ease;
     `;
     toggleButton.onmouseover = () => toggleButton.style.transform = 'scale(1.05)';
@@ -81,6 +81,7 @@ function setupToggleUI() {
         if (statsContainer && !document.querySelector('#stats-view-toggle')) {
             document.body.appendChild(toggleButton);
             console.log('Stats toggle button added to page');
+            alert('Team/Player toggle button added to stats page!'); // Temporary alert
         }
     };
 
@@ -115,6 +116,7 @@ function renderPlayerTable() {
 function renderTeamTable() {
     // #region agent log
     console.log('renderTeamTable called');
+    alert('Team view activated!'); // Temporary alert to confirm function is called
     fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
