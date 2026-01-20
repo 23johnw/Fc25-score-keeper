@@ -20,7 +20,27 @@ function setupToggleUI() {
     // #endregion
 
     const toggleButton = document.createElement('button');
-    toggleButton.innerText = 'Player View';
+    toggleButton.innerText = 'Switch to Team View';
+    toggleButton.id = 'stats-view-toggle';
+    toggleButton.style.cssText = `
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        z-index: 1000;
+        padding: 12px 20px;
+        background: linear-gradient(135deg, #2196F3, #1976D2);
+        color: white;
+        border: none;
+        border-radius: 25px;
+        font-size: 14px;
+        font-weight: bold;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        transition: all 0.3s ease;
+    `;
+    toggleButton.onmouseover = () => toggleButton.style.transform = 'scale(1.05)';
+    toggleButton.onmouseout = () => toggleButton.style.transform = 'scale(1)';
+
     toggleButton.onclick = function() {
         // #region agent log
         console.log('Toggle button clicked, current text:', toggleButton.innerText);
@@ -37,21 +57,37 @@ function setupToggleUI() {
         }).catch(() => {});
         // #endregion
 
-        const statsContainer = document.querySelector('.stats-container') || document.querySelector('#overallStatsDisplay') || document.querySelector('#seasonStatsDisplay');
+        const statsContainer = document.querySelector('#overallStatsDisplay') || document.querySelector('#seasonStatsDisplay') || document.querySelector('.stats-display');
 
-        if (toggleButton.innerText === 'Player View') {
+        if (toggleButton.innerText === 'Switch to Team View') {
             // Switch to team view
+            console.log('Switching to team view, container:', statsContainer?.id);
             renderTeamTable();
-            toggleButton.innerText = 'Team View';
+            toggleButton.innerText = 'Switch to Player View';
+            toggleButton.style.background = 'linear-gradient(135deg, #4CAF50, #388E3C)'; // Green for team view
         } else {
             // Switch to player view - use existing displayOverallStats or similar
+            console.log('Switching to player view, container:', statsContainer?.id);
             if (statsContainer && window.appController?.statisticsDisplay) {
                 window.appController.statisticsDisplay.displayOverallStats(statsContainer);
             }
-            toggleButton.innerText = 'Player View';
+            toggleButton.innerText = 'Switch to Team View';
+            toggleButton.style.background = 'linear-gradient(135deg, #2196F3, #1976D2)'; // Blue for player view
         }
     };
-    document.body.appendChild(toggleButton);
+    // Only add the button if we're on the stats page and it doesn't already exist
+    const checkForStatsPage = () => {
+        const statsContainer = document.querySelector('#overallStatsDisplay') || document.querySelector('#seasonStatsDisplay');
+        if (statsContainer && !document.querySelector('#stats-view-toggle')) {
+            document.body.appendChild(toggleButton);
+            console.log('Stats toggle button added to page');
+        }
+    };
+
+    // Check immediately and also after a delay in case the page loads dynamically
+    checkForStatsPage();
+    setTimeout(checkForStatsPage, 1000);
+    setTimeout(checkForStatsPage, 3000); // Extra check for slower loading
 }
 
 function renderPlayerTable() {
@@ -95,9 +131,27 @@ function renderTeamTable() {
     const matches = window.appController?.statisticsTracker?.getAllMatches() || [];
     const teamStats = window.appController?.statisticsTracker?.getTeamStats(matches) || {};
 
+    console.log('Team View Debug:', {
+        matchesCount: matches.length,
+        teamStatsKeys: Object.keys(teamStats),
+        teamStats: teamStats,
+        sampleMatch: matches[0]
+    });
+
+    if (Object.keys(teamStats).length === 0) {
+        statsContainer.innerHTML = '<div class="empty-state"><p>No team data available. Play some matches first!</p></div>';
+        console.log('No team stats available');
+        return;
+    }
+
     // Find the stats container - use the same container that displays overall stats
     const statsContainer = document.querySelector('#overallStatsDisplay') || document.querySelector('#seasonStatsDisplay') || document.querySelector('.stats-display');
-    if (!statsContainer) return;
+    if (!statsContainer) {
+        console.error('No stats container found for team view');
+        return;
+    }
+
+    console.log('Found stats container:', statsContainer.id, 'for team view');
 
     // Clear existing content
     statsContainer.innerHTML = '';
