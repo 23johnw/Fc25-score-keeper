@@ -2,27 +2,9 @@
 // TeamGenerator - Generate Round Structures
 // ============================================================================
 
-// Team Data Model
-type TeamStats = {
-    played: number,
-    won: number,
-    drawn: number,
-    lost: number,
-    gf: number,
-    ga: number,
-    gd: number,
-    points: number
-};
-type Team = {
-    id: string,
-    players: string[],
-    stats: TeamStats,
-    optional: {
-        history?: string[],
-        form?: string,
-        streaks?: string
-    }
-};
+// Team Data Model (JS doc only, not runtime types)
+// TeamStats shape: { played, won, drawn, lost, gf, ga, gd, points }
+// Team shape: { id, players: string[], stats: TeamStats, optional?: { history?, form?, streaks? } }
 
 class TeamGenerator {
     // Generate all possible round structures where each structure is a complete set of matches

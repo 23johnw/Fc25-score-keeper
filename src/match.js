@@ -2,21 +2,10 @@
 // MatchRecorder - Record Match Results
 // ============================================================================
 
-// Match Data Model
-type MatchStats = {
-    gf: number,
-    ga: number
-};
-type PlayerMatchStats = Record<string, {
-    goals: number,
-    assists: number
-}>;
-type Match = {
-    teamAId: string,
-    teamBId: string,
-    playerStats: PlayerMatchStats,
-    teamStats: MatchStats
-};
+// Match Data Model (JS doc only, not runtime types)
+// MatchStats shape: { gf, ga }
+// PlayerMatchStats shape: { [playerId]: { goals, assists } }
+// Match shape: { teamAId, teamBId, playerStats: PlayerMatchStats, teamStats: MatchStats }
 
 class MatchRecorder {
     constructor(storageManager, seasonManager) {

@@ -1,19 +1,9 @@
 // ============================================================================
 // PlayerManager - Player CRUD Operations
 
-// Player Data Model
-type PlayerStats = {
-    teamStats: Record<string, {
-        goals: number,
-        assists: number,
-        appearances: number
-    }>,
-    overallStats: {
-        goals: number,
-        assists: number,
-        appearances: number
-    }
-};
+// Player Data Model (JS doc only, not runtime types)
+// teamStats: { [teamId]: { goals, assists, appearances } }
+// overallStats: { goals, assists, appearances }
 // ============================================================================
 
 class PlayerManager {

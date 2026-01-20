@@ -13,6 +13,54 @@
     <link rel="stylesheet" href="styles.css">
     <!-- Chart.js for Data Visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        // #region agent log
+        (function () {
+            const endpoint = 'http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a';
+            const sessionId = 'debug-session';
+            const runId = 'pre-fix';
+            const hypothesisId = 'H-global';
+            function send(payload) {
+                try {
+                    fetch(endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(Object.assign({
+                            sessionId,
+                            runId,
+                            hypothesisId,
+                            timestamp: Date.now()
+                        }, payload))
+                    }).catch(() => {});
+                } catch (e) {
+                    console && console.warn && console.warn('log send failed', e);
+                }
+            }
+            window.addEventListener('error', function (e) {
+                send({
+                    location: 'index.html:onerror',
+                    message: 'window error',
+                    data: {
+                        message: e.message,
+                        filename: e.filename,
+                        lineno: e.lineno,
+                        colno: e.colno
+                    }
+                });
+            });
+            window.addEventListener('unhandledrejection', function (e) {
+                send({
+                    location: 'index.html:onunhandledrejection',
+                    message: 'unhandled rejection',
+                    data: {
+                        reason: e && e.reason ? String(e.reason) : 'unknown'
+                    }
+                });
+            });
+            send({ location: 'index.html:boot', message: 'page start' });
+        })();
+        // #endregion
+    </script>
 </head>
 <body>
     <!-- Toast Notification Container -->
