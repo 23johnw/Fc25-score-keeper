@@ -106,44 +106,57 @@ class StatisticsTracker {
     // Aggregate subset teams into superset teams (Ghost Proxy system)
     aggregateSubsetTeams(teamStats) {
         const teamIds = Object.keys(teamStats);
+        
+        // Sort team IDs by length (longest first) to process supersets before subsets
+        // This ensures we merge smaller teams into larger ones correctly
+        const sortedTeamIds = [...teamIds].sort((a, b) => {
+            const aPlayers = Array.isArray(teamStats[a]?.players) ? teamStats[a].players.length : 1;
+            const bPlayers = Array.isArray(teamStats[b]?.players) ? teamStats[b].players.length : 1;
+            return bPlayers - aPlayers; // Longer teams first
+        });
 
         // For each team, check if any other teams are subsets
-        teamIds.forEach(teamId => {
+        sortedTeamIds.forEach(teamId => {
             const teamData = teamStats[teamId];
             if (!teamData) return; // Team might have been deleted
 
-            const teamPlayers = teamData.players;
-
-            // Find teams that are supersets of this team (contain all its players plus more)
-            const supersetTeams = teamIds.filter(otherId => {
+            const teamPlayers = Array.isArray(teamData.players) ? teamData.players : [teamData.players];
+            
+            // Find teams that are subsets of this team (contain fewer players, all of which are in this team)
+            const subsetTeams = sortedTeamIds.filter(otherId => {
                 if (otherId === teamId) return false;
                 const otherTeamData = teamStats[otherId];
                 if (!otherTeamData) return false;
 
-                const otherPlayers = otherTeamData.players;
-                // Check if otherPlayers contains all of teamPlayers
-                return teamPlayers.every(player => otherPlayers.includes(player)) &&
-                       otherPlayers.length > teamPlayers.length;
+                const otherPlayers = Array.isArray(otherTeamData.players) ? otherTeamData.players : [otherTeamData.players];
+                
+                // Check if otherPlayers is a subset of teamPlayers (all other players are in team players)
+                // AND other team has fewer players (it's a true subset, not equal)
+                const isSubset = otherPlayers.length < teamPlayers.length &&
+                               otherPlayers.every(player => teamPlayers.includes(player));
+                
+                return isSubset;
             });
 
-            // If this team is a subset of another team, merge its stats
-            if (supersetTeams.length > 0) {
-                // Merge into the first superset team (usually the most complete one)
-                const targetTeamId = supersetTeams[0];
-                const targetTeam = teamStats[targetTeamId];
+            // If there are subset teams, merge their stats into this team
+            if (subsetTeams.length > 0) {
+                subsetTeams.forEach(subsetId => {
+                    const subsetData = teamStats[subsetId];
+                    if (!subsetData) return;
 
-                // Add stats from subset team to superset team
-                targetTeam.played += teamData.played;
-                targetTeam.won += teamData.won;
-                targetTeam.drawn += teamData.drawn;
-                targetTeam.lost += teamData.lost;
-                targetTeam.gf += teamData.gf;
-                targetTeam.ga += teamData.ga;
-                targetTeam.points += teamData.points;
-                targetTeam.gd = targetTeam.gf - targetTeam.ga;
+                    // Add stats from subset team to superset team
+                    teamData.played += subsetData.played;
+                    teamData.won += subsetData.won;
+                    teamData.drawn += subsetData.drawn;
+                    teamData.lost += subsetData.lost;
+                    teamData.gf += subsetData.gf;
+                    teamData.ga += subsetData.ga;
+                    teamData.points += subsetData.points;
+                    teamData.gd = teamData.gf - teamData.ga;
 
-                // Remove the subset team
-                delete teamStats[teamId];
+                    // Remove the subset team
+                    delete teamStats[subsetId];
+                });
             }
         });
     }

@@ -141,12 +141,114 @@ class LocalStorageManager {
             const stored = localStorage.getItem(this.storageKey);
             if (stored) {
                 const parsed = JSON.parse(stored);
-                return this.applyDefaults(parsed);
+                const data = this.applyDefaults(parsed);
+                // Set this.data first so migration can save if needed
+                this.data = data;
+                // Run migrations to fix old data
+                this.migratePlayerPresence(data);
+                return this.data;
             }
         } catch (error) {
             console.error('Error loading data:', error);
         }
-        return this.getDefaultData();
+        const defaultData = this.getDefaultData();
+        this.data = defaultData;
+        return defaultData;
+    }
+
+    /**
+     * Migration: Retroactively mark players as absent in old matches where their partner was solo
+     * This ensures the Ghost Proxy system works correctly for historical data
+     */
+    migratePlayerPresence(data) {
+        if (!data.seasons) return;
+        
+        let updated = 0;
+        let needsSave = false;
+        
+        // Get all known partnerships from match history
+        const partnerships = new Map(); // Map<player, Set<partners>>
+        
+        // First pass: identify partnerships by finding players who have played together
+        Object.values(data.seasons).forEach(season => {
+            if (!season.matches) return;
+            season.matches.forEach(match => {
+                const team1 = Array.isArray(match.team1) ? match.team1 : [match.team1];
+                const team2 = Array.isArray(match.team2) ? match.team2 : [match.team2];
+                const allPlayers = [...new Set([...team1, ...team2])];
+                
+                // For each team, record partnerships (players who played together)
+                if (team1.length > 1) {
+                    team1.forEach(p1 => {
+                        team1.forEach(p2 => {
+                            if (p1 !== p2) {
+                                if (!partnerships.has(p1)) partnerships.set(p1, new Set());
+                                if (!partnerships.has(p2)) partnerships.set(p2, new Set());
+                                partnerships.get(p1).add(p2);
+                                partnerships.get(p2).add(p1);
+                            }
+                        });
+                    });
+                }
+                if (team2.length > 1) {
+                    team2.forEach(p1 => {
+                        team2.forEach(p2 => {
+                            if (p1 !== p2) {
+                                if (!partnerships.has(p1)) partnerships.set(p1, new Set());
+                                if (!partnerships.has(p2)) partnerships.set(p2, new Set());
+                                partnerships.get(p1).add(p2);
+                                partnerships.get(p2).add(p1);
+                            }
+                        });
+                    });
+                }
+            });
+        });
+        
+        // Second pass: fix playerPresence for solo matches
+        Object.values(data.seasons).forEach(season => {
+            if (!season.matches) return;
+            season.matches.forEach(match => {
+                const team1 = Array.isArray(match.team1) ? match.team1 : [match.team1];
+                const team2 = Array.isArray(match.team2) ? match.team2 : [match.team2];
+                
+                if (!match.playerPresence) {
+                    match.playerPresence = {};
+                    needsSave = true;
+                }
+                
+                const presence = match.playerPresence;
+                
+                // Check each player who has known partnerships
+                partnerships.forEach((partners, player) => {
+                    const playerInT1 = team1.includes(player);
+                    const playerInT2 = team2.includes(player);
+                    const playerSolo = (playerInT1 && team1.length === 1) || (playerInT2 && team2.length === 1);
+                    
+                    if (playerSolo) {
+                        // Player is solo - check if any of their partners should be marked absent
+                        partners.forEach(partner => {
+                            const partnerInT1 = team1.includes(partner);
+                            const partnerInT2 = team2.includes(partner);
+                            const partnerNotPresent = !partnerInT1 && !partnerInT2;
+                            
+                            // If partner is not in either team and not already marked absent, mark them as absent
+                            if (partnerNotPresent && presence[partner] !== false) {
+                                presence[partner] = false;
+                                updated++;
+                                needsSave = true;
+                            }
+                        });
+                    }
+                });
+            });
+        });
+        
+        if (needsSave && updated > 0) {
+            console.log(`Migration: Updated ${updated} player presence entries for Ghost Proxy system`);
+            this.data = data;
+            this.saveData();
+        }
     }
 
     getDefaultData() {

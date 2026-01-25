@@ -2743,17 +2743,13 @@ class AppController {
                 continue;
             }
             
-            // Check for Ghost Proxy matches - one player solo but other was absent (still counts as team match)
-            // Check playerPresence to see if absent player was still part of the team conceptually
-            const matchPresence = match.playerPresence || {};
-            const playerAAbsent = matchPresence[playerA] === false;
-            const playerBAbsent = matchPresence[playerB] === false;
-            
-            // Solo matches where the other partner was absent (Ghost Proxy system)
-            const team1HasAOnly = team1.includes(playerA) && !team1.includes(playerB) && team1.length === 1 && playerBAbsent;
-            const team2HasAOnly = team2.includes(playerA) && !team2.includes(playerB) && team2.length === 1 && playerBAbsent;
-            const team1HasBOnly = team1.includes(playerB) && !team1.includes(playerA) && team1.length === 1 && playerAAbsent;
-            const team2HasBOnly = team2.includes(playerB) && !team2.includes(playerA) && team2.length === 1 && playerAAbsent;
+            // Check for solo matches - one player from partnership playing solo (team size = 1)
+            // This includes both true solo matches and Ghost Proxy matches (where partner was absent)
+            // The team stats aggregation system merges solo teams into partnership teams, so all solo matches count
+            const team1HasAOnly = team1.includes(playerA) && !team1.includes(playerB) && team1.length === 1;
+            const team2HasAOnly = team2.includes(playerA) && !team2.includes(playerB) && team2.length === 1;
+            const team1HasBOnly = team1.includes(playerB) && !team1.includes(playerA) && team1.length === 1;
+            const team2HasBOnly = team2.includes(playerB) && !team2.includes(playerA) && team2.length === 1;
             
             // #region agent log
             fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
@@ -2771,8 +2767,6 @@ class AppController {
                         team2HasAOnly,
                         team1HasBOnly,
                         team2HasBOnly,
-                        playerAAbsent,
-                        playerBAbsent,
                         playersOnOppositeTeams
                     },
                     timestamp: Date.now(),
@@ -2783,7 +2777,8 @@ class AppController {
             
             // Include if:
             // 1. Both players together on same team (Full Team)
-            // 2. One player solo AND the other was absent (Ghost Proxy - still counts as team match)
+            // 2. One player solo (team size = 1) - includes both true solo and Ghost Proxy matches
+            //    This aligns with team stats aggregation which merges solo teams into partnership teams
             if (team1HasBoth || team2HasBoth || team1HasAOnly || team2HasAOnly || team1HasBOnly || team2HasBOnly) {
                 filtered.push(match);
             }
@@ -2836,9 +2831,22 @@ class AppController {
         const team2HasBoth = team2.includes(playerA) && team2.includes(playerB);
         const bothPresent = team1HasBoth || team2HasBoth;
         
-        if (bothPresent) {
-            // Full Team match - both players together on same team (works for 2v2, 2v1, etc.)
-            const isTeam1 = team1HasBoth;
+        // Check for Ghost Proxy matches - one player solo but other was absent (still counts as Full Team)
+        const matchPresence = match.playerPresence || {};
+        const playerAAbsent = matchPresence[playerA] === false;
+        const playerBAbsent = matchPresence[playerB] === false;
+        
+        // Solo matches where the other partner was absent (Ghost Proxy system)
+        const team1HasSoloAWithAbsentB = team1.includes(playerA) && !team1.includes(playerB) && team1.length === 1 && playerBAbsent;
+        const team2HasSoloAWithAbsentB = team2.includes(playerA) && !team2.includes(playerB) && team2.length === 1 && playerBAbsent;
+        const team1HasSoloBWithAbsentA = team1.includes(playerB) && !team1.includes(playerA) && team1.length === 1 && playerAAbsent;
+        const team2HasSoloBWithAbsentA = team2.includes(playerB) && !team2.includes(playerA) && team2.length === 1 && playerAAbsent;
+        
+        const isGhostProxy = team1HasSoloAWithAbsentB || team2HasSoloAWithAbsentB || team1HasSoloBWithAbsentA || team2HasSoloBWithAbsentA;
+        
+        if (bothPresent || isGhostProxy) {
+            // Full Team match - both players together OR one solo with other absent (Ghost Proxy)
+            const isTeam1 = team1HasBoth || team1HasSoloAWithAbsentB || team1HasSoloBWithAbsentA;
             let result = 'Draw';
             if (match.result === 'team1' && isTeam1) {
                 result = 'Win';
@@ -2857,7 +2865,7 @@ class AppController {
                 body: JSON.stringify({
                     location: 'src/app-controller.js:classifyMatch',
                     message: 'classifyMatch - full team match',
-                    data: { type: 'team', result, isTeam1 },
+                    data: { type: 'team', result, isTeam1, isGhostProxy },
                     timestamp: Date.now(),
                     sessionId: 'debug-session'
                 })
@@ -2867,6 +2875,7 @@ class AppController {
             return { type: 'team', result, soloPlayer: null };
         } else {
             // Solo match - only one player from partnership played AND they are truly alone (team size = 1)
+            // AND the other partner was NOT marked absent (true solo, not Ghost Proxy)
             const team1HasAOnly = team1.includes(playerA) && !team1.includes(playerB) && team1.length === 1;
             const team2HasAOnly = team2.includes(playerA) && !team2.includes(playerB) && team2.length === 1;
             const team1HasBOnly = team1.includes(playerB) && !team1.includes(playerA) && team1.length === 1;
