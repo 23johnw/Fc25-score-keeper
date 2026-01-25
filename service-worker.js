@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fc25-score-tracker-v100';
+const CACHE_NAME = 'fc25-score-tracker-v101';
 
 // Determine base path from the SW scope.
 // - Firebase Hosting scope is usually "/"  -> BASE_PATH = ""

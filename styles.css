@@ -3504,9 +3504,22 @@ body.dark-mode .filter-stat-item {
     color: #616161;
 }
 
+.team-details-date-game {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+}
+
 .team-details-date {
     font-size: 0.85rem;
     color: var(--text-secondary);
+}
+
+.team-details-game-number {
+    font-size: 0.75rem;
+    color: var(--primary-color);
+    font-weight: 600;
 }
 
 .team-details-match-content {

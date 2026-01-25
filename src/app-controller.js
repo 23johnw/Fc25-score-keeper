@@ -123,7 +123,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.85.0';
+            bannerVersion.textContent = 'Version 1.86.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
@@ -2683,11 +2683,22 @@ class AppController {
         // Filter matches for this team/partnership
         const teamMatches = this.filterMatchesForTeam(allMatches, teamPlayers);
         
-        // Sort matches by timestamp (most recent first)
-        teamMatches.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        // Sort matches by timestamp (oldest first) to assign game numbers
+        teamMatches.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
         
-        // Display matches
-        this.renderTeamDetailsMatches(teamMatches, teamPlayers);
+        // Assign game numbers (1, 2, 3, etc.) starting from the first match
+        teamMatches.forEach((match, index) => {
+            match.gameNumber = index + 1;
+        });
+        
+        // Store total games count before reversing
+        const totalGames = teamMatches.length;
+        
+        // Reverse to show most recent first for display
+        teamMatches.reverse();
+        
+        // Pass total games to render function
+        this.renderTeamDetailsMatches(teamMatches, teamPlayers, totalGames);
         
         // Show the team details screen
         this.showScreen('teamDetailsScreen');
@@ -2900,7 +2911,7 @@ class AppController {
         return { type: 'unknown', result: 'Unknown', soloPlayer: null };
     }
 
-    renderTeamDetailsMatches(matches, teamPlayers) {
+    renderTeamDetailsMatches(matches, teamPlayers, totalGames = null) {
         // #region agent log
         fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
             method: 'POST',
@@ -2980,11 +2991,18 @@ class AppController {
                 resultClass = 'team-draw';
             }
             
+            // Get game number (assigned during sorting in showTeamDetails)
+            const gameNumber = match.gameNumber !== undefined ? match.gameNumber : 0;
+            const totalGamesCount = totalGames !== null ? totalGames : matches.length;
+            
             return `
                 <div class="team-details-match-item">
                     <div class="team-details-match-header">
                         <span class="team-details-classification ${resultClass}">${classificationLabel}</span>
-                        <span class="team-details-date">${dateStr}</span>
+                        <span class="team-details-date-game">
+                            <span class="team-details-date">${dateStr}</span>
+                            <span class="team-details-game-number">Game ${gameNumber} / ${totalGamesCount}</span>
+                        </span>
                     </div>
                     <div class="team-details-match-content">
                         <div class="team-details-teams">
@@ -3948,7 +3966,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.85.0';
+            bannerVersion.textContent = 'Version 1.86.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
