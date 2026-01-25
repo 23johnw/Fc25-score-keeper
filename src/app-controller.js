@@ -123,7 +123,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.83.0';
+            bannerVersion.textContent = 'Version 1.84.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
@@ -2815,12 +2815,13 @@ class AppController {
         const [playerA, playerB] = teamPlayers;
         
         // Check if both players are together on the same team (Full Team)
+        // This includes 2v2, 2v1, etc. - as long as both A and B are together, it's "Full Team"
         const team1HasBoth = team1.includes(playerA) && team1.includes(playerB);
         const team2HasBoth = team2.includes(playerA) && team2.includes(playerB);
         const bothPresent = team1HasBoth || team2HasBoth;
         
         if (bothPresent) {
-            // Full Team match - both players together on same team
+            // Full Team match - both players together on same team (works for 2v2, 2v1, etc.)
             const isTeam1 = team1HasBoth;
             let result = 'Draw';
             if (match.result === 'team1' && isTeam1) {
@@ -2928,14 +2929,21 @@ class AppController {
             const classification = this.classifyMatch(match, teamPlayers);
             const team1 = Array.isArray(match.team1) ? match.team1 : [match.team1];
             const team2 = Array.isArray(match.team2) ? match.team2 : [match.team2];
+            const [playerA, playerB] = teamPlayers;
             
-            // Determine which team the partnership was on
-            const team1HasBoth = teamPlayers.every(p => team1.includes(p));
-            const team2HasBoth = teamPlayers.every(p => team2.includes(p));
-            const team1HasSolo = teamPlayers.find(p => team1.includes(p));
-            const team2HasSolo = teamPlayers.find(p => team2.includes(p));
+            // Determine which team the partnership was on (consistent with classifyMatch logic)
+            // Check if both players are together on the same team (Full Team - works for 2v2, 2v1, etc.)
+            const team1HasBoth = team1.includes(playerA) && team1.includes(playerB);
+            const team2HasBoth = team2.includes(playerA) && team2.includes(playerB);
             
-            const isTeam1 = team1HasBoth || team1HasSolo;
+            // Check if only one player is present (Solo)
+            const team1HasA = team1.includes(playerA) && !team1.includes(playerB);
+            const team2HasA = team2.includes(playerA) && !team2.includes(playerB);
+            const team1HasB = team1.includes(playerB) && !team1.includes(playerA);
+            const team2HasB = team2.includes(playerB) && !team2.includes(playerA);
+            
+            // Determine which team the partnership player(s) were on
+            const isTeam1 = team1HasBoth || team1HasA || team1HasB;
             const ourTeam = isTeam1 ? team1 : team2;
             const opponentTeam = isTeam1 ? team2 : team1;
             
@@ -3940,7 +3948,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.83.0';
+            bannerVersion.textContent = 'Version 1.84.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
