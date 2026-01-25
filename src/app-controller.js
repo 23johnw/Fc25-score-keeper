@@ -123,7 +123,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.84.0';
+            bannerVersion.textContent = 'Version 1.85.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
@@ -2720,20 +2720,24 @@ class AppController {
             const team1HasBoth = team1.includes(playerA) && team1.includes(playerB);
             const team2HasBoth = team2.includes(playerA) && team2.includes(playerB);
             
-            // Check if only Player A is present (solo)
-            const team1HasA = team1.includes(playerA) && !team1.includes(playerB);
-            const team2HasA = team2.includes(playerA) && !team2.includes(playerB);
-            
-            // Check if only Player B is present (solo)
-            const team1HasB = team1.includes(playerB) && !team1.includes(playerA);
-            const team2HasB = team2.includes(playerB) && !team2.includes(playerA);
-            
             // Check if players are on opposite teams (both present but split)
             const playerAInTeam1 = team1.includes(playerA);
             const playerAInTeam2 = team2.includes(playerA);
             const playerBInTeam1 = team1.includes(playerB);
             const playerBInTeam2 = team2.includes(playerB);
             const playersOnOppositeTeams = (playerAInTeam1 && playerBInTeam2) || (playerAInTeam2 && playerBInTeam1);
+            
+            // Exclude if players are on opposite teams (head-to-head, not partnership match)
+            if (playersOnOppositeTeams) {
+                continue;
+            }
+            
+            // Check for TRUE solo matches - only one player from partnership, and they must be alone (team size = 1)
+            // This excludes cases where the solo player is playing with a different partner
+            const team1HasAOnly = team1.includes(playerA) && !team1.includes(playerB) && team1.length === 1;
+            const team2HasAOnly = team2.includes(playerA) && !team2.includes(playerB) && team2.length === 1;
+            const team1HasBOnly = team1.includes(playerB) && !team1.includes(playerA) && team1.length === 1;
+            const team2HasBOnly = team2.includes(playerB) && !team2.includes(playerA) && team2.length === 1;
             
             // #region agent log
             fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
@@ -2747,10 +2751,10 @@ class AppController {
                         team2,
                         team1HasBoth,
                         team2HasBoth,
-                        team1HasA,
-                        team2HasA,
-                        team1HasB,
-                        team2HasB,
+                        team1HasAOnly,
+                        team2HasAOnly,
+                        team1HasBOnly,
+                        team2HasBOnly,
                         playersOnOppositeTeams
                     },
                     timestamp: Date.now(),
@@ -2759,16 +2763,11 @@ class AppController {
             }).catch(() => {});
             // #endregion
             
-            // Exclude if players are on opposite teams (head-to-head, not partnership match)
-            if (playersOnOppositeTeams) {
-                continue;
-            }
-            
             // Include only if:
             // 1. Both players together on same team (Full Team)
-            // 2. Only Player A is present (A Solo)
-            // 3. Only Player B is present (B Solo)
-            if (team1HasBoth || team2HasBoth || team1HasA || team2HasA || team1HasB || team2HasB) {
+            // 2. Only Player A is present AND truly solo (team size = 1)
+            // 3. Only Player B is present AND truly solo (team size = 1)
+            if (team1HasBoth || team2HasBoth || team1HasAOnly || team2HasAOnly || team1HasBOnly || team2HasBOnly) {
                 filtered.push(match);
             }
         }
@@ -2850,24 +2849,25 @@ class AppController {
             
             return { type: 'team', result, soloPlayer: null };
         } else {
-            // Solo match - only one player from partnership played
-            const team1HasA = team1.includes(playerA) && !team1.includes(playerB);
-            const team2HasA = team2.includes(playerA) && !team2.includes(playerB);
-            const team1HasB = team1.includes(playerB) && !team1.includes(playerA);
-            const team2HasB = team2.includes(playerB) && !team2.includes(playerA);
+            // Solo match - only one player from partnership played AND they are truly alone (team size = 1)
+            const team1HasAOnly = team1.includes(playerA) && !team1.includes(playerB) && team1.length === 1;
+            const team2HasAOnly = team2.includes(playerA) && !team2.includes(playerB) && team2.length === 1;
+            const team1HasBOnly = team1.includes(playerB) && !team1.includes(playerA) && team1.length === 1;
+            const team2HasBOnly = team2.includes(playerB) && !team2.includes(playerA) && team2.length === 1;
             
             let soloPlayer = null;
             let isTeam1 = false;
             
-            if (team1HasA || team2HasA) {
+            if (team1HasAOnly || team2HasAOnly) {
                 soloPlayer = playerA;
-                isTeam1 = team1HasA;
-            } else if (team1HasB || team2HasB) {
+                isTeam1 = team1HasAOnly;
+            } else if (team1HasBOnly || team2HasBOnly) {
                 soloPlayer = playerB;
-                isTeam1 = team1HasB;
+                isTeam1 = team1HasBOnly;
             }
             
             if (soloPlayer) {
+                // Calculate result based on which team the solo player was on
                 let result = 'Draw';
                 if (match.result === 'team1' && isTeam1) {
                     result = 'Win';
@@ -3948,7 +3948,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.84.0';
+            bannerVersion.textContent = 'Version 1.85.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
