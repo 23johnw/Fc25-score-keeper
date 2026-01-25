@@ -123,7 +123,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.82.0';
+            bannerVersion.textContent = 'Version 1.83.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
@@ -2708,32 +2708,32 @@ class AppController {
         }).catch(() => {});
         // #endregion
 
+        // Strict partnership filtering: Only show matches where Player A, Player B, or both are on the SAME team
         const filtered = [];
+        const [playerA, playerB] = teamPlayers; // Get the two partnership players
         
         for (const match of matches) {
             const team1 = Array.isArray(match.team1) ? match.team1 : [match.team1];
             const team2 = Array.isArray(match.team2) ? match.team2 : [match.team2];
             
-            // Check if both players are together on team1
-            const team1HasBoth = teamPlayers.every(p => team1.includes(p));
-            // Check if both players are together on team2
-            const team2HasBoth = teamPlayers.every(p => team2.includes(p));
+            // Check if both players are together on the same team
+            const team1HasBoth = team1.includes(playerA) && team1.includes(playerB);
+            const team2HasBoth = team2.includes(playerA) && team2.includes(playerB);
             
-            // Check if only one player from partnership is in team1
-            const team1HasSolo = teamPlayers.filter(p => team1.includes(p)).length === 1;
-            // Check if only one player from partnership is in team2
-            const team2HasSolo = teamPlayers.filter(p => team2.includes(p)).length === 1;
+            // Check if only Player A is present (solo)
+            const team1HasA = team1.includes(playerA) && !team1.includes(playerB);
+            const team2HasA = team2.includes(playerA) && !team2.includes(playerB);
             
-            // Check if any team players are in each team
-            const team1HasAny = teamPlayers.some(p => team1.includes(p));
-            const team2HasAny = teamPlayers.some(p => team2.includes(p));
+            // Check if only Player B is present (solo)
+            const team1HasB = team1.includes(playerB) && !team1.includes(playerA);
+            const team2HasB = team2.includes(playerB) && !team2.includes(playerA);
             
-            // Check if players are split across teams (both present but on different teams)
-            const playersSplit = team1HasAny && team2HasAny && !team1HasBoth && !team2HasBoth;
-            
-            // Exclude if partnership (both players together) is on opposing team
-            // This means: both players together on one team, and NO team players on the other team
-            const partnershipOnOpposingTeam = (team1HasBoth && !team2HasAny) || (team2HasBoth && !team1HasAny);
+            // Check if players are on opposite teams (both present but split)
+            const playerAInTeam1 = team1.includes(playerA);
+            const playerAInTeam2 = team2.includes(playerA);
+            const playerBInTeam1 = team1.includes(playerB);
+            const playerBInTeam2 = team2.includes(playerB);
+            const playersOnOppositeTeams = (playerAInTeam1 && playerBInTeam2) || (playerAInTeam2 && playerBInTeam1);
             
             // #region agent log
             fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
@@ -2747,10 +2747,11 @@ class AppController {
                         team2,
                         team1HasBoth,
                         team2HasBoth,
-                        team1HasSolo,
-                        team2HasSolo,
-                        playersSplit,
-                        partnershipOnOpposingTeam
+                        team1HasA,
+                        team2HasA,
+                        team1HasB,
+                        team2HasB,
+                        playersOnOppositeTeams
                     },
                     timestamp: Date.now(),
                     sessionId: 'debug-session'
@@ -2758,20 +2759,16 @@ class AppController {
             }).catch(() => {});
             // #endregion
             
-            // Include match if:
-            // 1. Both players played together (on same team) - and not on opposing team
-            // 2. Only one player from partnership played (solo) - always include solo matches
-            // EXCLUDE if players are split across teams (both present but on different teams)
-            if (playersSplit) {
-                // Both players present but on different teams - exclude this match
+            // Exclude if players are on opposite teams (head-to-head, not partnership match)
+            if (playersOnOppositeTeams) {
                 continue;
-            } else if (team1HasBoth || team2HasBoth) {
-                // Both players together - only include if not on opposing team
-                if (!partnershipOnOpposingTeam) {
-                    filtered.push(match);
-                }
-            } else if (team1HasSolo || team2HasSolo) {
-                // Solo match - always include
+            }
+            
+            // Include only if:
+            // 1. Both players together on same team (Full Team)
+            // 2. Only Player A is present (A Solo)
+            // 3. Only Player B is present (B Solo)
+            if (team1HasBoth || team2HasBoth || team1HasA || team2HasA || team1HasB || team2HasB) {
                 filtered.push(match);
             }
         }
@@ -2815,19 +2812,15 @@ class AppController {
 
         const team1 = Array.isArray(match.team1) ? match.team1 : [match.team1];
         const team2 = Array.isArray(match.team2) ? match.team2 : [match.team2];
+        const [playerA, playerB] = teamPlayers;
         
-        // Check if both players were present on the same team
-        const team1HasBoth = teamPlayers.every(p => team1.includes(p));
-        const team2HasBoth = teamPlayers.every(p => team2.includes(p));
+        // Check if both players are together on the same team (Full Team)
+        const team1HasBoth = team1.includes(playerA) && team1.includes(playerB);
+        const team2HasBoth = team2.includes(playerA) && team2.includes(playerB);
         const bothPresent = team1HasBoth || team2HasBoth;
         
-        // Check if players are split across teams (both present but on different teams)
-        const team1HasAny = teamPlayers.some(p => team1.includes(p));
-        const team2HasAny = teamPlayers.some(p => team2.includes(p));
-        const playersSplit = team1HasAny && team2HasAny && !bothPresent;
-        
         if (bothPresent) {
-            // Team match - both players together on same team
+            // Full Team match - both players together on same team
             const isTeam1 = team1HasBoth;
             let result = 'Draw';
             if (match.result === 'team1' && isTeam1) {
@@ -2846,7 +2839,7 @@ class AppController {
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
                     location: 'src/app-controller.js:classifyMatch',
-                    message: 'classifyMatch - team match',
+                    message: 'classifyMatch - full team match',
                     data: { type: 'team', result, isTeam1 },
                     timestamp: Date.now(),
                     sessionId: 'debug-session'
@@ -2855,18 +2848,25 @@ class AppController {
             // #endregion
             
             return { type: 'team', result, soloPlayer: null };
-        } else if (playersSplit) {
-            // Both players present but on different teams - this shouldn't happen after filtering
-            // but handle it gracefully
-            return { type: 'unknown', result: 'Unknown', soloPlayer: null };
         } else {
             // Solo match - only one player from partnership played
-            const team1HasSolo = teamPlayers.find(p => team1.includes(p));
-            const team2HasSolo = teamPlayers.find(p => team2.includes(p));
-            const soloPlayer = team1HasSolo || team2HasSolo;
+            const team1HasA = team1.includes(playerA) && !team1.includes(playerB);
+            const team2HasA = team2.includes(playerA) && !team2.includes(playerB);
+            const team1HasB = team1.includes(playerB) && !team1.includes(playerA);
+            const team2HasB = team2.includes(playerB) && !team2.includes(playerA);
+            
+            let soloPlayer = null;
+            let isTeam1 = false;
+            
+            if (team1HasA || team2HasA) {
+                soloPlayer = playerA;
+                isTeam1 = team1HasA;
+            } else if (team1HasB || team2HasB) {
+                soloPlayer = playerB;
+                isTeam1 = team1HasB;
+            }
             
             if (soloPlayer) {
-                const isTeam1 = !!team1HasSolo;
                 let result = 'Draw';
                 if (match.result === 'team1' && isTeam1) {
                     result = 'Win';
@@ -2957,7 +2957,7 @@ class AppController {
             // Classification label
             let classificationLabel = '';
             if (classification.type === 'team') {
-                classificationLabel = `Team ${classification.result}`;
+                classificationLabel = `Full Team ${classification.result}`;
             } else if (classification.type === 'solo') {
                 classificationLabel = `${classification.soloPlayer} Solo ${classification.result}`;
             }
@@ -3940,7 +3940,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.82.0';
+            bannerVersion.textContent = 'Version 1.83.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
