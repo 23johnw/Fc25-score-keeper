@@ -314,7 +314,9 @@ window.renderTeamTable = function renderTeamTable() {
             ${sortedTeams
                 .map(([teamId, stats], index) => `
                     <tr style="border-bottom: 1px solid #e0e0e0; background: ${index % 2 === 0 ? '#ffffff' : '#f9f9f9'};">
-                        <td style="font-weight: bold; font-size: 14px; padding: 10px 8px; line-height: 1.4; max-width: 150px; vertical-align: middle;" title="${stats.players.join(' & ')}">${formatTeamName(stats.players)}</td>
+                        <td style="font-weight: bold; font-size: 14px; padding: 10px 8px; line-height: 1.4; max-width: 150px; vertical-align: middle;" title="${stats.players.join(' & ')}">
+                            <span class="team-name-clickable" data-team-id="${teamId}" data-team-players="${stats.players.join(',')}" style="cursor: pointer; color: #2196F3; text-decoration: underline;">${formatTeamName(stats.players)}</span>
+                        </td>
                         <td style="text-align: center; padding: 10px 8px; font-weight: bold; font-size: 16px; color: #4CAF50;">${stats.points}</td>
                         <td style="text-align: center; padding: 10px 6px; font-size: 14px;">${stats.played}</td>
                         <td style="text-align: center; padding: 10px 6px; font-size: 14px;">${stats.won}</td>
@@ -333,6 +335,20 @@ window.renderTeamTable = function renderTeamTable() {
 
     statsContainer.appendChild(teamTable);
     console.log('Team table appended to container:', statsContainer.id);
+    
+    // Add click handlers for team names
+    setTimeout(() => {
+        const clickableNames = teamTable.querySelectorAll('.team-name-clickable');
+        clickableNames.forEach(element => {
+            element.addEventListener('click', (e) => {
+                const teamId = element.getAttribute('data-team-id');
+                const teamPlayers = element.getAttribute('data-team-players').split(',');
+                if (window.appController && window.appController.showTeamDetails) {
+                    window.appController.showTeamDetails(teamPlayers);
+                }
+            });
+        });
+    }, 100);
     
     // Force a visual update
     statsContainer.style.display = 'block';

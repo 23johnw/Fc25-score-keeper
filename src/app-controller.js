@@ -123,7 +123,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.80.0';
+            bannerVersion.textContent = 'Version 1.81.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
@@ -482,6 +482,9 @@ class AppController {
 
         // History screen
         document.getElementById('backFromHistoryBtn').addEventListener('click', () => this.showScreen('statsScreen'));
+        
+        // Team Details screen
+        document.getElementById('backFromTeamDetailsBtn').addEventListener('click', () => this.showScreen('statsScreen'));
         document.getElementById('historyFilter').addEventListener('change', () => this.loadMatchHistory());
         document.getElementById('historySearch').addEventListener('input', () => this.loadMatchHistory());
         document.getElementById('historyDateFrom').addEventListener('change', () => this.loadMatchHistory());
@@ -2654,6 +2657,258 @@ class AppController {
         `;
     }
 
+    showTeamDetails(teamPlayers) {
+        // #region agent log
+        fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                location: 'src/app-controller.js:showTeamDetails',
+                message: 'showTeamDetails called',
+                data: { teamPlayers },
+                timestamp: Date.now(),
+                sessionId: 'debug-session'
+            })
+        }).catch(() => {});
+        // #endregion
+
+        // Update title and subtitle
+        const teamName = teamPlayers.length === 1 ? teamPlayers[0] : teamPlayers.join(' & ');
+        document.getElementById('teamDetailsTitle').textContent = teamName;
+        document.getElementById('teamDetailsSubtitle').textContent = `Match history for ${teamName}`;
+
+        // Get all matches
+        const allMatches = this.statisticsTracker.getAllMatches();
+        
+        // Filter matches for this team/partnership
+        const teamMatches = this.filterMatchesForTeam(allMatches, teamPlayers);
+        
+        // Sort matches by timestamp (most recent first)
+        teamMatches.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        // Display matches
+        this.renderTeamDetailsMatches(teamMatches, teamPlayers);
+        
+        // Show the team details screen
+        this.showScreen('teamDetailsScreen');
+    }
+
+    filterMatchesForTeam(matches, teamPlayers) {
+        // #region agent log
+        fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                location: 'src/app-controller.js:filterMatchesForTeam',
+                message: 'filterMatchesForTeam called',
+                data: { teamPlayers, matchesCount: matches.length },
+                timestamp: Date.now(),
+                sessionId: 'debug-session'
+            })
+        }).catch(() => {});
+        // #endregion
+
+        const filtered = [];
+        
+        for (const match of matches) {
+            const team1 = Array.isArray(match.team1) ? match.team1 : [match.team1];
+            const team2 = Array.isArray(match.team2) ? match.team2 : [match.team2];
+            
+            // Check if both players are together on team1
+            const team1HasBoth = teamPlayers.every(p => team1.includes(p));
+            // Check if both players are together on team2
+            const team2HasBoth = teamPlayers.every(p => team2.includes(p));
+            
+            // Check if only one player from partnership is in team1
+            const team1HasSolo = teamPlayers.filter(p => team1.includes(p)).length === 1;
+            // Check if only one player from partnership is in team2
+            const team2HasSolo = teamPlayers.filter(p => team2.includes(p)).length === 1;
+            
+            // Check if any team players are in each team
+            const team1HasAny = teamPlayers.some(p => team1.includes(p));
+            const team2HasAny = teamPlayers.some(p => team2.includes(p));
+            
+            // Exclude if partnership (both players together) is on opposing team
+            // This means: both players together on one team, and NO team players on the other team
+            const partnershipOnOpposingTeam = (team1HasBoth && !team2HasAny) || (team2HasBoth && !team1HasAny);
+            
+            // Include match if:
+            // 1. Both players played together (on same team) - and not on opposing team
+            // 2. Only one player from partnership played (solo) - always include solo matches
+            if (team1HasBoth || team2HasBoth) {
+                // Both players together - only include if not on opposing team
+                if (!partnershipOnOpposingTeam) {
+                    filtered.push(match);
+                }
+            } else if (team1HasSolo || team2HasSolo) {
+                // Solo match - always include
+                filtered.push(match);
+            }
+        }
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                location: 'src/app-controller.js:filterMatchesForTeam',
+                message: 'filterMatchesForTeam completed',
+                data: { filteredCount: filtered.length },
+                timestamp: Date.now(),
+                sessionId: 'debug-session'
+            })
+        }).catch(() => {});
+        // #endregion
+        
+        return filtered;
+    }
+
+    classifyMatch(match, teamPlayers) {
+        const team1 = Array.isArray(match.team1) ? match.team1 : [match.team1];
+        const team2 = Array.isArray(match.team2) ? match.team2 : [match.team2];
+        
+        // Check if both players were present
+        const team1HasBoth = teamPlayers.every(p => team1.includes(p));
+        const team2HasBoth = teamPlayers.every(p => team2.includes(p));
+        const bothPresent = team1HasBoth || team2HasBoth;
+        
+        if (bothPresent) {
+            // Team match - determine result
+            const isTeam1 = team1HasBoth;
+            let result = 'Draw';
+            if (match.result === 'team1' && isTeam1) {
+                result = 'Win';
+            } else if (match.result === 'team2' && !isTeam1) {
+                result = 'Win';
+            } else if (match.result === 'team1' && !isTeam1) {
+                result = 'Loss';
+            } else if (match.result === 'team2' && isTeam1) {
+                result = 'Loss';
+            }
+            return { type: 'team', result, soloPlayer: null };
+        } else {
+            // Solo match - find which player played
+            const team1HasSolo = teamPlayers.find(p => team1.includes(p));
+            const team2HasSolo = teamPlayers.find(p => team2.includes(p));
+            const soloPlayer = team1HasSolo || team2HasSolo;
+            
+            if (soloPlayer) {
+                const isTeam1 = !!team1HasSolo;
+                let result = 'Draw';
+                if (match.result === 'team1' && isTeam1) {
+                    result = 'Win';
+                } else if (match.result === 'team2' && !isTeam1) {
+                    result = 'Win';
+                } else if (match.result === 'team1' && !isTeam1) {
+                    result = 'Loss';
+                } else if (match.result === 'team2' && isTeam1) {
+                    result = 'Loss';
+                }
+                return { type: 'solo', result, soloPlayer };
+            }
+        }
+        
+        return { type: 'unknown', result: 'Unknown', soloPlayer: null };
+    }
+
+    renderTeamDetailsMatches(matches, teamPlayers) {
+        // #region agent log
+        fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                location: 'src/app-controller.js:renderTeamDetailsMatches',
+                message: 'renderTeamDetailsMatches called',
+                data: { matchesCount: matches.length },
+                timestamp: Date.now(),
+                sessionId: 'debug-session'
+            })
+        }).catch(() => {});
+        // #endregion
+
+        const container = document.getElementById('teamDetailsMatchList');
+        if (!container) return;
+        
+        if (matches.length === 0) {
+            container.innerHTML = '<div class="empty-state"><p>No matches found for this team.</p></div>';
+            return;
+        }
+        
+        const teamName = teamPlayers.length === 1 ? teamPlayers[0] : teamPlayers.join(' & ');
+        
+        container.innerHTML = matches.map(match => {
+            const classification = this.classifyMatch(match, teamPlayers);
+            const team1 = Array.isArray(match.team1) ? match.team1 : [match.team1];
+            const team2 = Array.isArray(match.team2) ? match.team2 : [match.team2];
+            
+            // Determine which team the partnership was on
+            const team1HasBoth = teamPlayers.every(p => team1.includes(p));
+            const team2HasBoth = teamPlayers.every(p => team2.includes(p));
+            const team1HasSolo = teamPlayers.find(p => team1.includes(p));
+            const team2HasSolo = teamPlayers.find(p => team2.includes(p));
+            
+            const isTeam1 = team1HasBoth || team1HasSolo;
+            const ourTeam = isTeam1 ? team1 : team2;
+            const opponentTeam = isTeam1 ? team2 : team1;
+            
+            // Format opponent names
+            const opponentNames = opponentTeam.map(p => this.formatPlayerNameWithColor(p)).join('');
+            
+            // Format date
+            const date = new Date(match.timestamp);
+            const dateStr = date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            // Format score
+            const ourScore = isTeam1 ? (match.team1Score || 0) : (match.team2Score || 0);
+            const opponentScore = isTeam1 ? (match.team2Score || 0) : (match.team1Score || 0);
+            
+            // Extra time and penalties
+            const hasExtra = match.team1ExtraTimeScore !== undefined && match.team2ExtraTimeScore !== undefined;
+            const hasPens = match.team1PenaltiesScore !== undefined && match.team2PenaltiesScore !== undefined;
+            
+            // Classification label
+            let classificationLabel = '';
+            if (classification.type === 'team') {
+                classificationLabel = `Team ${classification.result}`;
+            } else if (classification.type === 'solo') {
+                classificationLabel = `${classification.soloPlayer} Solo ${classification.result}`;
+            }
+            
+            // Result badge color
+            let resultClass = '';
+            if (classification.result === 'Win') {
+                resultClass = 'team-win';
+            } else if (classification.result === 'Loss') {
+                resultClass = 'team-loss';
+            } else {
+                resultClass = 'team-draw';
+            }
+            
+            return `
+                <div class="team-details-match-item">
+                    <div class="team-details-match-header">
+                        <span class="team-details-classification ${resultClass}">${classificationLabel}</span>
+                        <span class="team-details-date">${dateStr}</span>
+                    </div>
+                    <div class="team-details-match-content">
+                        <div class="team-details-teams">
+                            <span class="team-details-our-team">${teamName}</span>
+                            <span class="team-details-vs">vs</span>
+                            <span class="team-details-opponent">${opponentNames}</span>
+                        </div>
+                        <div class="team-details-score">
+                            <span class="team-details-score-value ${classification.result === 'Win' ? 'winning' : ''}">${ourScore}</span>
+                            <span class="team-details-score-sep">-</span>
+                            <span class="team-details-score-value ${classification.result === 'Loss' ? 'winning' : ''}">${opponentScore}</span>
+                            ${hasExtra ? `<span class="team-details-tag">ET ${isTeam1 ? match.team1ExtraTimeScore : match.team2ExtraTimeScore}-${isTeam1 ? match.team2ExtraTimeScore : match.team1ExtraTimeScore}</span>` : ''}
+                            ${hasPens ? `<span class="team-details-tag">Pens ${isTeam1 ? match.team1PenaltiesScore : match.team2PenaltiesScore}-${isTeam1 ? match.team2PenaltiesScore : match.team1PenaltiesScore}</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
     renderListView(matches, container, searchTerm = '') {
         container.innerHTML = matches.map(match => {
             let team1Display = this.formatTeamWithColors(match.team1);
@@ -3597,7 +3852,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.80.0';
+            bannerVersion.textContent = 'Version 1.81.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
