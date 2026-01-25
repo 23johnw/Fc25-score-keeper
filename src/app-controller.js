@@ -123,7 +123,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.86.0';
+            bannerVersion.textContent = 'Version 1.87.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
@@ -2743,12 +2743,17 @@ class AppController {
                 continue;
             }
             
-            // Check for TRUE solo matches - only one player from partnership, and they must be alone (team size = 1)
-            // This excludes cases where the solo player is playing with a different partner
-            const team1HasAOnly = team1.includes(playerA) && !team1.includes(playerB) && team1.length === 1;
-            const team2HasAOnly = team2.includes(playerA) && !team2.includes(playerB) && team2.length === 1;
-            const team1HasBOnly = team1.includes(playerB) && !team1.includes(playerA) && team1.length === 1;
-            const team2HasBOnly = team2.includes(playerB) && !team2.includes(playerA) && team2.length === 1;
+            // Check for Ghost Proxy matches - one player solo but other was absent (still counts as team match)
+            // Check playerPresence to see if absent player was still part of the team conceptually
+            const matchPresence = match.playerPresence || {};
+            const playerAAbsent = matchPresence[playerA] === false;
+            const playerBAbsent = matchPresence[playerB] === false;
+            
+            // Solo matches where the other partner was absent (Ghost Proxy system)
+            const team1HasAOnly = team1.includes(playerA) && !team1.includes(playerB) && team1.length === 1 && playerBAbsent;
+            const team2HasAOnly = team2.includes(playerA) && !team2.includes(playerB) && team2.length === 1 && playerBAbsent;
+            const team1HasBOnly = team1.includes(playerB) && !team1.includes(playerA) && team1.length === 1 && playerAAbsent;
+            const team2HasBOnly = team2.includes(playerB) && !team2.includes(playerA) && team2.length === 1 && playerAAbsent;
             
             // #region agent log
             fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
@@ -2766,6 +2771,8 @@ class AppController {
                         team2HasAOnly,
                         team1HasBOnly,
                         team2HasBOnly,
+                        playerAAbsent,
+                        playerBAbsent,
                         playersOnOppositeTeams
                     },
                     timestamp: Date.now(),
@@ -2774,10 +2781,9 @@ class AppController {
             }).catch(() => {});
             // #endregion
             
-            // Include only if:
+            // Include if:
             // 1. Both players together on same team (Full Team)
-            // 2. Only Player A is present AND truly solo (team size = 1)
-            // 3. Only Player B is present AND truly solo (team size = 1)
+            // 2. One player solo AND the other was absent (Ghost Proxy - still counts as team match)
             if (team1HasBoth || team2HasBoth || team1HasAOnly || team2HasAOnly || team1HasBOnly || team2HasBOnly) {
                 filtered.push(match);
             }
@@ -3966,7 +3972,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.86.0';
+            bannerVersion.textContent = 'Version 1.87.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
