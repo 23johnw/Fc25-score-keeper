@@ -123,7 +123,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.81.0';
+            bannerVersion.textContent = 'Version 1.82.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
@@ -2728,14 +2728,44 @@ class AppController {
             const team1HasAny = teamPlayers.some(p => team1.includes(p));
             const team2HasAny = teamPlayers.some(p => team2.includes(p));
             
+            // Check if players are split across teams (both present but on different teams)
+            const playersSplit = team1HasAny && team2HasAny && !team1HasBoth && !team2HasBoth;
+            
             // Exclude if partnership (both players together) is on opposing team
             // This means: both players together on one team, and NO team players on the other team
             const partnershipOnOpposingTeam = (team1HasBoth && !team2HasAny) || (team2HasBoth && !team1HasAny);
             
+            // #region agent log
+            fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    location: 'src/app-controller.js:filterMatchesForTeam',
+                    message: 'filterMatchesForTeam - match analysis',
+                    data: { 
+                        team1,
+                        team2,
+                        team1HasBoth,
+                        team2HasBoth,
+                        team1HasSolo,
+                        team2HasSolo,
+                        playersSplit,
+                        partnershipOnOpposingTeam
+                    },
+                    timestamp: Date.now(),
+                    sessionId: 'debug-session'
+                })
+            }).catch(() => {});
+            // #endregion
+            
             // Include match if:
             // 1. Both players played together (on same team) - and not on opposing team
             // 2. Only one player from partnership played (solo) - always include solo matches
-            if (team1HasBoth || team2HasBoth) {
+            // EXCLUDE if players are split across teams (both present but on different teams)
+            if (playersSplit) {
+                // Both players present but on different teams - exclude this match
+                continue;
+            } else if (team1HasBoth || team2HasBoth) {
                 // Both players together - only include if not on opposing team
                 if (!partnershipOnOpposingTeam) {
                     filtered.push(match);
@@ -2764,16 +2794,40 @@ class AppController {
     }
 
     classifyMatch(match, teamPlayers) {
+        // #region agent log
+        fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                location: 'src/app-controller.js:classifyMatch',
+                message: 'classifyMatch called',
+                data: { 
+                    teamPlayers,
+                    team1: match.team1,
+                    team2: match.team2,
+                    result: match.result
+                },
+                timestamp: Date.now(),
+                sessionId: 'debug-session'
+            })
+        }).catch(() => {});
+        // #endregion
+
         const team1 = Array.isArray(match.team1) ? match.team1 : [match.team1];
         const team2 = Array.isArray(match.team2) ? match.team2 : [match.team2];
         
-        // Check if both players were present
+        // Check if both players were present on the same team
         const team1HasBoth = teamPlayers.every(p => team1.includes(p));
         const team2HasBoth = teamPlayers.every(p => team2.includes(p));
         const bothPresent = team1HasBoth || team2HasBoth;
         
+        // Check if players are split across teams (both present but on different teams)
+        const team1HasAny = teamPlayers.some(p => team1.includes(p));
+        const team2HasAny = teamPlayers.some(p => team2.includes(p));
+        const playersSplit = team1HasAny && team2HasAny && !bothPresent;
+        
         if (bothPresent) {
-            // Team match - determine result
+            // Team match - both players together on same team
             const isTeam1 = team1HasBoth;
             let result = 'Draw';
             if (match.result === 'team1' && isTeam1) {
@@ -2785,9 +2839,28 @@ class AppController {
             } else if (match.result === 'team2' && isTeam1) {
                 result = 'Loss';
             }
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    location: 'src/app-controller.js:classifyMatch',
+                    message: 'classifyMatch - team match',
+                    data: { type: 'team', result, isTeam1 },
+                    timestamp: Date.now(),
+                    sessionId: 'debug-session'
+                })
+            }).catch(() => {});
+            // #endregion
+            
             return { type: 'team', result, soloPlayer: null };
+        } else if (playersSplit) {
+            // Both players present but on different teams - this shouldn't happen after filtering
+            // but handle it gracefully
+            return { type: 'unknown', result: 'Unknown', soloPlayer: null };
         } else {
-            // Solo match - find which player played
+            // Solo match - only one player from partnership played
             const team1HasSolo = teamPlayers.find(p => team1.includes(p));
             const team2HasSolo = teamPlayers.find(p => team2.includes(p));
             const soloPlayer = team1HasSolo || team2HasSolo;
@@ -2804,6 +2877,21 @@ class AppController {
                 } else if (match.result === 'team2' && isTeam1) {
                     result = 'Loss';
                 }
+                
+                // #region agent log
+                fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        location: 'src/app-controller.js:classifyMatch',
+                        message: 'classifyMatch - solo match',
+                        data: { type: 'solo', result, soloPlayer, isTeam1 },
+                        timestamp: Date.now(),
+                        sessionId: 'debug-session'
+                    })
+                }).catch(() => {});
+                // #endregion
+                
                 return { type: 'solo', result, soloPlayer };
             }
         }
@@ -2851,8 +2939,8 @@ class AppController {
             const ourTeam = isTeam1 ? team1 : team2;
             const opponentTeam = isTeam1 ? team2 : team1;
             
-            // Format opponent names
-            const opponentNames = opponentTeam.map(p => this.formatPlayerNameWithColor(p)).join('');
+            // Format opponent names with " & " separator
+            const opponentNames = opponentTeam.map(p => this.formatPlayerNameWithColor(p)).join(' & ');
             
             // Format date
             const date = new Date(match.timestamp);
@@ -3852,7 +3940,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.81.0';
+            bannerVersion.textContent = 'Version 1.82.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
