@@ -1,7 +1,7 @@
-const CACHE_NAME = 'fc25-score-tracker-v105';
+const CACHE_NAME = 'fc25-score-tracker-v106';
 
 // Determine base path from the SW scope.
-// - Firebase Hosting scope is usually "/"  -> BASE_PATH = ""
+// - Root scope is usually "/"  -> BASE_PATH = ""
 // - GitHub Pages scope might be "/Fc25-score-keeper/" -> BASE_PATH = "/Fc25-score-keeper"
 const SCOPE_PATH = new URL(self.registration.scope).pathname.replace(/\/$/, '');
 const BASE_PATH = SCOPE_PATH === '/' ? '' : SCOPE_PATH;
@@ -25,8 +25,8 @@ const urlsToCache = [
   `${BASE_PATH}/src/share.js`,
   `${BASE_PATH}/src/touch.js`,
   `${BASE_PATH}/src/app-controller.js`,
+  `${BASE_PATH}/src/stats-view-toggler-global.js`,
   `${BASE_PATH}/src/main.js`,
-  `${BASE_PATH}/src/firebase-simple.js`,
   // Legacy single-bundle (kept for compatibility)
   `${BASE_PATH}/app.js`,
   `${BASE_PATH}/manifest.json`,

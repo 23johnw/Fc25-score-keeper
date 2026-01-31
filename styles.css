@@ -2480,6 +2480,17 @@ body.dark-mode .card,
 body.dark-mode .team-combination-card,
 body.dark-mode .round-structure-card,
 body.dark-mode .sequence-item,
+.team-name-badge {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-left: 0.25rem;
+}
+
+body.dark-mode .team-name-badge {
+    color: var(--text-secondary);
+}
+
 body.dark-mode .match-history-item {
     background-color: #1E1E1E;
     color: #E0E0E0;

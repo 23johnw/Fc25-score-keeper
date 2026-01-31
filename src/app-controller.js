@@ -19,15 +19,11 @@ class AppController {
         this.sessionStarted = false;
         this.uiMode = 'session'; // 'session' | 'advanced'
         this.seasonManager = new SeasonManager(this.storage);
-        this.matchRecorder = new MatchRecorder(this.storage, this.seasonManager);
+        this.matchRecorder = new MatchRecorder(this.storage, this.seasonManager, this.playerManager);
         this.statisticsTracker = new StatisticsTracker(this.storage, this.settingsManager);
         this.statisticsDisplay = new StatisticsDisplay(this.statisticsTracker, this.settingsManager);
         this.shareManager = new ShareManager(this.storage, this.statisticsTracker, this.seasonManager);
         
-        // Firebase integration
-        this.firebaseManager = null;
-        this.firebaseStore = null;
-        this.isFirebaseMode = false;
         this.isAdmin = false;
         this.adminUnlockedThisSession = false; // Track if admin was unlocked in current session
 
@@ -67,18 +63,6 @@ class AppController {
     }
 
     async initializeApp() {
-
-        // Initialize Firebase first
-        await this.initializeFirebase();
-
-        // Retry Firebase initialization after a delay if it failed
-        if (!this.isFirebaseMode) {
-            setTimeout(async () => {
-                console.log('Retrying Firebase initialization...');
-                await this.initializeFirebase();
-            }, 2000);
-        }
-
         // Load existing players
         const players = this.playerManager.getPlayers();
         this.loadPlayersIntoUI(players);
@@ -114,10 +98,9 @@ class AppController {
         this.updateCustomFilterSummary([]);
 
         // Update share URL in settings
-        this.updateShareUrl();
         this.renderCustomStatsSection();
 
-        this.initializeEventListeners();
+        // Event listeners are attached once in constructor; do not call again here (would duplicate handlers)
         
         // Display app version banner
         const bannerVersion = document.getElementById('appVersionBanner');
@@ -128,187 +111,6 @@ class AppController {
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
             });
-        }
-    }
-
-    async initializeFirebase() {
-        try {
-            // Wait for Firebase modules to load
-            let attempts = 0;
-            while (window.firebaseReady === undefined && attempts < 50) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-                attempts++;
-            }
-            
-            if (window.firebaseReady === false || !window.firebaseManager || !window.firebaseStore) {
-                console.log('Firebase modules not available, using local storage mode');
-                this.toastManager.info('Using local storage mode');
-                return;
-            }
-            
-            this.firebaseManager = window.firebaseManager;
-            this.firebaseStore = window.firebaseStore;
-            
-            // Make this available globally for Firebase callbacks
-            window.appController = this;
-            
-            // Initialize Firebase
-            const authOk = await this.firebaseManager.initialize();
-            if (authOk) {
-                const leagueOk = await this.firebaseStore.initializeLeague();
-                this.isFirebaseMode = !!leagueOk;
-                
-                // Set Firebase store on other managers
-                if (this.isFirebaseMode) {
-                    this.matchRecorder.setFirebaseStore(this.firebaseStore);
-                    this.statisticsTracker.setFirebaseStore(this.firebaseStore);
-                    this.playerManager.setFirebaseStore(this.firebaseStore);
-                }
-                // Always set playerManager on matchRecorder (needed for presence tracking)
-                this.matchRecorder.setPlayerManager(this.playerManager);
-                
-                console.log('Firebase initialized successfully');
-                if (this.isFirebaseMode) {
-                    this.toastManager.success('Connected to shared league! 🔥');
-                } else {
-                    this.toastManager.info('Using local storage mode');
-                }
-                
-                // Update UI to show Firebase is ready
-                this.updateAdminUI();
-                this.updateShareUrl();
-            } else {
-                console.warn('Firebase initialization failed, using local storage');
-                this.toastManager.info('Using local storage mode');
-            }
-        } catch (error) {
-            console.error('Firebase setup error:', error);
-            console.log('Falling back to local storage');
-            this.toastManager.info('Using local storage mode');
-        }
-    }
-
-    onAuthStateChanged(user, isAdmin) {
-        console.log('Auth state changed - isAdmin:', isAdmin, 'session unlocked:', this.adminUnlockedThisSession);
-
-        // Only grant admin status if it was unlocked in THIS session
-        // This prevents admin status from persisting across browser refreshes
-        const wasAdminBefore = this.isAdmin;
-        this.isAdmin = isAdmin && this.adminUnlockedThisSession;
-
-        if (wasAdminBefore && !this.isAdmin) {
-            console.log('Admin status cleared on page load (session-only)');
-        }
-
-        this.updateAdminUI();
-
-        // In compat mode, firebaseStore may not have claimAdmin; admin claim is handled in firebase-simple.js
-        if (this.isAdmin && this.firebaseStore && typeof this.firebaseStore.claimAdmin === 'function') {
-            this.firebaseStore.claimAdmin(user);
-        }
-    }
-
-    onDataChanged(type, data) {
-        // Handle real-time data updates from Firebase
-        switch (type) {
-            case 'matches':
-                this.onMatchesChanged(data);
-                break;
-            case 'players':
-                this.onPlayersChanged(data);
-                break;
-            case 'activePlayers':
-                this.onActivePlayersChanged(data);
-                break;
-            case 'settings':
-                this.onSettingsChanged(data);
-                break;
-        }
-    }
-
-    onMatchesChanged(matches) {
-        // Update UI when matches change
-        console.log('Firebase matches changed:', matches.length, 'matches');
-        if (this.currentScreen === 'historyScreen') {
-            this.loadMatchHistory();
-        }
-        if (this.currentScreen === 'statsScreen') {
-            this.renderStatsForCurrentTab();
-        }
-    }
-
-    renderStatsForCurrentTab() {
-        // Re-render stats for the currently active tab
-        const activeTabBtn = document.querySelector('#statsTabSelect');
-        const currentTab = activeTabBtn ? activeTabBtn.value : 'today';
-        console.log('Refreshing stats for tab:', currentTab);
-        this.switchStatsTab(currentTab);
-    }
-
-    onPlayersChanged(players) {
-        // Update UI when players change
-        // For now, we'll keep using local player management
-        // but this could be extended to sync players too
-    }
-
-    onActivePlayersChanged(players) {
-        // Update UI if on player screen
-        if (this.currentScreen === 'playerScreen') {
-            const currentPlayers = this.playerManager.getPlayers();
-            this.loadPlayersIntoUI(currentPlayers);
-        }
-    }
-
-    onSettingsChanged(settings) {
-        // Update UI when settings change
-        this.settingsManager.updateFromFirebase(settings);
-        this.updateLockLabels();
-    }
-
-    updateAdminUI() {
-        const adminStatus = document.getElementById('adminStatus');
-        const adminStatusText = document.getElementById('adminStatusText');
-        const adminPinInput = document.getElementById('adminPinInput');
-        const adminPinConfirmInput = document.getElementById('adminPinConfirmInput');
-        const adminUnlockBtn = document.getElementById('adminUnlockBtn');
-        const adminSetPinBtn = document.getElementById('adminSetPinBtn');
-        const adminPinSetupRow = document.getElementById('adminPinSetupRow');
-        const adminLockBtn = document.getElementById('adminLockBtn');
-        const adminResetPinBtn = document.getElementById('adminResetPinBtn');
-        
-        if (adminStatus && adminStatusText && adminPinInput && adminUnlockBtn && adminSetPinBtn && adminPinSetupRow && adminLockBtn && adminResetPinBtn) {
-            if (this.isAdmin) {
-                adminStatus.classList.add('admin-active');
-                adminStatusText.textContent = 'Admin unlocked';
-                adminPinInput.value = '';
-                if (adminPinConfirmInput) adminPinConfirmInput.value = '';
-                adminPinInput.style.display = 'none';
-                adminUnlockBtn.style.display = 'none';
-                adminPinSetupRow.style.display = 'none';
-                adminLockBtn.style.display = 'block';
-                // “Hidden” reset (shown only when already admin; can be hidden further later)
-                adminResetPinBtn.style.display = 'block';
-            } else {
-                adminStatus.classList.remove('admin-active');
-                adminStatusText.textContent = 'Admin locked';
-                adminLockBtn.style.display = 'none';
-                adminResetPinBtn.style.display = 'none';
-                adminPinInput.style.display = 'block';
-                adminUnlockBtn.style.display = 'inline-flex';
-            }
-        }
-    }
-
-    updateShareUrl() {
-        const shareUrlInput = document.getElementById('shareUrlInput');
-        if (shareUrlInput) {
-            if (this.isFirebaseMode) {
-                shareUrlInput.value = 'https://fc---score-keeper.web.app';
-                shareUrlInput.disabled = false;
-            } else {
-                shareUrlInput.value = 'Local storage mode - no sharing available';
-                shareUrlInput.disabled = true;
-            }
         }
     }
 
@@ -1391,7 +1193,7 @@ class AppController {
         }
 
         const randomIndex = Math.floor(Math.random() * structures.length);
-        console.log('Randomly selected structure:', randomIndex);
+        console.log('Randomly selected structure:', randomIndex, 'of', structures.length);
 
         this.selectedStructureIndex = randomIndex;
         this.selectedStructure = structures[randomIndex];
@@ -1401,9 +1203,11 @@ class AppController {
         const confirmBtn = document.getElementById('confirmSequenceBtn');
         if (confirmBtn) confirmBtn.disabled = false;
 
-        this.loadTeamCombinations();
+        // Don't re-render cards here: a stray touch/click from the same gesture can hit a card
+        // and call selectStructure(0), overwriting the random choice. Refresh happens when user
+        // returns to team screen via showScreen('teamScreen') -> loadTeamCombinations().
         this.toastManager.success(`Randomized order selected: Structure ${randomIndex + 1}`, 'Random Pick');
-        this.saveCurrentGameState(); // Save the state
+        this.saveCurrentGameState();
         this.confirmSequence();
     }
 
@@ -1571,10 +1375,17 @@ class AppController {
 
     // Match Recording
     async recordScore() {
+        const submitBtn = document.getElementById('submitScoreBtn');
+        if (submitBtn && submitBtn.disabled) return; // Prevent double-submit (double-click / double-tap)
+        if (submitBtn) submitBtn.disabled = true;
+
         const team1Score = parseInt(document.getElementById('team1Score').value) || 0;
         const team2Score = parseInt(document.getElementById('team2Score').value) || 0;
 
-        if (!this.currentMatch) return;
+        if (!this.currentMatch) {
+            if (submitBtn) submitBtn.disabled = false;
+            return;
+        }
 
         // Get extra time scores if applicable
         // Extra time scores should be cumulative (full time + extra time goals)
@@ -1598,18 +1409,18 @@ class AppController {
 
         const { team1, team2 } = this.currentMatch;
         const matchIndex = this.currentGameIndex;
-        
-        const savedMatch = await this.matchRecorder.recordMatch(
-            team1, 
-            team2, 
-            team1Score, 
-            team2Score,
-            team1ExtraTimeScore,
-            team2ExtraTimeScore,
-            team1PenaltiesScore,
-            team2PenaltiesScore
-        );
-        
+
+        const savedMatch = this.matchRecorder.recordMatch({
+            team1,
+            team2,
+            score1: team1Score,
+            score2: team2Score,
+            extraTimeScore1: team1ExtraTimeScore,
+            extraTimeScore2: team2ExtraTimeScore,
+            penaltiesScore1: team1PenaltiesScore,
+            penaltiesScore2: team2PenaltiesScore
+        });
+
         if (savedMatch) {
             // Track last recorded match for undo
             this.lastRecordedMatch = { match: savedMatch, gameIndex: matchIndex };
@@ -1633,6 +1444,8 @@ class AppController {
         } else {
             this.toastManager.error('Error recording match result');
         }
+        // Re-enable button after a short delay to avoid double-submit from double-click/double-tap
+        setTimeout(() => { if (submitBtn) submitBtn.disabled = false; }, 400);
     }
 
     // By Date / Custom Stats helpers
@@ -1915,6 +1728,9 @@ class AppController {
         const select = document.getElementById('statsTabSelect');
         const targetTab = select ? select.value : 'today';
         this.switchStatsTab(targetTab || 'today');
+        if (typeof window.setupToggleUI === 'function') {
+            window.setupToggleUI();
+        }
     }
 
     switchStatsTab(tab) {
@@ -1962,6 +1778,9 @@ class AppController {
         }
         if (tab !== 'custom') {
             this.lastStatsTab = tab;
+        }
+        if (window.currentStatsView === 'team' && typeof window.renderTeamTable === 'function') {
+            setTimeout(() => window.renderTeamTable(), 0);
         }
     }
 
@@ -3407,27 +3226,11 @@ class AppController {
             this.toastManager.success('Admin access granted for this action');
         }
 
-        // Now open the edit modal
-        let match = null;
-        if (this.isFirebaseMode && this.firebaseStore) {
-            // In Firebase mode, find match in Firebase cache
-            const firebaseMatches = this.firebaseStore.getMatches();
-            console.log('Looking for match in Firebase cache, total matches:', firebaseMatches.length, 'timestamp:', timestamp);
-            match = firebaseMatches.find(m => m.timestamp === timestamp);
-            if (!match) {
-                console.error('Match not found in Firebase cache:', timestamp);
-                console.log('Available timestamps:', firebaseMatches.map(m => m.timestamp));
-                return;
-            }
-            console.log('Found Firebase match:', match);
-        } else {
-            // Local storage mode
+        // Open the edit modal
         const matchInfo = this.matchRecorder.findMatch(timestamp);
         if (!matchInfo) return;
-
         const data = this.storage.getData();
-            match = data.seasons[matchInfo.season].matches[matchInfo.index];
-        }
+        const match = data.seasons[matchInfo.season].matches[matchInfo.index];
         
         this.editingMatchTimestamp = timestamp;
 
@@ -3698,68 +3501,7 @@ class AppController {
                     throw new Error('Invalid data format');
                 }
 
-                const isLegacyBackup = !!(importedData.seasons && typeof importedData.seasons === 'object');
-
-                // Check if we can do Firebase import
-                const canDoFirebaseImport = this.isFirebaseMode && this.firebaseStore && this.firebaseManager && isLegacyBackup;
-
-                if (canDoFirebaseImport) {
-                    console.log('Firebase available, importing to shared league');
-                } else {
-                    // Firebase not available or not legacy backup - do local import
-                    console.log('Using local import mode');
-                }
-
-                // Firebase mode: import into shared league (merge, no deletes)
-                if (canDoFirebaseImport) {
-                    const allLegacyMatches = [];
-                    Object.values(importedData.seasons || {}).forEach(season => {
-                        (season.matches || []).forEach(m => allLegacyMatches.push(m));
-                    });
-
-                    const wipeFirst = confirm(
-                        `Before importing, do you want to WIPE the shared league first?\n\n` +
-                        `Choose OK = WIPE then import (clean slate)\n` +
-                        `Choose Cancel = MERGE import (skip duplicates by timestamp)`
-                    );
-
-                    if (wipeFirst) {
-                        if (this.firebaseManager && !this.firebaseManager.getIsAdmin()) {
-                            alert('To wipe the shared league, you must unlock Admin first (PIN).');
-                            return;
-                        } else if (!this.firebaseManager) {
-                            // Firebase not available, allow local wipe
-                            console.log('Firebase not available, allowing local data wipe');
-                        }
-                        if (!confirm('Final warning: this will DELETE ALL existing shared matches for everyone. Continue?')) {
-                            return;
-                        }
-                        await this.firebaseStore.wipeLeagueData();
-                    } else {
-                        if (!confirm(
-                            `Import legacy backup into the SHARED league (merge)?\n\n` +
-                            `- This will ADD matches (skip duplicates by timestamp)\n` +
-                            `- Set active players to: ${importedData.players.join(', ')}\n\n` +
-                            `Continue?`
-                        )) {
-                            return;
-                        }
-                    }
-
-                    const result = await this.firebaseStore.importLegacyMatches(allLegacyMatches);
-                    await this.firebaseStore.saveActivePlayers(importedData.players);
-
-                    alert(`Import complete!\nImported: ${result.imported}\nSkipped: ${result.skipped}\n\nReloading...`);
-                    location.reload();
-                    return;
-                }
-
-                // Local mode fallback (when Firebase is broken or not available)
-                if (!canDoFirebaseImport) {
-                    console.log('Falling back to local import');
-                }
-
-                // Local mode (or non-legacy): replace local storage like before
+                // Replace local storage with imported data
                 if (confirm('This will replace ALL your current LOCAL data on this device. Continue?')) {
                     this.storage.updateData(data => {
                         Object.assign(data, importedData);
@@ -4108,29 +3850,8 @@ class AppController {
             this.updateAdminUI();
         }
 
-        const firebaseNote = this.isFirebaseMode ? '\n\n⚠️ This will also delete ALL Firebase data (shared across all browsers)!' : '';
-        if (confirm('Are you sure you want to clear ALL data? This cannot be undone!\n\nThis will delete:\n- All matches\n- All statistics\n- All settings\n- All player data' + firebaseNote)) {
+        if (confirm('Are you sure you want to clear ALL data? This cannot be undone!\n\nThis will delete:\n- All matches\n- All statistics\n- All settings\n- All player data')) {
             if (confirm('This is your last chance. Are you absolutely sure?')) {
-                
-                
-                // If Firebase mode, clear Firebase data first
-                if (this.isFirebaseMode && this.firebaseStore) {
-                    try {
-                        if (!this.firebaseManager || !this.firebaseManager.getIsAdmin()) {
-                            alert('To wipe the shared league, you must unlock Admin first (PIN).');
-                            return;
-                        }
-
-                        const result = await this.firebaseStore.wipeLeagueData();
-                        console.log('Wiped league data:', result);
-                        
-                    } catch (error) {
-                        console.error('Error clearing Firebase:', error);
-                        alert('Error clearing Firebase data: ' + error.message);
-                        return;
-                    }
-                }
-                
                 // Clear local storage
                 this.storage.clearAll();
                 this.settingsManager.resetAll();
@@ -4346,25 +4067,12 @@ class AppController {
             return false;
         }
 
-        if (this.isFirebaseMode && this.firebaseManager) {
-            // Firebase mode: verify PIN with Firebase
-            try {
-                await this.firebaseManager.verifyPin(pin);
-                this.isAdmin = this.firebaseManager.getIsAdmin();
-                return this.isAdmin;
-            } catch (error) {
-                console.error('Firebase PIN verification error:', error);
-                return false;
-            }
-        } else {
-            // Local mode: check against stored PIN
-            const storedPin = this.storage.getData().adminPin;
-            if (storedPin && pin === storedPin) {
-                this.isAdmin = true;
-                return true;
-            }
-            return false;
+        const storedPin = this.storage.getData().adminPin;
+        if (storedPin && pin === storedPin) {
+            this.isAdmin = true;
+            return true;
         }
+        return false;
     }
 
     async unlockAdminWithPin() {
@@ -4378,18 +4086,15 @@ class AppController {
         if (isValid) {
             this.adminUnlockedThisSession = true; // Mark admin as unlocked in this session
             this.updateAdminUI();
-            this.toastManager.success(`Admin unlocked${this.isFirebaseMode ? '' : ' (local mode)'}`);
+            this.toastManager.success('Admin unlocked');
         } else {
-            if (!this.isFirebaseMode) {
-                const storedPin = this.storage.getData().adminPin;
+            const storedPin = this.storage.getData().adminPin;
                 if (!storedPin) {
-                    // No PIN set yet, show setup row
                     const row = document.getElementById('adminPinSetupRow');
                     if (row) row.style.display = 'flex';
-                    this.toastManager.info('Set a PIN first (local mode)');
+                    this.toastManager.info('Set a PIN first');
                     return;
                 }
-            }
             this.toastManager.error('Incorrect PIN');
         }
     }
@@ -4402,68 +4107,31 @@ class AppController {
             return;
         }
 
-        if (this.isFirebaseMode && this.firebaseManager) {
-            // Firebase mode: set PIN in Firebase
-            try {
-                await this.firebaseManager.setPin(pin);
-                this.adminUnlockedThisSession = true; // Mark admin as unlocked in this session
-                this.isAdmin = this.firebaseManager.getIsAdmin();
-                this.updateAdminUI();
-                this.toastManager.success('PIN set. Admin unlocked');
-            } catch (error) {
-                this.toastManager.error('Could not set PIN (already set?)');
-            }
-        } else {
-            // Local mode: store PIN in localStorage
-            this.storage.updateData(data => {
-                data.adminPin = pin;
-            });
-            this.adminUnlockedThisSession = true;
-            this.isAdmin = true;
-            this.updateAdminUI();
-            this.toastManager.success('PIN set. Admin unlocked (local mode)');
-        }
+        this.storage.updateData(data => {
+            data.adminPin = pin;
+        });
+        this.adminUnlockedThisSession = true;
+        this.isAdmin = true;
+        this.updateAdminUI();
+        this.toastManager.success('PIN set. Admin unlocked');
     }
 
     async lockAdmin() {
-        try {
-            if (this.firebaseManager) {
-                await this.firebaseManager.clearAdmin();
-
-                // Update local state immediately
-                this.adminUnlockedThisSession = false; // Clear session flag
-                this.isAdmin = false;
-                this.updateAdminUI();
-
-                this.toastManager.success('Admin locked successfully');
-            } else {
-                // Fallback for local mode
-                this.adminUnlockedThisSession = false; // Clear session flag
-                this.isAdmin = false;
-                this.updateAdminUI();
-                this.toastManager.info('Admin locked');
-            }
-        } catch (error) {
-            console.error('Error locking admin:', error);
-            this.toastManager.error('Failed to lock admin: ' + (error.message || 'Unknown error'));
-        }
+        this.adminUnlockedThisSession = false;
+        this.isAdmin = false;
+        this.updateAdminUI();
+        this.toastManager.success('Admin locked');
     }
 
     async resetAdminPin() {
-        if (!this.firebaseManager || !this.isAdmin) return;
+        if (!this.isAdmin) return;
         const newPin = await this.showPinModal('Reset Admin PIN', 'Enter a NEW 4-digit PIN:');
-        if (!newPin) {
-            return; // User cancelled
-        }
-
-        try {
-            await this.firebaseManager.resetPin(newPin);
-            this.isAdmin = this.firebaseManager.getIsAdmin();
-            this.updateAdminUI();
-            this.toastManager.success('PIN reset');
-        } catch (error) {
-            this.toastManager.error('Could not reset PIN');
-        }
+        if (!newPin) return;
+        this.storage.updateData(data => {
+            data.adminPin = newPin;
+        });
+        this.updateAdminUI();
+        this.toastManager.success('PIN reset');
     }
 
     copyShareUrl() {
@@ -4491,21 +4159,7 @@ class AppController {
     }
 
     loadSettingsScreen() {
-        // Update admin UI when settings screen loads
         this.updateAdminUI();
-        this.updateShareUrl();
-        
-        // Show/hide Firebase-specific UI
-        const sharedLeagueSection = document.querySelector('.settings-section h3');
-        if (sharedLeagueSection && sharedLeagueSection.textContent === 'Shared League') {
-            const section = sharedLeagueSection.parentElement;
-            if (this.isFirebaseMode) {
-                section.style.display = 'block';
-            } else {
-                section.style.display = 'none';
-            }
-        }
-        
         // Load other settings as needed
         const darkModeSetting = document.getElementById('darkModeSetting');
         if (darkModeSetting) {
@@ -5163,8 +4817,13 @@ class AppController {
     }
 
     async submitSessionScore() {
+        const continueBtn = document.getElementById('sessionContinueBtn');
+        if (continueBtn && continueBtn.disabled) return; // Prevent double-submit
+        if (continueBtn) continueBtn.disabled = true;
+
         if (!this.currentMatch) {
             this.toastManager.error('No match selected');
+            if (continueBtn) continueBtn.disabled = false;
             return;
         }
 
@@ -5191,18 +4850,18 @@ class AppController {
 
         const { team1, team2 } = this.currentMatch;
         const matchIndex = this.currentGameIndex;
-        
-        const savedMatch = await this.matchRecorder.recordMatch(
-            team1, 
-            team2, 
-            team1Score, 
-            team2Score,
-            team1ExtraTimeScore,
-            team2ExtraTimeScore,
-            team1PenaltiesScore,
-            team2PenaltiesScore
-        );
-        
+
+        const savedMatch = this.matchRecorder.recordMatch({
+            team1,
+            team2,
+            score1: team1Score,
+            score2: team2Score,
+            extraTimeScore1: team1ExtraTimeScore,
+            extraTimeScore2: team2ExtraTimeScore,
+            penaltiesScore1: team1PenaltiesScore,
+            penaltiesScore2: team2PenaltiesScore
+        });
+
         if (savedMatch) {
             // Track last recorded match for undo
             this.lastRecordedMatch = { match: savedMatch, gameIndex: matchIndex };
@@ -5241,6 +4900,7 @@ class AppController {
         } else {
             this.toastManager.error('Error recording match result');
         }
+        setTimeout(() => { if (continueBtn) continueBtn.disabled = false; }, 400);
     }
 
     sessionNextMatch() {

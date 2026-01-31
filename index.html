@@ -768,36 +768,6 @@
     <!-- jsPDF library for PDF export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
-    <!-- Firebase SDK v9 (compat) -->
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-    
-    <script>
-        // Firebase configuration
-        const firebaseConfig = {
-            // apiKey removed; placeholder for secure implementation
-            authDomain: "fc---score-keeper.firebaseapp.com",
-            projectId: "fc---score-keeper",
-            storageBucket: "fc---score-keeper.firebasestorage.app",
-            messagingSenderId: "990570140768",
-            appId: "1:990570140768:web:9e04c7b541d6ec99e05f05",
-            measurementId: "G-PG7RECYTW5"
-        };
-
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
-        
-        console.log('Firebase initialized with compat library');
-        window.firebaseReady = true;
-    </script>
-    
-    <!-- Simple Firebase integration -->
-    <script src="src/firebase-simple.js?v=20260104e"></script>
-    
     <!-- Application scripts (split from app.js) -->
     <script src="src/constants.js?v=20260104e"></script>
     <script src="src/persistence.js?v=20260104e"></script>
@@ -813,6 +783,7 @@
     <script src="src/share.js?v=20260104e"></script>
     <script src="src/touch.js?v=20260104e"></script>
     <script src="src/app-controller.js?v=20260104e"></script>
+    <script src="src/stats-view-toggler-global.js?v=20260104e"></script>
     <script src="src/main.js?v=20260104e"></script>
 </body>
 </html>

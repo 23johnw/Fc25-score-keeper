@@ -5,7 +5,6 @@
 class SettingsManager {
     constructor(storageManager) {
         this.storage = storageManager;
-        this.settingsKey = 'fc25_settings';
         this.settings = this.loadSettings();
     }
 
@@ -28,10 +27,9 @@ class SettingsManager {
 
     loadSettings() {
         try {
-            const stored = localStorage.getItem(this.settingsKey);
-            if (stored) {
-                const parsed = JSON.parse(stored);
-                return { ...this.getDefaultSettings(), ...parsed };
+            const data = this.storage.getData();
+            if (data.settings) {
+                return { ...this.getDefaultSettings(), ...data.settings };
             }
         } catch (error) {
             console.error('Error loading settings:', error);
@@ -41,8 +39,9 @@ class SettingsManager {
 
     saveSettings() {
         try {
-            localStorage.setItem(this.settingsKey, JSON.stringify(this.settings));
-            return true;
+            return this.storage.updateData(data => {
+                data.settings = this.settings;
+            });
         } catch (error) {
             console.error('Error saving settings:', error);
             return false;
@@ -138,10 +137,5 @@ class SettingsManager {
         return this.saveSettings();
     }
 
-    // Update settings from Firebase
-    updateFromFirebase(firebaseSettings) {
-        this.settings = { ...this.getDefaultSettings(), ...firebaseSettings };
-        // Don't save to localStorage when updating from Firebase to avoid conflicts
-    }
 }
 
