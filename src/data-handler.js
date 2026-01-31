@@ -55,13 +55,11 @@ export function recordMatch(matchData) {
         playerPresence: playerPresence // Track which players were present/absent
     };
 
-    // Add team names if provided
-    if (matchData.team1Name) {
-        match.team1Name = matchData.team1Name;
-    }
-    if (matchData.team2Name) {
-        match.team2Name = matchData.team2Name;
-    }
+    // Add team names and leagues if provided
+    if (matchData.team1Name) match.team1Name = matchData.team1Name;
+    if (matchData.team2Name) match.team2Name = matchData.team2Name;
+    if (matchData.team1League != null) match.team1League = matchData.team1League;
+    if (matchData.team2League != null) match.team2League = matchData.team2League;
 
     // Add extra time scores if provided
     if (matchData.extraTimeScore1 !== null && matchData.extraTimeScore2 !== null) {

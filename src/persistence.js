@@ -126,6 +126,8 @@ class LocalStorageManager {
         return {
             players: [],
             playerNameHistory: [], // Add this line to store previously used names
+            uploadedTeamNames: [], // legacy: array of strings
+            uploadedTeamEntries: [], // { league, name }[] from uploaded .txt/.csv
             currentSeason: 1,
             seasons: {},
             overallStats: {
@@ -172,6 +174,8 @@ class LocalStorageManager {
         const merged = {
             ...defaults,
             ...data,
+            uploadedTeamNames: Array.isArray(data.uploadedTeamNames) ? data.uploadedTeamNames : defaults.uploadedTeamNames,
+            uploadedTeamEntries: Array.isArray(data.uploadedTeamEntries) ? data.uploadedTeamEntries : (defaults.uploadedTeamEntries || []),
             seasons: data.seasons || defaults.seasons,
             overallStats: {
                 ...defaults.overallStats,

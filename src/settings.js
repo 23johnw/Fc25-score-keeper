@@ -21,7 +21,10 @@ class SettingsManager {
                 loss: 0
             },
             playerColors: {},
-            darkMode: false
+            darkMode: false,
+            useRandomTeams: false,
+            useSameTeamName: false,
+            useSameTeamPerRound: false
         };
     }
 
@@ -125,6 +128,33 @@ class SettingsManager {
         this.settings.darkMode = enabled;
         this.saveSettings();
         return enabled;
+    }
+
+    getUseRandomTeams() {
+        return this.settings.useRandomTeams === true;
+    }
+
+    setUseRandomTeams(enabled) {
+        this.settings.useRandomTeams = enabled === true;
+        return this.saveSettings();
+    }
+
+    getUseSameTeamName() {
+        return this.settings.useSameTeamName === true;
+    }
+
+    setUseSameTeamName(enabled) {
+        this.settings.useSameTeamName = enabled === true;
+        return this.saveSettings();
+    }
+
+    getUseSameTeamPerRound() {
+        return this.settings.useSameTeamPerRound === true;
+    }
+
+    setUseSameTeamPerRound(enabled) {
+        this.settings.useSameTeamPerRound = enabled === true;
+        return this.saveSettings();
     }
 
     resetLabels() {

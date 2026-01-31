@@ -54,6 +54,8 @@ class MatchRecorder {
         };
         if (matchData.team1Name) match.team1Name = matchData.team1Name;
         if (matchData.team2Name) match.team2Name = matchData.team2Name;
+        if (matchData.team1League != null) match.team1League = matchData.team1League;
+        if (matchData.team2League != null) match.team2League = matchData.team2League;
         if (matchData.extraTimeScore1 != null && matchData.extraTimeScore2 != null) {
             match.team1ExtraTimeScore = matchData.extraTimeScore1;
             match.team2ExtraTimeScore = matchData.extraTimeScore2;

@@ -700,6 +700,12 @@ body.dark-mode .player-editable-item.absent .presence-text {
     gap: 1rem;
 }
 
+.sequence-item .match-teams-block {
+    max-width: 420px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
 /* Match Recording */
 .match-info {
     background-color: var(--surface-color);
@@ -717,6 +723,68 @@ body.dark-mode .player-editable-item.absent .presence-text {
     margin-bottom: 1rem;
 }
 
+/* Match teams block: centered, two columns with clear gap */
+.match-teams,
+.match-teams-block {
+    max-width: 420px;
+    margin-left: auto;
+    margin-right: auto;
+    text-align: center;
+}
+
+.match-teams .match-league-row,
+.match-teams .match-name-row,
+.match-teams-block .match-league-row,
+.match-teams-block .match-name-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: nowrap;
+}
+
+.match-teams .match-league-row .team-league,
+.match-teams .match-name-row .team-name,
+.match-teams-block .match-league-row .team-league,
+.match-teams-block .match-name-row .team-name {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 140px;
+    text-align: center;
+    padding: 0 0.5rem;
+}
+
+.match-teams .match-league-row {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.15rem;
+}
+
+.match-teams .match-name-row,
+.match-teams-block .match-name-row {
+    font-weight: 600;
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.match-teams .vs-spacer,
+.match-teams-block .vs-spacer {
+    flex: 0 0 auto;
+    width: 2.5rem;
+    min-width: 2.5rem;
+    text-align: center;
+}
+
+.match-teams .match-players-row.team-display,
+.match-teams-block .match-players-row.team-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+}
+
 .match-teams .team-display {
     display: flex;
     align-items: center;
@@ -725,19 +793,23 @@ body.dark-mode .player-editable-item.absent .presence-text {
     flex-wrap: wrap;
 }
 
-.match-teams .team-players {
+.match-teams .team-players,
+.match-teams-block .team-players {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 0.5rem;
     flex: 1;
-    min-width: 120px;
+    min-width: 100px;
+    max-width: 160px;
 }
 
-.match-teams .vs {
+.match-teams .vs,
+.match-teams-block .vs {
     font-size: 1.25rem;
     font-weight: 700;
     color: var(--text-secondary);
+    flex-shrink: 0;
 }
 
 .match-result {

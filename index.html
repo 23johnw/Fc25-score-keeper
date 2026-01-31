@@ -252,6 +252,25 @@
             <div class="button-group" style="margin-bottom: 0.5rem;">
                 <button id="randomCombinationBtn" class="btn btn-secondary">Randomize Order</button>
             </div>
+            <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; cursor: pointer;">
+                <input type="checkbox" id="useRandomTeamsCheckbox" class="checkbox-input">
+                <span>Use random team names from file (.txt or .csv)</span>
+            </label>
+            <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; margin-left: 1.5rem; cursor: pointer;">
+                <input type="checkbox" id="useSameTeamNameCheckbox" class="checkbox-input">
+                <span>Use one club for every round (same club for all matches)</span>
+            </label>
+            <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; margin-left: 1.5rem; cursor: pointer;">
+                <input type="checkbox" id="useSameTeamPerRoundCheckbox" class="checkbox-input">
+                <span>Same team per round (e.g. Round 1: Newcastle vs Newcastle, Round 2: Liverpool vs Liverpool)</span>
+            </label>
+            <p class="screen-description" id="teamSameClubHint" style="margin-left: 1.5rem; margin-top: 0; margin-bottom: 0.5rem; font-size: 0.85rem;">Leave unchecked for a different club each round. If you see the same club every round, uncheck this and click Confirm Sequence again.</p>
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+                <input type="file" id="teamNamesFileInput" accept=".txt,.csv" style="display: none;">
+                <button type="button" id="teamNamesChooseFileBtn" class="btn btn-secondary">Choose file…</button>
+                <span id="teamNamesLoadedCount" class="screen-description" style="display: none;"></span>
+            </div>
+            <p class="screen-description" style="margin-top: 0; margin-bottom: 1rem; font-size: 0.85rem; color: #666;">File format: <strong>League,Team Name</strong> per line (e.g. Premier League,Arsenal). League names will then show above the club when you randomise.</p>
             <p class="screen-description" id="teamScreenDescription">Select the order you want to play these matches</p>
             
             <div id="teamCombinations" class="team-combinations-grid"></div>

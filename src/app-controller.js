@@ -580,6 +580,168 @@ class AppController {
         return `<span class="player-name">${escapedName}</span>`;
     }
 
+    // Helper: deterministic team ID from player names (matches data-handler getTeamId)
+    getTeamId(team) {
+        const arr = Array.isArray(team) ? team : [team];
+        const sorted = [...arr].sort();
+        return `team_${sorted.join('_')}`;
+    }
+
+    /**
+     * Parse team names from CSV/txt content (format: "League,Team Name" per line).
+     * Returns array of { league, name }.
+     */
+    parseTeamNamesFile(text) {
+        const lines = String(text).trim().split(/\r?\n/).filter(line => line.trim());
+        const entries = [];
+        for (let i = 0; i < lines.length; i++) {
+            const commaIdx = lines[i].indexOf(',');
+            if (commaIdx === -1) continue;
+            const league = lines[i].slice(0, commaIdx).trim();
+            const name = lines[i].slice(commaIdx + 1).trim();
+            if (!name) continue;
+            if (i === 0 && name.toLowerCase() === 'team name') continue;
+            entries.push({ league: league || '', name });
+        }
+        return entries;
+    }
+
+    /**
+     * Get team name entries for random assignment: use saved uploaded list first,
+     * else try fetch only when app is served over http/https (fails from file://).
+     * Returns { league, name }[]. Backward compat: old uploadedTeamNames (strings) become { league: '', name }.
+     */
+    async getTeamNamesForRandom() {
+        const data = this.storage.getData();
+        let saved = Array.isArray(data.uploadedTeamEntries) ? data.uploadedTeamEntries : [];
+        if (saved.length === 0 && Array.isArray(data.uploadedTeamNames) && data.uploadedTeamNames.length > 0) {
+            saved = data.uploadedTeamNames.map(n => ({ league: '', name: n }));
+        }
+        if (saved.length > 0) return saved.map(e => ({ league: e.league || '', name: e.name }));
+        try {
+            const protocol = typeof location !== 'undefined' ? location.protocol : '';
+            if (protocol === 'http:' || protocol === 'https:') {
+                const res = await fetch('League-Team-Names.txt');
+                if (!res.ok) return [];
+                const text = await res.text();
+                return this.parseTeamNamesFile(text);
+            }
+        } catch (e) {
+            console.warn('Could not fetch team names:', e);
+        }
+        return [];
+    }
+
+    /**
+     * Return count of saved uploaded team entries (for UI).
+     */
+    getUploadedTeamNamesCount() {
+        const data = this.storage.getData();
+        const arr = Array.isArray(data.uploadedTeamEntries) ? data.uploadedTeamEntries : [];
+        if (arr.length > 0) return arr.length;
+        const legacy = Array.isArray(data.uploadedTeamNames) ? data.uploadedTeamNames : [];
+        return legacy.length;
+    }
+
+    /**
+     * Called when user selects a .txt or .csv file via file picker. Saves to app storage
+     * so names are used until the user uploads a new file (e.g. next season).
+     */
+    onTeamNamesFileChosen(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const entries = this.parseTeamNamesFile(e.target.result || '');
+            this.storage.updateData(data => {
+                data.uploadedTeamEntries = entries;
+            });
+            const withLeagues = entries.some(entry => entry.league && entry.league.trim() !== '');
+            const message = withLeagues
+                ? `Saved ${entries.length} team names (with leagues). League names will show when you randomise.`
+                : `Saved ${entries.length} team names. Use "League,Team Name" per line (e.g. Premier League,Arsenal) to show league names when you randomise.`;
+            this.toastManager.success(message, 'Team names saved');
+            this.updateTeamNamesSavedCountUI();
+        };
+        reader.onerror = () => this.toastManager.error('Could not read file.', 'Error');
+        reader.readAsText(file);
+    }
+
+    /**
+     * Build match teams display: league row (always when using random team names), team name row, players row.
+     * Shows league from entry when present so you can see which league the club is in.
+     */
+    formatMatchTeamsDisplay(entry1, entry2, players1Html, players2Html, fallback1, fallback2) {
+        const hasEntries = entry1 || entry2;
+        const league1 = hasEntries && entry1 && entry1.league ? this.escapeHtml(entry1.league) : (hasEntries && entry1 ? '' : '');
+        const league2 = hasEntries && entry2 && entry2.league ? this.escapeHtml(entry2.league) : (hasEntries && entry2 ? '' : '');
+        const name1 = (entry1 && entry1.name) ? this.escapeHtml(entry1.name) : (fallback1 || '');
+        const name2 = (entry2 && entry2.name) ? this.escapeHtml(entry2.name) : (fallback2 || '');
+        const showLeagueRow = hasEntries;
+        const showNameRow = hasEntries;
+        // #region agent log
+        if (hasEntries) fetch('http://127.0.0.1:7242/ingest/08043545-943c-47f4-96ac-88ee42089f72',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app-controller.js:formatMatchTeamsDisplay',message:'display args',data:{entry1,entry2,league1,league2,showLeagueRow},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
+        // #endregion
+        return `
+            ${showLeagueRow ? `<div class="match-league-row"><span class="team-league">${league1}</span><span class="vs-spacer"></span><span class="team-league">${league2}</span></div>` : ''}
+            ${showNameRow ? `<div class="match-name-row"><span class="team-name">${name1}</span><span class="vs-spacer"></span><span class="team-name">${name2}</span></div>` : ''}
+            <div class="match-players-row team-display"><div class="team-players">${players1Html}</div><span class="vs">VS</span><div class="team-players">${players2Html}</div></div>
+        `;
+    }
+
+    /**
+     * Normalize season teamNames entry: may be legacy string or { league, name }.
+     */
+    getTeamNameEntry(teamNamesMap, teamId) {
+        const v = teamNamesMap && teamNamesMap[teamId];
+        if (v == null) return null;
+        if (typeof v === 'object' && v !== null && 'name' in v) {
+            return { league: v.league || '', name: v.name || '' };
+        }
+        if (typeof v === 'string') return { league: '', name: v };
+        return null;
+    }
+
+    /**
+     * Get team entry for a match: when "same team per round" is used, returns the one club for that round;
+     * otherwise returns per-team entry from teamNames.
+     */
+    getMatchTeamEntry(seasonData, matchIndex, teamId) {
+        const matchTeamNames = seasonData && seasonData.matchTeamNames;
+        const teamNamesMap = (seasonData && seasonData.teamNames) || {};
+        // #region agent log
+        const useRandom = this.settingsManager.getUseRandomTeams();
+        const hasStored = (Array.isArray(matchTeamNames) && matchTeamNames[matchIndex] != null) || (teamNamesMap[teamId] != null);
+        if (hasStored) fetch('http://127.0.0.1:7242/ingest/08043545-943c-47f4-96ac-88ee42089f72',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app-controller.js:getMatchTeamEntry',message:'entry',data:{useRandomTeams:useRandom,hasStored,fromMatchTeamNames:Array.isArray(matchTeamNames)&&matchTeamNames[matchIndex],fromTeamNamesMap:!!teamNamesMap[teamId]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
+        // #endregion
+        if (Array.isArray(matchTeamNames) && matchTeamNames[matchIndex] != null) {
+            const e = matchTeamNames[matchIndex];
+            const out = typeof e === 'object' && e !== null && 'name' in e
+                ? { league: e.league || '', name: e.name || '' }
+                : { league: '', name: String(e) };
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/08043545-943c-47f4-96ac-88ee42089f72',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app-controller.js:getMatchTeamEntry',message:'from matchTeamNames',data:{matchIndex,rawE:e,returned:out},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
+            // #endregion
+            return out;
+        }
+        const fromMap = this.getTeamNameEntry(teamNamesMap, teamId);
+        // #region agent log
+        if (fromMap) fetch('http://127.0.0.1:7242/ingest/08043545-943c-47f4-96ac-88ee42089f72',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app-controller.js:getMatchTeamEntry',message:'from teamNamesMap',data:{matchIndex,teamId,returned:fromMap},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
+        // #endregion
+        return fromMap;
+    }
+
+    /**
+     * Update "(X names saved)" in session and advanced team screens.
+     */
+    updateTeamNamesSavedCountUI() {
+        const n = this.getUploadedTeamNamesCount();
+        const countEl = document.getElementById('teamNamesLoadedCount');
+        if (countEl) {
+            countEl.textContent = n > 0 ? `(${n} names saved)` : '';
+            countEl.style.display = n > 0 ? 'inline' : 'none';
+        }
+    }
+
     // Helper function to format team with player colors
     formatTeamWithColors(team) {
         if (Array.isArray(team)) {
@@ -1140,6 +1302,44 @@ class AppController {
             description.textContent = 'Ready to play 1v1!';
         }
 
+        const useRandomTeamsCheck = document.getElementById('useRandomTeamsCheckbox');
+        if (useRandomTeamsCheck) {
+            useRandomTeamsCheck.checked = this.settingsManager.getUseRandomTeams();
+            useRandomTeamsCheck.onchange = () => {
+                this.settingsManager.setUseRandomTeams(useRandomTeamsCheck.checked);
+                const hint = document.getElementById('teamSameClubHint');
+                if (hint) hint.style.display = useRandomTeamsCheck.checked ? 'block' : 'none';
+            };
+        }
+        const teamSameClubHint = document.getElementById('teamSameClubHint');
+        if (teamSameClubHint) teamSameClubHint.style.display = this.settingsManager.getUseRandomTeams() ? 'block' : 'none';
+        const useSameTeamNameCheck = document.getElementById('useSameTeamNameCheckbox');
+        if (useSameTeamNameCheck) {
+            useSameTeamNameCheck.checked = this.settingsManager.getUseSameTeamName();
+            useSameTeamNameCheck.onchange = () => this.settingsManager.setUseSameTeamName(useSameTeamNameCheck.checked);
+        }
+        const useSameTeamPerRoundCheck = document.getElementById('useSameTeamPerRoundCheckbox');
+        if (useSameTeamPerRoundCheck) {
+            useSameTeamPerRoundCheck.checked = this.settingsManager.getUseSameTeamPerRound();
+            useSameTeamPerRoundCheck.onchange = () => this.settingsManager.setUseSameTeamPerRound(useSameTeamPerRoundCheck.checked);
+        }
+        const teamNamesFileInput = document.getElementById('teamNamesFileInput');
+        const teamNamesChooseFileBtn = document.getElementById('teamNamesChooseFileBtn');
+        const teamNamesLoadedCount = document.getElementById('teamNamesLoadedCount');
+        if (teamNamesFileInput && teamNamesChooseFileBtn) {
+            teamNamesChooseFileBtn.onclick = () => teamNamesFileInput.click();
+            teamNamesFileInput.onchange = (e) => {
+                const f = e.target.files && e.target.files[0];
+                if (f) this.onTeamNamesFileChosen(f);
+                e.target.value = '';
+            };
+        }
+        if (teamNamesLoadedCount) {
+            const n = this.getUploadedTeamNamesCount();
+            teamNamesLoadedCount.textContent = n > 0 ? `(${n} names saved)` : '';
+            teamNamesLoadedCount.style.display = n > 0 ? 'inline' : 'none';
+        }
+
         // Show "Select All" button and update its state
         const selectAllBtn = document.getElementById('selectAllCombinationsBtn');
         selectAllBtn.style.display = 'block';
@@ -1248,7 +1448,61 @@ class AppController {
         console.log('All structures selected, total matches:', allMatches.length);
     }
 
-    confirmSequence() {
+    /**
+     * Assign random team names to the current season (for selected structure).
+     * Used when confirming sequence and when looping from last round back to round 1.
+     * @param {Array<{league:string,name:string}>|null} existingEntries - optional; if null, fetches via getTeamNamesForRandom()
+     * @returns {{ assigned: boolean, needCount: number }}
+     */
+    async assignRandomTeamNamesToCurrentSeason(existingEntries = null) {
+        if (!this.settingsManager.getUseRandomTeams() || !this.selectedStructure || !this.selectedStructure.matches) {
+            return { assigned: false, needCount: 0 };
+        }
+        const entries = existingEntries != null ? existingEntries : await this.getTeamNamesForRandom();
+        const matches = this.selectedStructure.matches;
+        const useSameAll = this.settingsManager.getUseSameTeamName();
+        const useSamePerRound = this.settingsManager.getUseSameTeamPerRound();
+        const teamIds = new Set();
+        if (!useSamePerRound) {
+            matches.forEach(m => {
+                teamIds.add(this.getTeamId(m.team1));
+                teamIds.add(this.getTeamId(m.team2));
+            });
+        }
+        const needCount = useSamePerRound ? matches.length : (useSameAll ? 1 : teamIds.size);
+        if (entries.length < needCount) {
+            return { assigned: false, needCount };
+        }
+        const shuffled = [...entries].sort(() => Math.random() - 0.5);
+        const currentSeason = this.seasonManager.getCurrentSeason();
+        this.storage.updateData(data => {
+            if (!data.seasons[currentSeason]) {
+                data.seasons[currentSeason] = { matches: [], startDate: new Date().toISOString() };
+            }
+            const season = data.seasons[currentSeason];
+            if (useSamePerRound) {
+                season.matchTeamNames = matches.map(() => shuffled[Math.floor(Math.random() * shuffled.length)]);
+                season.teamNames = {};
+            } else if (useSameAll) {
+                const one = shuffled[0];
+                season.teamNames = {};
+                teamIds.forEach(id => { season.teamNames[id] = { league: one.league, name: one.name }; });
+                season.matchTeamNames = undefined;
+            } else {
+                const ids = [...teamIds];
+                season.teamNames = {};
+                ids.forEach((id, i) => { season.teamNames[id] = { league: shuffled[i].league, name: shuffled[i].name }; });
+                season.matchTeamNames = undefined;
+            }
+        });
+        return { assigned: true, needCount };
+    }
+
+    async confirmSequence() {
+        // #region agent log
+        const useRandom = this.settingsManager.getUseRandomTeams();
+        fetch('http://127.0.0.1:7242/ingest/08043545-943c-47f4-96ac-88ee42089f72',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app-controller.js:confirmSequence',message:'confirmSequence entry',data:{useRandomTeams:useRandom,useSameTeamName:this.settingsManager.getUseSameTeamName(),useSameTeamPerRound:this.settingsManager.getUseSameTeamPerRound()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+        // #endregion
         console.log('confirmSequence called');
         console.log('selectedStructureIndex:', this.selectedStructureIndex);
         console.log('selectedStructure:', this.selectedStructure);
@@ -1258,6 +1512,44 @@ class AppController {
             console.log('No structure selected, showing warning');
             this.toastManager.warning('Please select a round structure or click "Select All"', 'Selection Required');
             return;
+        }
+
+        if (this.settingsManager.getUseRandomTeams() && this.selectedStructure && this.selectedStructure.matches) {
+            const entries = await this.getTeamNamesForRandom();
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/08043545-943c-47f4-96ac-88ee42089f72',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app-controller.js:confirmSequence entries',message:'entries from getTeamNamesForRandom',data:{entriesLen:entries.length,firstEntry:entries[0]?{league:entries[0].league,name:entries[0].name}:null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
+            // #endregion
+            const { assigned, needCount } = await this.assignRandomTeamNamesToCurrentSeason(entries);
+            if (assigned) {
+                // already updated in assignRandomTeamNamesToCurrentSeason
+            } else if (entries.length > 0) {
+                this.toastManager.warning(
+                    needCount === 1 ? 'Need at least 1 team in file.' : `File has ${entries.length} teams but you need ${needCount}. Using player names for this session.`,
+                    'Not Enough Names'
+                );
+            } else {
+                this.toastManager.warning(
+                    'Upload a .txt or .csv file via "Choose file" below. Using player names until then.',
+                    'Random Names Unavailable'
+                );
+            }
+        } else {
+            // When random team names are off, clear stored club names so display uses player names only
+            const currentSeason = this.seasonManager.getCurrentSeason();
+            this.storage.updateData(data => {
+                if (data.seasons && data.seasons[currentSeason]) {
+                    const season = data.seasons[currentSeason];
+                    season.teamNames = {};
+                    season.matchTeamNames = undefined;
+                }
+            });
+            // #region agent log
+            const seasons = this.storage.getData().seasons || {};
+            const season = seasons[currentSeason];
+            const hasTeamNames = season && typeof season.teamNames === 'object' && Object.keys(season.teamNames || {}).length > 0;
+            const hasMatchTeamNames = season && Array.isArray(season.matchTeamNames) && season.matchTeamNames.length > 0;
+            fetch('http://127.0.0.1:7242/ingest/08043545-943c-47f4-96ac-88ee42089f72',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app-controller.js:confirmSequence',message:'useRandomTeams false cleared',data:{useRandomTeams:false,hasTeamNamesAfterClear:hasTeamNames,hasMatchTeamNamesAfterClear:hasMatchTeamNames},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1',runId:'post-fix'})}).catch(()=>{});
+            // #endregion
         }
 
         console.log('Structure confirmed, switching to sequence screen');
@@ -1274,22 +1566,22 @@ class AppController {
         }
         
         const container = document.getElementById('sequenceList');
+        const seasonData = this.storage.getData().seasons[this.seasonManager.getCurrentSeason()];
         
         container.innerHTML = this.selectedStructure.matches.map((match, index) => {
-            const team1Display = this.formatTeamWithColors(match.team1);
-            const team2Display = this.formatTeamWithColors(match.team2);
+            const e1 = this.getMatchTeamEntry(seasonData, index, this.getTeamId(match.team1));
+            const e2 = this.getMatchTeamEntry(seasonData, index, this.getTeamId(match.team2));
+            const team1PlayersHtml = this.formatTeamWithColors(match.team1);
+            const team2PlayersHtml = this.formatTeamWithColors(match.team2);
+            const teamsBlock = this.formatMatchTeamsDisplay(
+                e1, e2, team1PlayersHtml, team2PlayersHtml,
+                this.teamGenerator.formatTeamName(match.team1),
+                this.teamGenerator.formatTeamName(match.team2)
+            );
             return `
                 <div class="sequence-item">
                     <div class="sequence-number">Round ${index + 1}</div>
-                    <div class="team-display">
-                        <div class="team-players">
-                            ${team1Display}
-                        </div>
-                        <span class="vs">VS</span>
-                        <div class="team-players">
-                            ${team2Display}
-                        </div>
-                    </div>
+                    <div class="match-teams-block">${teamsBlock}</div>
                 </div>
             `;
         }).join('');
@@ -1317,15 +1609,25 @@ class AppController {
         document.getElementById('currentGameNumber').textContent = this.currentGameIndex + 1;
         document.getElementById('totalGames').textContent = this.selectedStructure.matches.length;
         
-        const team1Name = this.teamGenerator.formatTeamName(match.team1);
-        const team2Name = this.teamGenerator.formatTeamName(match.team2);
+        const seasonData = this.storage.getData().seasons[this.seasonManager.getCurrentSeason()];
+        const e1 = this.getMatchTeamEntry(seasonData, this.currentGameIndex, this.getTeamId(match.team1));
+        const e2 = this.getMatchTeamEntry(seasonData, this.currentGameIndex, this.getTeamId(match.team2));
+        const team1Label = (e1 && e1.name) ? e1.name : this.teamGenerator.formatTeamName(match.team1);
+        const team2Label = (e2 && e2.name) ? e2.name : this.teamGenerator.formatTeamName(match.team2);
 
-        const team1Display = this.formatTeamWithColors(match.team1);
-        const team2Display = this.formatTeamWithColors(match.team2);
-        document.getElementById('team1Display').innerHTML = team1Display;
-        document.getElementById('team2Display').innerHTML = team2Display;
-        document.getElementById('team1ScoreLabel').textContent = `${team1Name} Score (Full Time)`;
-        document.getElementById('team2ScoreLabel').textContent = `${team2Name} Score (Full Time)`;
+        const team1PlayersHtml = this.formatTeamWithColors(match.team1);
+        const team2PlayersHtml = this.formatTeamWithColors(match.team2);
+        const matchTeamsEl = document.getElementById('matchTeams');
+        if (matchTeamsEl) {
+            matchTeamsEl.innerHTML = this.formatMatchTeamsDisplay(
+                e1, e2,
+                team1PlayersHtml, team2PlayersHtml,
+                this.teamGenerator.formatTeamName(match.team1),
+                this.teamGenerator.formatTeamName(match.team2)
+            );
+        }
+        document.getElementById('team1ScoreLabel').textContent = `${team1Label} Score (Full Time)`;
+        document.getElementById('team2ScoreLabel').textContent = `${team2Label} Score (Full Time)`;
         
         // Reset score inputs
         document.getElementById('team1Score').value = 0;
@@ -1410,6 +1712,10 @@ class AppController {
         const { team1, team2 } = this.currentMatch;
         const matchIndex = this.currentGameIndex;
 
+        const seasonData = this.storage.getData().seasons[this.seasonManager.getCurrentSeason()];
+        const e1 = this.getMatchTeamEntry(seasonData, matchIndex, this.getTeamId(team1));
+        const e2 = this.getMatchTeamEntry(seasonData, matchIndex, this.getTeamId(team2));
+
         const savedMatch = this.matchRecorder.recordMatch({
             team1,
             team2,
@@ -1418,7 +1724,11 @@ class AppController {
             extraTimeScore1: team1ExtraTimeScore,
             extraTimeScore2: team2ExtraTimeScore,
             penaltiesScore1: team1PenaltiesScore,
-            penaltiesScore2: team2PenaltiesScore
+            penaltiesScore2: team2PenaltiesScore,
+            team1Name: e1 ? e1.name : undefined,
+            team2Name: e2 ? e2.name : undefined,
+            team1League: e1 && e1.league ? e1.league : undefined,
+            team2League: e2 && e2.league ? e2.league : undefined
         });
 
         if (savedMatch) {
@@ -1437,8 +1747,12 @@ class AppController {
             if (this.selectedStructure && this.currentGameIndex < this.selectedStructure.matches.length) {
                 this.showCurrentMatch();
             } else {
-                // All games completed - reset to first match for replay
+                // All games completed - reset to first match for replay; re-randomise clubs if user asked for random teams
                 this.currentGameIndex = 0;
+                if (this.settingsManager.getUseRandomTeams()) {
+                    await this.assignRandomTeamNamesToCurrentSeason();
+                    this.loadSequenceList();
+                }
                 this.showCurrentMatch();
             }
         } else {
@@ -2768,8 +3082,6 @@ class AppController {
             return;
         }
         
-        const teamName = teamPlayers.length === 1 ? teamPlayers[0] : teamPlayers.join(' & ');
-        
         container.innerHTML = matches.map(match => {
             const classification = this.classifyMatch(match, teamPlayers);
             const team1 = Array.isArray(match.team1) ? match.team1 : [match.team1];
@@ -2792,8 +3104,17 @@ class AppController {
             const ourTeam = isTeam1 ? team1 : team2;
             const opponentTeam = isTeam1 ? team2 : team1;
             
-            // Format opponent names with " & " separator
-            const opponentNames = opponentTeam.map(p => this.formatPlayerNameWithColor(p)).join(' & ');
+            const ourLeague = isTeam1 ? (match.team1League || '') : (match.team2League || '');
+            const ourName = isTeam1 ? (match.team1Name || '') : (match.team2Name || '');
+            const oppLeague = isTeam1 ? (match.team2League || '') : (match.team1League || '');
+            const oppName = isTeam1 ? (match.team2Name || '') : (match.team1Name || '');
+            const ourEntry = (ourName || ourLeague) ? { league: ourLeague, name: ourName } : null;
+            const oppEntry = (oppName || oppLeague) ? { league: oppLeague, name: oppName } : null;
+            const ourTeamDisplayName = (ourName || (teamPlayers.length === 1 ? teamPlayers[0] : teamPlayers.join(' & ')));
+            const opponentDisplay = oppEntry
+                ? (oppLeague ? `<span class="team-details-league">${this.escapeHtml(oppLeague)}</span><br><span class="team-details-name">${this.escapeHtml(oppName)}</span>`
+                  : this.escapeHtml(oppName))
+                : opponentTeam.map(p => this.formatPlayerNameWithColor(p)).join(' & ');
             
             // Format date
             const date = new Date(match.timestamp);
@@ -2840,9 +3161,9 @@ class AppController {
                     </div>
                     <div class="team-details-match-content">
                         <div class="team-details-teams">
-                            <span class="team-details-our-team">${teamName}</span>
+                            <span class="team-details-our-team">${ourLeague ? `<span class="team-details-league">${this.escapeHtml(ourLeague)}</span><br>` : ''}<span class="team-details-name">${this.escapeHtml(ourTeamDisplayName)}</span></span>
                             <span class="team-details-vs">vs</span>
-                            <span class="team-details-opponent">${opponentNames}</span>
+                            <span class="team-details-opponent">${opponentDisplay}</span>
                         </div>
                         <div class="team-details-score">
                             <span class="team-details-score-value ${classification.result === 'Win' ? 'winning' : ''}">${ourScore}</span>
@@ -2859,14 +3180,12 @@ class AppController {
 
     renderListView(matches, container, searchTerm = '') {
         container.innerHTML = matches.map(match => {
-            let team1Display = this.formatTeamWithColors(match.team1);
-            let team2Display = this.formatTeamWithColors(match.team2);
-            
-            // Highlight search terms if present
-            if (searchTerm) {
-                team1Display = this.highlightSearchTerm(team1Display, searchTerm);
-                team2Display = this.highlightSearchTerm(team2Display, searchTerm);
-            }
+            const entry1 = (match.team1Name != null || match.team1League != null) ? { league: match.team1League || '', name: match.team1Name || '' } : null;
+            const entry2 = (match.team2Name != null || match.team2League != null) ? { league: match.team2League || '', name: match.team2Name || '' } : null;
+            const p1 = this.formatTeamWithColors(match.team1);
+            const p2 = this.formatTeamWithColors(match.team2);
+            let teamsBlock = this.formatMatchTeamsDisplay(entry1, entry2, p1, p2, this.teamGenerator.formatTeamName(match.team1), this.teamGenerator.formatTeamName(match.team2));
+            if (searchTerm) teamsBlock = this.highlightSearchTerm(teamsBlock, searchTerm);
             
             const date = new Date(match.timestamp);
             const dateStr = date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -2888,7 +3207,7 @@ class AppController {
                 <div class="match-history-item compact" data-timestamp="${match.timestamp}">
                     <div class="match-history-header">
                         <div class="match-history-main">
-                            <div class="match-history-teams">${team1Display} vs ${team2Display}</div>
+                            <div class="match-history-teams">${teamsBlock}</div>
                             ${scoreLine}
                             <div class="match-history-date">${dateStr}</div>
                         </div>
@@ -3044,14 +3363,12 @@ class AppController {
             `;
 
             const matchesHTML = dateMatches.map(match => {
-                let team1Display = this.formatTeamWithColors(match.team1);
-                let team2Display = this.formatTeamWithColors(match.team2);
-                
-                // Highlight search terms if present
-                if (searchTerm) {
-                    team1Display = this.highlightSearchTerm(team1Display, searchTerm);
-                    team2Display = this.highlightSearchTerm(team2Display, searchTerm);
-                }
+                const entry1 = (match.team1Name != null || match.team1League != null) ? { league: match.team1League || '', name: match.team1Name || '' } : null;
+                const entry2 = (match.team2Name != null || match.team2League != null) ? { league: match.team2League || '', name: match.team2Name || '' } : null;
+                const p1 = this.formatTeamWithColors(match.team1);
+                const p2 = this.formatTeamWithColors(match.team2);
+                let teamsBlock = this.formatMatchTeamsDisplay(entry1, entry2, p1, p2, this.teamGenerator.formatTeamName(match.team1), this.teamGenerator.formatTeamName(match.team2));
+                if (searchTerm) teamsBlock = this.highlightSearchTerm(teamsBlock, searchTerm);
                 
                 const date = new Date(match.timestamp);
                 const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -3069,7 +3386,7 @@ class AppController {
                         <div class="timeline-match-header">
                             <div class="timeline-match-teams">
                                 <span class="timeline-result-indicator ${resultIndicator}"></span>
-                                ${team1Display} vs ${team2Display}
+                                ${teamsBlock}
                             </div>
                             <div class="timeline-match-score">
                                 ${match.result === 'team1' ?
@@ -3236,16 +3553,13 @@ class AppController {
 
         const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
         const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
-        const team1Display = this.formatTeamWithColors(match.team1);
-        const team2Display = this.formatTeamWithColors(match.team2);
+        const entry1 = (match.team1Name != null || match.team1League != null) ? { league: match.team1League || '', name: match.team1Name || '' } : null;
+        const entry2 = (match.team2Name != null || match.team2League != null) ? { league: match.team2League || '', name: match.team2Name || '' } : null;
+        const p1 = this.formatTeamWithColors(match.team1);
+        const p2 = this.formatTeamWithColors(match.team2);
+        const teamsBlock = this.formatMatchTeamsDisplay(entry1, entry2, p1, p2, this.teamGenerator.formatTeamName(match.team1), this.teamGenerator.formatTeamName(match.team2));
 
-        document.getElementById('editMatchTeams').innerHTML = `
-            <div class="team-display">
-                <div class="team-players">${team1Display}</div>
-                <span class="vs">VS</span>
-                <div class="team-players">${team2Display}</div>
-            </div>
-        `;
+        document.getElementById('editMatchTeams').innerHTML = `<div class="match-teams-block">${teamsBlock}</div>`;
         document.getElementById('editTeam1Score').value = match.team1Score || 0;
         document.getElementById('editTeam2Score').value = match.team2Score || 0;
         
@@ -4487,6 +4801,91 @@ class AppController {
         };
         teamOptions.appendChild(randomizeBtn);
 
+        // Use random team names from file
+        const randomTeamsWrap = document.createElement('label');
+        randomTeamsWrap.className = 'checkbox-label';
+        randomTeamsWrap.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; cursor: pointer;';
+        const randomTeamsCheck = document.createElement('input');
+        randomTeamsCheck.type = 'checkbox';
+        randomTeamsCheck.className = 'checkbox-input';
+        randomTeamsCheck.checked = this.settingsManager.getUseRandomTeams();
+        randomTeamsCheck.addEventListener('change', (e) => {
+            this.settingsManager.setUseRandomTeams(e.target.checked);
+            this.saveSessionState();
+        });
+        const randomTeamsLabel = document.createElement('span');
+        randomTeamsLabel.textContent = 'Use random team names from file (.txt or .csv)';
+        randomTeamsWrap.appendChild(randomTeamsCheck);
+        randomTeamsWrap.appendChild(randomTeamsLabel);
+        teamOptions.appendChild(randomTeamsWrap);
+
+        const sameTeamWrap = document.createElement('label');
+        sameTeamWrap.className = 'checkbox-label';
+        sameTeamWrap.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; cursor: pointer; margin-left: 1.5rem;';
+        const sameTeamCheck = document.createElement('input');
+        sameTeamCheck.type = 'checkbox';
+        sameTeamCheck.className = 'checkbox-input';
+        sameTeamCheck.checked = this.settingsManager.getUseSameTeamName();
+        sameTeamCheck.addEventListener('change', (e) => {
+            this.settingsManager.setUseSameTeamName(e.target.checked);
+            this.saveSessionState();
+        });
+        const sameTeamLabel = document.createElement('span');
+        sameTeamLabel.textContent = 'Use one club for every round (same club for all matches)';
+        sameTeamWrap.appendChild(sameTeamCheck);
+        sameTeamWrap.appendChild(sameTeamLabel);
+        teamOptions.appendChild(sameTeamWrap);
+
+        const samePerRoundWrap = document.createElement('label');
+        samePerRoundWrap.className = 'checkbox-label';
+        samePerRoundWrap.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; margin-left: 1.5rem; cursor: pointer;';
+        const samePerRoundCheck = document.createElement('input');
+        samePerRoundCheck.type = 'checkbox';
+        samePerRoundCheck.className = 'checkbox-input';
+        samePerRoundCheck.checked = this.settingsManager.getUseSameTeamPerRound();
+        samePerRoundCheck.addEventListener('change', (e) => {
+            this.settingsManager.setUseSameTeamPerRound(e.target.checked);
+            this.saveSessionState();
+        });
+        const samePerRoundLabel = document.createElement('span');
+        samePerRoundLabel.textContent = 'Same team per round (e.g. Round 1: Newcastle vs Newcastle, Round 2: Liverpool vs Liverpool)';
+        samePerRoundWrap.appendChild(samePerRoundCheck);
+        samePerRoundWrap.appendChild(samePerRoundLabel);
+        teamOptions.appendChild(samePerRoundWrap);
+
+        const sameClubHint = document.createElement('p');
+        sameClubHint.className = 'screen-description';
+        sameClubHint.style.cssText = 'margin-left: 1.5rem; margin-top: 0; margin-bottom: 1rem; font-size: 0.85rem;';
+        sameClubHint.textContent = 'Leave unchecked for a different club each round. If you see the same club every round, uncheck this and continue again.';
+        teamOptions.appendChild(sameClubHint);
+
+        const fileRow = document.createElement('div');
+        fileRow.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;';
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.txt,.csv';
+        fileInput.style.display = 'none';
+        fileInput.addEventListener('change', (e) => {
+            const f = e.target.files && e.target.files[0];
+            if (f) this.onTeamNamesFileChosen(f);
+            e.target.value = '';
+        });
+        const chooseFileBtn = document.createElement('button');
+        chooseFileBtn.type = 'button';
+        chooseFileBtn.className = 'btn btn-secondary';
+        chooseFileBtn.textContent = 'Choose file…';
+        chooseFileBtn.onclick = () => fileInput.click();
+        fileRow.appendChild(fileInput);
+        fileRow.appendChild(chooseFileBtn);
+        const savedCount = this.getUploadedTeamNamesCount();
+        if (savedCount > 0) {
+            const savedLabel = document.createElement('span');
+            savedLabel.className = 'screen-description';
+            savedLabel.textContent = `(${savedCount} names saved)`;
+            fileRow.appendChild(savedLabel);
+        }
+        teamOptions.appendChild(fileRow);
+
         // Add description
         const description = document.createElement('p');
         description.className = 'screen-description';
@@ -4668,10 +5067,18 @@ class AppController {
         }
 
         const match = this.selectedStructure.matches[this.currentGameIndex];
-        const team1Name = this.teamGenerator.formatTeamName(match.team1);
-        const team2Name = this.teamGenerator.formatTeamName(match.team2);
-        const team1Display = this.formatTeamWithColors(match.team1);
-        const team2Display = this.formatTeamWithColors(match.team2);
+        const seasonData = this.storage.getData().seasons[this.seasonManager.getCurrentSeason()];
+        const e1 = this.getMatchTeamEntry(seasonData, this.currentGameIndex, this.getTeamId(match.team1));
+        const e2 = this.getMatchTeamEntry(seasonData, this.currentGameIndex, this.getTeamId(match.team2));
+        const team1Label = (e1 && e1.name) ? e1.name : this.teamGenerator.formatTeamName(match.team1);
+        const team2Label = (e2 && e2.name) ? e2.name : this.teamGenerator.formatTeamName(match.team2);
+        const team1PlayersHtml = this.formatTeamWithColors(match.team1);
+        const team2PlayersHtml = this.formatTeamWithColors(match.team2);
+        const teamsBlock = this.formatMatchTeamsDisplay(
+            e1, e2, team1PlayersHtml, team2PlayersHtml,
+            this.teamGenerator.formatTeamName(match.team1),
+            this.teamGenerator.formatTeamName(match.team2)
+        );
 
         // Store current match for score recording
         this.currentMatch = match;
@@ -4682,25 +5089,19 @@ class AppController {
                     <div class="game-counter">
                         <span>${this.currentGameIndex + 1}</span> / <span>${this.selectedStructure.matches.length}</span>
                     </div>
-                    <div class="match-teams">
-                        <div class="team-display">
-                            <div class="team-players">${team1Display}</div>
-                            <span class="vs">VS</span>
-                            <div class="team-players">${team2Display}</div>
-                        </div>
-                    </div>
+                    <div class="match-teams">${teamsBlock}</div>
                 </div>
 
                 <div class="match-result">
                     <h3>Enter Scores</h3>
                     <div class="score-input-container">
                         <div class="score-input-group">
-                            <label for="sessionTeam1Score">${team1Name} Score (Full Time)</label>
+                            <label for="sessionTeam1Score">${this.escapeHtml(team1Label)} Score (Full Time)</label>
                             <input type="number" id="sessionTeam1Score" min="0" max="99" value="0" class="score-input">
                         </div>
                         <span class="score-separator">-</span>
                         <div class="score-input-group">
-                            <label for="sessionTeam2Score">${team2Name} Score (Full Time)</label>
+                            <label for="sessionTeam2Score">${this.escapeHtml(team2Label)} Score (Full Time)</label>
                             <input type="number" id="sessionTeam2Score" min="0" max="99" value="0" class="score-input">
                         </div>
                     </div>
@@ -4779,7 +5180,7 @@ class AppController {
     }
 
     // Navigation
-    sessionContinue() {
+    async sessionContinue() {
         switch (this.sessionWizardStep) {
             case 'players':
                 if (this.sessionPlayers.length >= 2) {
@@ -4792,8 +5193,8 @@ class AppController {
                 break;
             case 'teams':
                 if (this.sessionSelectedStructure) {
-                    // Save players and start the session
-                    this.saveSessionPlayers();
+                    // Save players and start the session (may fetch random team names)
+                    await this.saveSessionPlayers();
                 }
                 break;
             case 'match':
@@ -4802,9 +5203,68 @@ class AppController {
         }
     }
 
-    saveSessionPlayers() {
+    async saveSessionPlayers() {
         // Set players in player manager
         this.playerManager.setPlayers(this.sessionPlayers);
+
+        if (this.settingsManager.getUseRandomTeams() && this.sessionSelectedStructure && this.sessionSelectedStructure.matches) {
+            const entries = await this.getTeamNamesForRandom();
+            const matches = this.sessionSelectedStructure.matches;
+            const useSameAll = this.settingsManager.getUseSameTeamName();
+            const useSamePerRound = this.settingsManager.getUseSameTeamPerRound();
+            const teamIds = new Set();
+            if (!useSamePerRound) {
+                matches.forEach(m => {
+                    teamIds.add(this.getTeamId(m.team1));
+                    teamIds.add(this.getTeamId(m.team2));
+                });
+            }
+            const needCount = useSamePerRound ? matches.length : (useSameAll ? 1 : teamIds.size);
+            if (entries.length >= needCount) {
+                const shuffled = [...entries].sort(() => Math.random() - 0.5);
+                const currentSeason = this.seasonManager.getCurrentSeason();
+                this.storage.updateData(data => {
+                    if (!data.seasons[currentSeason]) {
+                        data.seasons[currentSeason] = { matches: [], startDate: new Date().toISOString() };
+                    }
+                    const season = data.seasons[currentSeason];
+                    if (useSamePerRound) {
+                        season.matchTeamNames = matches.map(() => shuffled[Math.floor(Math.random() * shuffled.length)]);
+                        season.teamNames = {};
+                    } else if (useSameAll) {
+                        const one = shuffled[0];
+                        season.teamNames = {};
+                        teamIds.forEach(id => { season.teamNames[id] = { league: one.league, name: one.name }; });
+                        season.matchTeamNames = undefined;
+                    } else {
+                        const ids = [...teamIds];
+                        season.teamNames = {};
+                        ids.forEach((id, i) => { season.teamNames[id] = { league: shuffled[i].league, name: shuffled[i].name }; });
+                        season.matchTeamNames = undefined;
+                    }
+                });
+            } else if (entries.length > 0) {
+                this.toastManager.warning(
+                    needCount === 1 ? 'Need at least 1 team in file.' : `File has ${entries.length} teams but you need ${needCount}. Using player names for this session.`,
+                    'Not Enough Names'
+                );
+            } else {
+                this.toastManager.warning(
+                    'Upload a .txt or .csv file via "Choose file" below. Using player names until then.',
+                    'Random Names Unavailable'
+                );
+            }
+        } else {
+            // When random team names are off, clear stored club names so display uses player names only
+            const currentSeason = this.seasonManager.getCurrentSeason();
+            this.storage.updateData(data => {
+                if (data.seasons && data.seasons[currentSeason]) {
+                    const season = data.seasons[currentSeason];
+                    season.teamNames = {};
+                    season.matchTeamNames = undefined;
+                }
+            });
+        }
 
         // Generate teams and start games
         this.selectStructure(this.sessionSelectedStructure);
@@ -4851,6 +5311,10 @@ class AppController {
         const { team1, team2 } = this.currentMatch;
         const matchIndex = this.currentGameIndex;
 
+        const seasonData = this.storage.getData().seasons[this.seasonManager.getCurrentSeason()];
+        const e1 = this.getMatchTeamEntry(seasonData, matchIndex, this.getTeamId(team1));
+        const e2 = this.getMatchTeamEntry(seasonData, matchIndex, this.getTeamId(team2));
+
         const savedMatch = this.matchRecorder.recordMatch({
             team1,
             team2,
@@ -4859,7 +5323,11 @@ class AppController {
             extraTimeScore1: team1ExtraTimeScore,
             extraTimeScore2: team2ExtraTimeScore,
             penaltiesScore1: team1PenaltiesScore,
-            penaltiesScore2: team2PenaltiesScore
+            penaltiesScore2: team2PenaltiesScore,
+            team1Name: e1 ? e1.name : undefined,
+            team2Name: e2 ? e2.name : undefined,
+            team1League: e1 && e1.league ? e1.league : undefined,
+            team2League: e2 && e2.league ? e2.league : undefined
         });
 
         if (savedMatch) {
