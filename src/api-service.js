@@ -13,10 +13,47 @@ const LEAGUE_NAMES = {
 };
 const TOP_TEAMS_COUNT = 5;
 
+/** True when app is on phone or non-localhost (e.g. 192.168.x.x:3000); use proxy first to avoid API blocking. */
+function shouldUseProxyFirst() {
+    if (typeof location === 'undefined' || !location.origin) return false;
+    const origin = location.origin;
+    const hostname = location.hostname || '';
+    // localhost or 127.0.0.1 on port 80 is often allowed by the API
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        const port = (location.port || '80').toString();
+        return port !== '80'; // e.g. 3000 -> use proxy first
+    }
+    // LAN IP (phone loading from PC) or other non-public origin
+    return true;
+}
+
 async function fetchWithCorsFallback(url, headers) {
     const proxyUrl = CORS_PROXY + encodeURIComponent(url);
+    const useProxyFirst = shouldUseProxyFirst();
+
+    async function doFetch(useProxy) {
+        const target = useProxy ? proxyUrl : url;
+        return fetch(target, { headers });
+    }
+
+    if (useProxyFirst) {
+        try {
+            const res = await doFetch(true);
+            if (res.ok || res.status === 401 || res.status === 403) return res;
+            throw new Error(`HTTP ${res.status}`);
+        } catch (err) {
+            const isCorsOrNetwork = !err.message || err.message.includes('Failed to fetch') ||
+                err.message.includes('NetworkError') || err.name === 'TypeError' ||
+                err.message.includes('Load failed');
+            if (isCorsOrNetwork) {
+                return doFetch(false);
+            }
+            throw err;
+        }
+    }
+
     try {
-        const res = await fetch(url, { headers });
+        const res = await doFetch(false);
         if (res.ok || res.status === 401 || res.status === 403) return res;
         throw new Error(`HTTP ${res.status}`);
     } catch (err) {
@@ -24,7 +61,7 @@ async function fetchWithCorsFallback(url, headers) {
             err.message.includes('NetworkError') || err.name === 'TypeError' ||
             err.message.includes('Load failed');
         if (isCorsOrNetwork) {
-            return fetch(proxyUrl, { headers });
+            return doFetch(true);
         }
         throw err;
     }
