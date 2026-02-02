@@ -2,10 +2,11 @@
 import { LocalStorageManager } from './persistence.js';
 import { SeasonManager } from './season.js';
 import { PlayerManager } from './players.js';
+import { fetchTopTeams } from './api-service.js';
 
 const storage = new LocalStorageManager();
 const seasonManager = new SeasonManager(storage);
-const playerManager = new PlayerManager(); // PlayerManager no longer needs storageManager directly
+const playerManager = new PlayerManager(storage);
 
 export function addPlayer(playerData) {
     return storage.updateData(data => {
@@ -236,4 +237,45 @@ export function getTeamId(team) {
     // Create deterministic team ID from player names
     const sortedPlayers = [...team].sort();
     return `team_${sortedPlayers.join('_')}`;
+}
+
+/**
+ * Sync teams from football-data.org API. Fetches top 5 from PL, PD, BL1, FL1
+ * and overwrites uploadedTeamEntries in persistence (used when randomising team names).
+ * Uses opts.storage when provided so the same instance as the app is updated (fixes View list).
+ * @param {Object} opts - Options with toastManager and optional storage (same as app controller)
+ * @returns {Promise<{ success: boolean, count?: number, entries?: Array, error?: string }>}
+ */
+export async function syncTeamsFromOnline(opts = {}) {
+    const toast = opts.toastManager;
+    const store = opts.storage ?? storage;
+    const show = (msg, type = 'info', title = null) => {
+        if (toast && typeof toast[type] === 'function') {
+            toast[type](msg, title);
+        }
+    };
+
+    if (toast) show('Syncing...', 'info');
+    try {
+        const entries = await fetchTopTeams();
+        if (!entries || entries.length === 0) {
+            show('No teams retrieved from API', 'warning');
+            return { success: false, error: 'No teams retrieved' };
+        }
+        store.updateData(data => {
+            data.uploadedTeamEntries = entries;
+            data.uploadedTeamNames = []; // clear legacy file list so randomise only uses synced list
+        });
+        if (toast) show(`Synced ${entries.length} teams from top 4 leagues!`, 'success', 'Success!');
+        return { success: true, count: entries.length, entries };
+    } catch (err) {
+        let msg = err?.message || 'Sync failed';
+        if (msg.includes('No API key')) {
+            msg = 'No API Key found. Add your key in Settings > Data > External Services.';
+        } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('CORS') || msg.includes('blocked')) {
+            msg = 'Network/CORS error. Try running the app on http://localhost (port 80) or deploy it—football-data.org may block localhost:3000.';
+        }
+        if (toast) show(msg, 'error', 'Error');
+        return { success: false, error: msg };
+    }
 }

@@ -196,3 +196,5 @@ function setupToggleUI() {
 
 window.renderTeamTable = renderTeamTable;
 window.setupToggleUI = setupToggleUI;
+
+export { renderTeamTable, setupToggleUI };

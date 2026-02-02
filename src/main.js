@@ -1,10 +1,10 @@
-// Bootstraps the app and registers the service worker
+// Bootstrap module - imports AppController to ensure it's loaded.
+// The actual bootstrap runs from app-controller.js (entry point).
+import { AppController } from './app-controller.js';
 
-document.addEventListener('DOMContentLoaded', () => {
-    window.appController = new AppController();
-});
+// Re-export for any code that imports from main.js
+export { AppController };
 
-// Register service worker for PWA with update checking
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         // Support both root (/) and GitHub Pages subpath (/Fc25-score-keeper/)

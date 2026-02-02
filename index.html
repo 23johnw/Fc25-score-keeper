@@ -254,7 +254,7 @@
             </div>
             <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; cursor: pointer;">
                 <input type="checkbox" id="useRandomTeamsCheckbox" class="checkbox-input">
-                <span>Use random team names from file (.txt or .csv)</span>
+                <span>Use random team names from synced list</span>
             </label>
             <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; margin-left: 1.5rem; cursor: pointer;">
                 <input type="checkbox" id="useSameTeamNameCheckbox" class="checkbox-input">
@@ -265,12 +265,12 @@
                 <span>Same team per round (e.g. Round 1: Newcastle vs Newcastle, Round 2: Liverpool vs Liverpool)</span>
             </label>
             <p class="screen-description" id="teamSameClubHint" style="margin-left: 1.5rem; margin-top: 0; margin-bottom: 0.5rem; font-size: 0.85rem;">Leave unchecked for a different club each round. If you see the same club every round, uncheck this and click Confirm Sequence again.</p>
-            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
-                <input type="file" id="teamNamesFileInput" accept=".txt,.csv" style="display: none;">
-                <button type="button" id="teamNamesChooseFileBtn" class="btn btn-secondary">Choose file…</button>
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; flex-wrap: wrap;">
+                <button type="button" id="syncTopTeamsBtn" class="btn btn-secondary" title="Fetch top 5 teams from Premier League, La Liga, Bundesliga, Ligue 1">Sync Top Teams</button>
+                <button type="button" id="viewSyncedTeamsListBtn" class="btn btn-secondary" title="View the list of team names from sync">View list</button>
                 <span id="teamNamesLoadedCount" class="screen-description" style="display: none;"></span>
             </div>
-            <p class="screen-description" style="margin-top: 0; margin-bottom: 1rem; font-size: 0.85rem; color: #666;">File format: <strong>League,Team Name</strong> per line (e.g. Premier League,Arsenal). League names will then show above the club when you randomise.</p>
+            <p class="screen-description" style="margin-top: 0; margin-bottom: 1rem; font-size: 0.85rem; color: #666;">Sync Top Teams to download club names from the top 4 leagues; they are used when you randomise.</p>
             <p class="screen-description" id="teamScreenDescription">Select the order you want to play these matches</p>
             
             <div id="teamCombinations" class="team-combinations-grid"></div>
@@ -547,6 +547,17 @@
         </div>
     </div>
 
+    <!-- Synced / uploaded teams list modal -->
+    <div id="syncedTeamsListModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 480px;">
+            <h3 id="syncedTeamsListModalTitle">Team names list</h3>
+            <div id="syncedTeamsListBody" style="max-height: 60vh; overflow-y: auto; margin: 0.5rem 0 1rem 0; padding-right: 0.25rem;"></div>
+            <div style="display: flex; justify-content: flex-end;">
+                <button id="syncedTeamsListModalClose" class="btn btn-primary">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Edit Match Modal -->
     <div id="editMatchModal" class="modal" style="display: none;">
         <div class="modal-content">
@@ -690,6 +701,17 @@
             <!-- Data Management Tab -->
             <div id="dataSettingsTab" class="settings-tab-content">
                 <div class="settings-section">
+                    <h3>External Services</h3>
+                    <p class="settings-description">API key for football-data.org (Live Team Sync). Get a free key at <a href="https://www.football-data.org/" target="_blank" rel="noopener">football-data.org</a></p>
+                    <div class="settings-group">
+                        <label for="apiKeyInput">Football Data API Key:</label>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <input type="password" id="apiKeyInput" class="settings-input" placeholder="Enter your API key" autocomplete="off" style="flex: 1;">
+                            <button id="saveApiKeyBtn" class="btn btn-primary" style="padding: 0.5rem;">Save Key</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="settings-section">
                     <h3>Shared League</h3>
                     <p class="settings-description">Share this link with friends to play together</p>
                     <div class="settings-group">
@@ -787,23 +809,8 @@
     <!-- jsPDF library for PDF export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
-    <!-- Application scripts (split from app.js) -->
-    <script src="src/constants.js?v=20260104e"></script>
-    <script src="src/persistence.js?v=20260104e"></script>
-    <script src="src/settings.js?v=20260104e"></script>
-    <script src="src/players.js?v=20260104e"></script>
-    <script src="src/team-generator.js?v=20260104e"></script>
-    <script src="src/stats-calculators.js?v=20260104e"></script>
-    <script src="src/statistics-tracker.js?v=20260104e"></script>
-    <script src="src/toast.js?v=20260104e"></script>
-    <script src="src/statistics-display.js?v=20260104e"></script>
-    <script src="src/match.js?v=20260104e"></script>
-    <script src="src/season.js?v=20260104e"></script>
-    <script src="src/share.js?v=20260104e"></script>
-    <script src="src/touch.js?v=20260104e"></script>
-    <script src="src/app-controller.js?v=20260104e"></script>
-    <script src="src/stats-view-toggler-global.js?v=20260104e"></script>
-    <script src="src/main.js?v=20260104e"></script>
+    <!-- Application scripts - single ES module entry point -->
+    <script type="module" src="src/app-controller.js"></script>
 </body>
 </html>
 

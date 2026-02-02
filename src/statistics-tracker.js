@@ -1,6 +1,8 @@
 // ============================================================================
-// StatisticsTracker - Core Statistics Framework (classic script)
+// StatisticsTracker - Core Statistics Framework
 // ============================================================================
+
+import { StatisticsCalculators } from './stats-calculators.js';
 
 function getTeamId(team) {
     const s = [...team].sort();
@@ -434,3 +436,5 @@ class StatisticsTracker {
         return defaults;
     }
 }
+
+export { StatisticsTracker };

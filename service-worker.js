@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fc25-score-tracker-v107';
+const CACHE_NAME = 'fc25-score-tracker-v109';
 
 // Determine base path from the SW scope.
 // - Root scope is usually "/"  -> BASE_PATH = ""
@@ -25,6 +25,7 @@ const urlsToCache = [
   `${BASE_PATH}/src/share.js`,
   `${BASE_PATH}/src/touch.js`,
   `${BASE_PATH}/src/app-controller.js`,
+  `${BASE_PATH}/src/api-service.js`,
   `${BASE_PATH}/src/stats-view-toggler-global.js`,
   `${BASE_PATH}/src/main.js`,
   // Legacy single-bundle (kept for compatibility)
@@ -117,16 +118,17 @@ self.addEventListener('fetch', (event) => {
         })
     );
   } else {
-    // For cross-origin requests (Firebase/Google/CDNs), do not interfere.
+    // For cross-origin requests, pass through to network (no caching).
     // For same-origin non-app assets (icons, etc.), cache-first is fine.
+    const cacheFirst = isSameOrigin ? caches.match(event.request) : Promise.resolve(null);
     event.respondWith(
-      (isSameOrigin ? caches.match(event.request) : Promise.resolve(null))
-        .then((response) => response || fetch(event.request))
-        .catch(() => {
-          // If both fail, return offline page for navigation requests
+      cacheFirst
+        .then((cached) => cached || fetch(event.request))
+        .catch((err) => {
           if (event.request.mode === 'navigate') {
-            return caches.match(`${BASE_PATH}/index.html`);
+            return caches.match(`${BASE_PATH}/index.html`) || new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
           }
+          throw err;
         })
     );
   }

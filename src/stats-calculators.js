@@ -3312,3 +3312,5 @@ StatisticsCalculators.register({
     }
 });
 
+export { StatisticsCalculators, StatDescriptions, STAT_GROUPS };
+

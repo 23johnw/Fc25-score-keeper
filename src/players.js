@@ -172,3 +172,5 @@ class PlayerManager {
     }
 }
 
+export { PlayerManager };
+

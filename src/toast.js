@@ -92,3 +92,5 @@ class ToastManager {
     }
 }
 
+export { ToastManager };
+

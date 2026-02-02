@@ -129,3 +129,5 @@ class TeamGenerator {
     }
 }
 
+export { TeamGenerator };
+

@@ -2,6 +2,8 @@
 // ShareManager - Social Sharing & Export
 // ============================================================================
 
+import { StatisticsCalculators, StatDescriptions } from './stats-calculators.js';
+
 class ShareManager {
     constructor(storageManager, statisticsTracker, seasonManager) {
         this.storage = storageManager;
@@ -1071,4 +1073,6 @@ class ShareManager {
         });
     }
 }
+
+export { ShareManager };
 

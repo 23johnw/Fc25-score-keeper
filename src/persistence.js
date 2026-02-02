@@ -127,7 +127,7 @@ class LocalStorageManager {
             players: [],
             playerNameHistory: [], // Add this line to store previously used names
             uploadedTeamNames: [], // legacy: array of strings
-            uploadedTeamEntries: [], // { league, name }[] from uploaded .txt/.csv
+            uploadedTeamEntries: [], // { league, name }[] from Sync Top Teams
             currentSeason: 1,
             seasons: {},
             overallStats: {
@@ -244,4 +244,6 @@ class LocalStorageManager {
         });
     }
 }
+
+export { LocalStorageManager };
 

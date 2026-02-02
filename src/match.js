@@ -171,3 +171,5 @@ class MatchRecorder {
         });
     }
 }
+
+export { MatchRecorder };

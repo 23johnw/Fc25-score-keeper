@@ -326,3 +326,5 @@ class TouchSwipeHandler {
     }
 }
 
+export { TouchSwipeHandler };
+

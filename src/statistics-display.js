@@ -1,7 +1,8 @@
 // ============================================================================
-// StatisticsDisplay - Render Statistics (classic script)
+// StatisticsDisplay - Render Statistics
 // ============================================================================
-// Uses global: StatisticsCalculators, StatDescriptions (from stats-calculators.js)
+
+import { StatisticsCalculators, StatDescriptions } from './stats-calculators.js';
 
 class StatisticsDisplay {
     constructor(statisticsTracker, settingsManager) {
@@ -315,3 +316,5 @@ class StatisticsDisplay {
         console.log('Showing team details for:', teamPlayers);
     }
 }
+
+export { StatisticsDisplay };

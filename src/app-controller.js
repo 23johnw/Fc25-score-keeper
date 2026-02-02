@@ -2,6 +2,21 @@
 // Main Application Controller
 // ============================================================================
 
+import { LocalStorageManager } from './persistence.js';
+import { SettingsManager } from './settings.js';
+import { ToastManager } from './toast.js';
+import { PlayerManager } from './players.js';
+import { TeamGenerator } from './team-generator.js';
+import { SeasonManager } from './season.js';
+import { MatchRecorder } from './match.js';
+import { StatisticsTracker } from './statistics-tracker.js';
+import { StatisticsDisplay } from './statistics-display.js';
+import { ShareManager } from './share.js';
+import { TouchSwipeHandler } from './touch.js';
+import { STAT_GROUPS } from './stats-calculators.js';
+import { syncTeamsFromOnline } from './data-handler.js';
+import './stats-view-toggler-global.js';
+
 class AppController {
     constructor() {
         this.storage = new LocalStorageManager();
@@ -106,7 +121,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.87.0';
+            bannerVersion.textContent = 'Version 1.92.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
@@ -192,6 +207,41 @@ class AppController {
         document.getElementById('selectAllCombinationsBtn').addEventListener('click', () => this.selectAllStructures());
         document.getElementById('randomCombinationBtn').addEventListener('click', () => this.randomSelectStructure());
         document.getElementById('backToPlayersBtn').addEventListener('click', () => this.showScreen('playerScreen'));
+        const syncTopTeamsBtn = document.getElementById('syncTopTeamsBtn');
+        if (syncTopTeamsBtn) {
+            syncTopTeamsBtn.addEventListener('click', async () => {
+                syncTopTeamsBtn.disabled = true;
+                const result = await syncTeamsFromOnline({ toastManager: this.toastManager, storage: this.storage });
+                syncTopTeamsBtn.disabled = false;
+                if (result.success) {
+                    this.updateTeamNamesSavedCountUI();
+                    this.settingsManager.setUseRandomTeams(true);
+                    const useRandomCheck = document.getElementById('useRandomTeamsCheckbox');
+                    if (useRandomCheck) useRandomCheck.checked = true;
+                    this.loadTeamCombinations();
+                    // Clear current season's cached team names so next Confirm Sequence uses only the synced list (no Aston Villa etc)
+                    const currentSeason = this.seasonManager.getCurrentSeason();
+                    this.storage.updateData(data => {
+                        if (data.seasons && data.seasons[currentSeason]) {
+                            const season = data.seasons[currentSeason];
+                            season.teamNames = {};
+                            season.matchTeamNames = undefined;
+                        }
+                    });
+                    if (result.entries && result.entries.length) this.showSyncedTeamsListModal(result.entries);
+                }
+            });
+        }
+        const viewSyncedTeamsListBtn = document.getElementById('viewSyncedTeamsListBtn');
+        if (viewSyncedTeamsListBtn) {
+            viewSyncedTeamsListBtn.addEventListener('click', () => this.showSyncedTeamsListModal());
+        }
+        const syncedTeamsListModalClose = document.getElementById('syncedTeamsListModalClose');
+        const syncedTeamsListModal = document.getElementById('syncedTeamsListModal');
+        if (syncedTeamsListModalClose) syncedTeamsListModalClose.addEventListener('click', () => this.closeSyncedTeamsListModal());
+        if (syncedTeamsListModal) {
+            syncedTeamsListModal.addEventListener('click', (e) => { if (e.target === syncedTeamsListModal) this.closeSyncedTeamsListModal(); });
+        }
 
         // Sequence screen
         document.getElementById('startGamesBtn').addEventListener('click', () => this.startGames());
@@ -324,6 +374,15 @@ class AppController {
             btn.addEventListener('click', (e) => this.switchSettingsTab(e.target.dataset.settingsTab));
         });
         document.getElementById('saveSettingsBtn').addEventListener('click', () => this.saveSettings());
+        const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
+        if (saveApiKeyBtn) {
+            saveApiKeyBtn.addEventListener('click', () => {
+                const apiKeyInput = document.getElementById('apiKeyInput');
+                const key = apiKeyInput ? apiKeyInput.value : '';
+                this.settingsManager.setFootballApiKey(key);
+                this.toastManager.success('API key saved');
+            });
+        }
         document.getElementById('backFromSettingsBtn').addEventListener('click', () => this.showScreen('playerScreen'));
         document.getElementById('resetLabelsBtn').addEventListener('click', () => this.resetLabels());
         document.getElementById('exportDataSettingsBtn').addEventListener('click', () => this.exportData());
@@ -607,29 +666,14 @@ class AppController {
     }
 
     /**
-     * Get team name entries for random assignment: use saved uploaded list first,
-     * else try fetch only when app is served over http/https (fails from file://).
-     * Returns { league, name }[]. Backward compat: old uploadedTeamNames (strings) become { league: '', name }.
+     * Get team name entries for random assignment. Uses only the synced list (uploadedTeamEntries).
+     * No fallback to legacy file upload or League-Team-Names.txt so randomise only uses Sync Top Teams data.
+     * Returns { league, name }[].
      */
     async getTeamNamesForRandom() {
         const data = this.storage.getData();
-        let saved = Array.isArray(data.uploadedTeamEntries) ? data.uploadedTeamEntries : [];
-        if (saved.length === 0 && Array.isArray(data.uploadedTeamNames) && data.uploadedTeamNames.length > 0) {
-            saved = data.uploadedTeamNames.map(n => ({ league: '', name: n }));
-        }
-        if (saved.length > 0) return saved.map(e => ({ league: e.league || '', name: e.name }));
-        try {
-            const protocol = typeof location !== 'undefined' ? location.protocol : '';
-            if (protocol === 'http:' || protocol === 'https:') {
-                const res = await fetch('League-Team-Names.txt');
-                if (!res.ok) return [];
-                const text = await res.text();
-                return this.parseTeamNamesFile(text);
-            }
-        } catch (e) {
-            console.warn('Could not fetch team names:', e);
-        }
-        return [];
+        const saved = Array.isArray(data.uploadedTeamEntries) ? data.uploadedTeamEntries : [];
+        return saved.map(e => ({ league: e.league || '', name: e.name || '' }));
     }
 
     /**
@@ -638,32 +682,7 @@ class AppController {
     getUploadedTeamNamesCount() {
         const data = this.storage.getData();
         const arr = Array.isArray(data.uploadedTeamEntries) ? data.uploadedTeamEntries : [];
-        if (arr.length > 0) return arr.length;
-        const legacy = Array.isArray(data.uploadedTeamNames) ? data.uploadedTeamNames : [];
-        return legacy.length;
-    }
-
-    /**
-     * Called when user selects a .txt or .csv file via file picker. Saves to app storage
-     * so names are used until the user uploads a new file (e.g. next season).
-     */
-    onTeamNamesFileChosen(file) {
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const entries = this.parseTeamNamesFile(e.target.result || '');
-            this.storage.updateData(data => {
-                data.uploadedTeamEntries = entries;
-            });
-            const withLeagues = entries.some(entry => entry.league && entry.league.trim() !== '');
-            const message = withLeagues
-                ? `Saved ${entries.length} team names (with leagues). League names will show when you randomise.`
-                : `Saved ${entries.length} team names. Use "League,Team Name" per line (e.g. Premier League,Arsenal) to show league names when you randomise.`;
-            this.toastManager.success(message, 'Team names saved');
-            this.updateTeamNamesSavedCountUI();
-        };
-        reader.onerror = () => this.toastManager.error('Could not read file.', 'Error');
-        reader.readAsText(file);
+        return arr.length;
     }
 
     /**
@@ -704,30 +723,29 @@ class AppController {
     /**
      * Get team entry for a match: when "same team per round" is used, returns the one club for that round;
      * otherwise returns per-team entry from teamNames.
+     * When using random teams, only returns an entry if it is in the current synced list (so old file names like Aston Villa are never shown).
      */
     getMatchTeamEntry(seasonData, matchIndex, teamId) {
         const matchTeamNames = seasonData && seasonData.matchTeamNames;
         const teamNamesMap = (seasonData && seasonData.teamNames) || {};
-        // #region agent log
         const useRandom = this.settingsManager.getUseRandomTeams();
-        const hasStored = (Array.isArray(matchTeamNames) && matchTeamNames[matchIndex] != null) || (teamNamesMap[teamId] != null);
-        if (hasStored) fetch('http://127.0.0.1:7242/ingest/08043545-943c-47f4-96ac-88ee42089f72',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app-controller.js:getMatchTeamEntry',message:'entry',data:{useRandomTeams:useRandom,hasStored,fromMatchTeamNames:Array.isArray(matchTeamNames)&&matchTeamNames[matchIndex],fromTeamNamesMap:!!teamNamesMap[teamId]},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
-        // #endregion
+        let entry = null;
         if (Array.isArray(matchTeamNames) && matchTeamNames[matchIndex] != null) {
             const e = matchTeamNames[matchIndex];
-            const out = typeof e === 'object' && e !== null && 'name' in e
+            entry = typeof e === 'object' && e !== null && 'name' in e
                 ? { league: e.league || '', name: e.name || '' }
                 : { league: '', name: String(e) };
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/08043545-943c-47f4-96ac-88ee42089f72',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app-controller.js:getMatchTeamEntry',message:'from matchTeamNames',data:{matchIndex,rawE:e,returned:out},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
-            // #endregion
-            return out;
+        } else {
+            entry = this.getTeamNameEntry(teamNamesMap, teamId);
         }
-        const fromMap = this.getTeamNameEntry(teamNamesMap, teamId);
-        // #region agent log
-        if (fromMap) fetch('http://127.0.0.1:7242/ingest/08043545-943c-47f4-96ac-88ee42089f72',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app-controller.js:getMatchTeamEntry',message:'from teamNamesMap',data:{matchIndex,teamId,returned:fromMap},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
-        // #endregion
-        return fromMap;
+        if (!entry || !entry.name) return entry;
+        // Only show a team name if it's in the current synced list (never show old file-upload names like Aston Villa)
+        if (useRandom) {
+            const synced = Array.isArray(this.storage.getData().uploadedTeamEntries) ? this.storage.getData().uploadedTeamEntries : [];
+            const inList = synced.some(s => (s && s.name || '').trim() === (entry.name || '').trim());
+            if (!inList) return null;
+        }
+        return entry;
     }
 
     /**
@@ -740,6 +758,42 @@ class AppController {
             countEl.textContent = n > 0 ? `(${n} names saved)` : '';
             countEl.style.display = n > 0 ? 'inline' : 'none';
         }
+    }
+
+    /**
+     * Show modal with the list of team names (from sync or file).
+     * @param {Array<{ league: string, name: string }>|undefined} entries - If omitted, uses uploadedTeamEntries from storage.
+     */
+    showSyncedTeamsListModal(entries = null) {
+        const list = entries ?? (this.storage.getData().uploadedTeamEntries || []);
+        const titleEl = document.getElementById('syncedTeamsListModalTitle');
+        const bodyEl = document.getElementById('syncedTeamsListBody');
+        const modal = document.getElementById('syncedTeamsListModal');
+        if (!titleEl || !bodyEl || !modal) return;
+        if (titleEl) titleEl.textContent = list.length ? `Team names (${list.length})` : 'Team names list';
+        if (list.length === 0) {
+            bodyEl.innerHTML = '<p class="screen-description" style="margin: 0;">No team names saved yet. Sync Top Teams to download the list.</p>';
+        } else {
+            const byLeague = new Map();
+            for (const e of list) {
+                const league = (e && e.league) ? String(e.league).trim() : '(No league)';
+                const name = (e && e.name) ? String(e.name).trim() : '';
+                if (!name) continue;
+                if (!byLeague.has(league)) byLeague.set(league, []);
+                byLeague.get(league).push(name);
+            }
+            const parts = [];
+            for (const [league, names] of [...byLeague.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+                parts.push(`<div style="margin-bottom: 0.75rem;"><strong style="color: var(--text-secondary);">${this.escapeHtml(league)}</strong><ul style="margin: 0.25rem 0 0 1.25rem; padding: 0;">${names.map(n => `<li>${this.escapeHtml(n)}</li>`).join('')}</ul></div>`);
+            }
+            bodyEl.innerHTML = parts.join('') || '<p class="screen-description" style="margin: 0;">No team names.</p>';
+        }
+        modal.style.display = 'flex';
+    }
+
+    closeSyncedTeamsListModal() {
+        const modal = document.getElementById('syncedTeamsListModal');
+        if (modal) modal.style.display = 'none';
     }
 
     // Helper function to format team with player colors
@@ -1323,17 +1377,7 @@ class AppController {
             useSameTeamPerRoundCheck.checked = this.settingsManager.getUseSameTeamPerRound();
             useSameTeamPerRoundCheck.onchange = () => this.settingsManager.setUseSameTeamPerRound(useSameTeamPerRoundCheck.checked);
         }
-        const teamNamesFileInput = document.getElementById('teamNamesFileInput');
-        const teamNamesChooseFileBtn = document.getElementById('teamNamesChooseFileBtn');
         const teamNamesLoadedCount = document.getElementById('teamNamesLoadedCount');
-        if (teamNamesFileInput && teamNamesChooseFileBtn) {
-            teamNamesChooseFileBtn.onclick = () => teamNamesFileInput.click();
-            teamNamesFileInput.onchange = (e) => {
-                const f = e.target.files && e.target.files[0];
-                if (f) this.onTeamNamesFileChosen(f);
-                e.target.value = '';
-            };
-        }
         if (teamNamesLoadedCount) {
             const n = this.getUploadedTeamNamesCount();
             teamNamesLoadedCount.textContent = n > 0 ? `(${n} names saved)` : '';
@@ -1524,12 +1568,12 @@ class AppController {
                 // already updated in assignRandomTeamNamesToCurrentSeason
             } else if (entries.length > 0) {
                 this.toastManager.warning(
-                    needCount === 1 ? 'Need at least 1 team in file.' : `File has ${entries.length} teams but you need ${needCount}. Using player names for this session.`,
+                    needCount === 1 ? 'Need at least 1 team from sync.' : `Synced list has ${entries.length} teams but you need ${needCount}. Using player names for this session.`,
                     'Not Enough Names'
                 );
             } else {
                 this.toastManager.warning(
-                    'Upload a .txt or .csv file via "Choose file" below. Using player names until then.',
+                    'Sync Top Teams to download team names, then try again. Using player names until then.',
                     'Random Names Unavailable'
                 );
             }
@@ -4016,6 +4060,27 @@ class AppController {
         if (darkModeSetting) {
             darkModeSetting.checked = settings.darkMode || false;
         }
+
+        // Load Football API key (stored in localStorage)
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        if (apiKeyInput) {
+            apiKeyInput.value = this.settingsManager.getFootballApiKey() || '';
+        }
+    }
+
+    updateAdminUI() {
+        const statusText = document.getElementById('adminStatusText');
+        const pinRow = document.querySelector('#adminStatus .pin-row');
+        const setupRow = document.getElementById('adminPinSetupRow');
+        const lockBtn = document.getElementById('adminLockBtn');
+        const resetBtn = document.getElementById('adminResetPinBtn');
+        const hasPin = !!(this.storage.getData().adminPin);
+
+        if (statusText) statusText.textContent = this.isAdmin ? 'Admin unlocked' : 'Admin locked';
+        if (pinRow) pinRow.style.display = this.isAdmin ? 'none' : 'flex';
+        if (setupRow) setupRow.style.display = (!hasPin && !this.isAdmin) ? 'flex' : 'none';
+        if (lockBtn) lockBtn.style.display = this.isAdmin ? 'inline-block' : 'none';
+        if (resetBtn) resetBtn.style.display = this.isAdmin ? 'inline-block' : 'none';
     }
 
     loadSettingsScreen() {
@@ -4028,6 +4093,9 @@ class AppController {
         // Render player colors
         this.renderPlayerColors();
 
+        // Update admin status UI
+        this.updateAdminUI();
+
         // Display app version - extract from service worker cache or use constant
         const versionDisplay = document.getElementById('appVersionDisplay');
         if (versionDisplay) {
@@ -4037,7 +4105,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.87.0';
+            bannerVersion.textContent = 'Version 1.92.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
@@ -4195,6 +4263,7 @@ class AppController {
             screen: this.currentScreen,
             selectedStructureIndex: this.selectedStructureIndex,
             selectedStructure: this.selectedStructure,
+            selectedAllStructures: this.selectedAllStructures,
             currentGameIndex: this.currentGameIndex,
             currentMatch: this.currentMatch
         };
@@ -4215,6 +4284,7 @@ class AppController {
         this.currentScreen = savedState.screen || this.currentScreen;
         this.selectedStructureIndex = savedState.selectedStructureIndex;
         this.selectedStructure = savedState.selectedStructure;
+        this.selectedAllStructures = savedState.selectedAllStructures === true;
         this.currentGameIndex = savedState.currentGameIndex || 0;
         this.currentMatch = savedState.currentMatch;
 
@@ -4231,12 +4301,14 @@ class AppController {
                 // Saved structure is no longer valid (players changed), clear it
                 this.selectedStructure = null;
                 this.selectedStructureIndex = null;
+                this.selectedAllStructures = false;
                 this.currentGameIndex = 0;
                 this.currentMatch = null;
                 this.storage.saveCurrentGameState({
                     screen: this.currentScreen,
                     selectedStructureIndex: null,
                     selectedStructure: null,
+                    selectedAllStructures: false,
                     currentGameIndex: 0,
                     currentMatch: null
                 });
@@ -4472,15 +4544,6 @@ class AppController {
         }
     }
 
-    loadSettingsScreen() {
-        this.updateAdminUI();
-        // Load other settings as needed
-        const darkModeSetting = document.getElementById('darkModeSetting');
-        if (darkModeSetting) {
-            darkModeSetting.checked = this.settingsManager.isDarkMode();
-        }
-    }
-
     // ===== SESSION WIZARD METHODS =====
 
     loadUiMode() {
@@ -4557,7 +4620,9 @@ class AppController {
             selectedStructureIndex: this.sessionSelectedStructureIndex,
             selectedStructure: this.sessionSelectedStructure,
             availableStructures: this.sessionAvailableStructures,
-            started: this.sessionStarted
+            started: this.sessionStarted,
+            currentGameIndex: this.currentGameIndex,
+            currentMatch: this.currentMatch
         };
 
         try {
@@ -4579,6 +4644,13 @@ class AppController {
                 this.sessionSelectedStructure = savedState.selectedStructure || null;
                 this.sessionAvailableStructures = Array.isArray(savedState.availableStructures) ? [...savedState.availableStructures] : [];
                 this.sessionStarted = savedState.started || false;
+                this.currentGameIndex = typeof savedState.currentGameIndex === 'number' ? savedState.currentGameIndex : 0;
+                this.currentMatch = savedState.currentMatch || null;
+                // So match step can display: sync selectedStructure/currentMatch from session state
+                if (this.sessionWizardStep === 'match' && this.sessionSelectedStructure) {
+                    this.selectedStructure = this.sessionSelectedStructure;
+                    this.currentMatch = (this.selectedStructure.matches && this.selectedStructure.matches[this.currentGameIndex]) || null;
+                }
             }
         } catch (e) {
             console.warn('Could not restore session state:', e);
@@ -4615,6 +4687,9 @@ class AppController {
         // Only reset if we don't have saved state
         if (!this.sessionStarted) {
             this.resetSessionWizard();
+        } else if (this.sessionPlayers.length === 0 && this.playerManager.getPlayers().length > 0) {
+            // In advanced mode we don't restore session state; pre-populate from advanced players
+            this.sessionPlayers = [...this.playerManager.getPlayers()];
         }
 
         this.renderCurrentSessionStep();
@@ -4801,7 +4876,7 @@ class AppController {
         };
         teamOptions.appendChild(randomizeBtn);
 
-        // Use random team names from file
+        // Use random team names from synced list
         const randomTeamsWrap = document.createElement('label');
         randomTeamsWrap.className = 'checkbox-label';
         randomTeamsWrap.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; cursor: pointer;';
@@ -4814,7 +4889,7 @@ class AppController {
             this.saveSessionState();
         });
         const randomTeamsLabel = document.createElement('span');
-        randomTeamsLabel.textContent = 'Use random team names from file (.txt or .csv)';
+        randomTeamsLabel.textContent = 'Use random team names from synced list';
         randomTeamsWrap.appendChild(randomTeamsCheck);
         randomTeamsWrap.appendChild(randomTeamsLabel);
         teamOptions.appendChild(randomTeamsWrap);
@@ -4859,32 +4934,41 @@ class AppController {
         sameClubHint.textContent = 'Leave unchecked for a different club each round. If you see the same club every round, uncheck this and continue again.';
         teamOptions.appendChild(sameClubHint);
 
-        const fileRow = document.createElement('div');
-        fileRow.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;';
-        const fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.accept = '.txt,.csv';
-        fileInput.style.display = 'none';
-        fileInput.addEventListener('change', (e) => {
-            const f = e.target.files && e.target.files[0];
-            if (f) this.onTeamNamesFileChosen(f);
-            e.target.value = '';
-        });
-        const chooseFileBtn = document.createElement('button');
-        chooseFileBtn.type = 'button';
-        chooseFileBtn.className = 'btn btn-secondary';
-        chooseFileBtn.textContent = 'Choose file…';
-        chooseFileBtn.onclick = () => fileInput.click();
-        fileRow.appendChild(fileInput);
-        fileRow.appendChild(chooseFileBtn);
+        const syncRow = document.createElement('div');
+        syncRow.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap;';
+        const sessionSyncBtn = document.createElement('button');
+        sessionSyncBtn.type = 'button';
+        sessionSyncBtn.className = 'btn btn-secondary';
+        sessionSyncBtn.textContent = 'Sync Top Teams';
+        sessionSyncBtn.title = 'Fetch top 5 teams from Premier League, La Liga, Bundesliga, Ligue 1';
+        sessionSyncBtn.onclick = async () => {
+            sessionSyncBtn.disabled = true;
+            const result = await syncTeamsFromOnline({ toastManager: this.toastManager, storage: this.storage });
+            sessionSyncBtn.disabled = false;
+            if (result.success) {
+                this.updateTeamNamesSavedCountUI();
+                this.settingsManager.setUseRandomTeams(true);
+                randomTeamsCheck.checked = true;
+                this.renderSessionTeamsStep();
+                if (result.entries && result.entries.length) this.showSyncedTeamsListModal(result.entries);
+            }
+        };
+        const sessionViewListBtn = document.createElement('button');
+        sessionViewListBtn.type = 'button';
+        sessionViewListBtn.className = 'btn btn-secondary';
+        sessionViewListBtn.textContent = 'View list';
+        sessionViewListBtn.title = 'View the list of team names from sync';
+        sessionViewListBtn.onclick = () => this.showSyncedTeamsListModal();
+        syncRow.appendChild(sessionSyncBtn);
+        syncRow.appendChild(sessionViewListBtn);
         const savedCount = this.getUploadedTeamNamesCount();
         if (savedCount > 0) {
             const savedLabel = document.createElement('span');
             savedLabel.className = 'screen-description';
-            savedLabel.textContent = `(${savedCount} names saved)`;
-            fileRow.appendChild(savedLabel);
+            savedLabel.textContent = `(${savedCount} names from sync)`;
+            syncRow.appendChild(savedLabel);
         }
-        teamOptions.appendChild(fileRow);
+        teamOptions.appendChild(syncRow);
 
         // Add description
         const description = document.createElement('p');
@@ -5245,12 +5329,12 @@ class AppController {
                 });
             } else if (entries.length > 0) {
                 this.toastManager.warning(
-                    needCount === 1 ? 'Need at least 1 team in file.' : `File has ${entries.length} teams but you need ${needCount}. Using player names for this session.`,
+                    needCount === 1 ? 'Need at least 1 team from sync.' : `Synced list has ${entries.length} teams but you need ${needCount}. Using player names for this session.`,
                     'Not Enough Names'
                 );
             } else {
                 this.toastManager.warning(
-                    'Upload a .txt or .csv file via "Choose file" below. Using player names until then.',
+                    'Sync Top Teams to download team names, then try again. Using player names until then.',
                     'Random Names Unavailable'
                 );
             }
@@ -5274,6 +5358,7 @@ class AppController {
         this.sessionWizardStep = 'match';
         this.renderSessionMatchStep();
         this.updateSessionStepper();
+        this.saveSessionState();
     }
 
     async submitSessionScore() {
@@ -5340,7 +5425,8 @@ class AppController {
 
             // Advance to next match or show completion
             this.currentGameIndex++;
-            
+            this.saveSessionState();
+
             if (this.selectedStructure && this.currentGameIndex < this.selectedStructure.matches.length) {
                 // More matches to play - show next match CTA (button already exists in HTML)
                 document.getElementById('sessionNextMatchCTA').style.display = 'block';
@@ -5364,6 +5450,7 @@ class AppController {
                 
                 // Reset to first match for replay if needed
                 this.currentGameIndex = 0;
+                this.saveSessionState();
             }
         } else {
             this.toastManager.error('Error recording match result');
@@ -5400,5 +5487,50 @@ class AppController {
                 break;
         }
     }
+}
+
+export { AppController };
+
+// Bootstrap: create app when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    window.appController = new AppController();
+});
+
+// Register service worker for PWA with update checking
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        const basePath = window.location.pathname.includes('/Fc25-score-keeper/') ? '/Fc25-score-keeper/' : '/';
+        navigator.serviceWorker.register(`${basePath}service-worker.js`, {
+            scope: basePath,
+            updateViaCache: 'none'
+        })
+            .then(reg => {
+                console.log('Service Worker registered');
+                reg.update();
+                setInterval(() => reg.update(), 3600000);
+                reg.addEventListener('updatefound', () => {
+                    const newWorker = reg.installing;
+                    if (newWorker) {
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                console.log('New service worker available');
+                                if (confirm('A new version is available! Reload to update?')) {
+                                    window.location.reload();
+                                }
+                            }
+                        });
+                    }
+                });
+            })
+            .catch(err => console.log('Service Worker registration failed:', err));
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!refreshing) {
+                refreshing = true;
+                console.log('Service worker updated, reloading page...');
+                window.location.reload();
+            }
+        });
+    });
 }
 

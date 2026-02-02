@@ -167,5 +167,30 @@ class SettingsManager {
         return this.saveSettings();
     }
 
+    // Football Data API key (stored separately in localStorage for security)
+    getFootballApiKey() {
+        try {
+            return localStorage.getItem('FOOTBALL_API_KEY') || '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    setFootballApiKey(key) {
+        try {
+            if (key && key.trim()) {
+                localStorage.setItem('FOOTBALL_API_KEY', key.trim());
+            } else {
+                localStorage.removeItem('FOOTBALL_API_KEY');
+            }
+            return true;
+        } catch (e) {
+            console.error('Error saving API key:', e);
+            return false;
+        }
+    }
+
 }
+
+export { SettingsManager };
 
