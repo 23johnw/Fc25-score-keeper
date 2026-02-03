@@ -710,6 +710,14 @@
                             <button id="saveApiKeyBtn" class="btn btn-primary" style="padding: 0.5rem;">Save Key</button>
                         </div>
                     </div>
+                    <div class="settings-group" style="margin-top: 1rem;">
+                        <label for="corsProxyKeyInput">CORS proxy key (for Sync on phone):</label>
+                        <p class="settings-description" style="margin-top: 0.25rem;">Required for Sync Top Teams on mobile. Get a free key at <a href="https://cors.sh/" target="_blank" rel="noopener">cors.sh</a>, then paste it here and save.</p>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <input type="password" id="corsProxyKeyInput" class="settings-input" placeholder="Optional – paste cors.sh API key for mobile sync" autocomplete="off" style="flex: 1;">
+                            <button id="saveCorsProxyKeyBtn" class="btn btn-secondary" style="padding: 0.5rem;">Save</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="settings-section">
                     <h3>Shared League</h3>

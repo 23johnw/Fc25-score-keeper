@@ -383,6 +383,15 @@ class AppController {
                 this.toastManager.success('API key saved');
             });
         }
+        const saveCorsProxyKeyBtn = document.getElementById('saveCorsProxyKeyBtn');
+        if (saveCorsProxyKeyBtn) {
+            saveCorsProxyKeyBtn.addEventListener('click', () => {
+                const corsProxyKeyInput = document.getElementById('corsProxyKeyInput');
+                const key = corsProxyKeyInput ? corsProxyKeyInput.value : '';
+                this.settingsManager.setCorsProxyApiKey(key);
+                this.toastManager.success(key ? 'CORS proxy key saved – Sync on phone should work' : 'CORS proxy key cleared');
+            });
+        }
         document.getElementById('backFromSettingsBtn').addEventListener('click', () => this.showScreen('playerScreen'));
         document.getElementById('resetLabelsBtn').addEventListener('click', () => this.resetLabels());
         document.getElementById('exportDataSettingsBtn').addEventListener('click', () => this.exportData());
@@ -4065,6 +4074,10 @@ class AppController {
         const apiKeyInput = document.getElementById('apiKeyInput');
         if (apiKeyInput) {
             apiKeyInput.value = this.settingsManager.getFootballApiKey() || '';
+        }
+        const corsProxyKeyInput = document.getElementById('corsProxyKeyInput');
+        if (corsProxyKeyInput) {
+            corsProxyKeyInput.value = this.settingsManager.getCorsProxyApiKey() || '';
         }
     }
 

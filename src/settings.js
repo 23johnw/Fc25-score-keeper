@@ -190,6 +190,29 @@ class SettingsManager {
         }
     }
 
+    // CORS proxy API key (for mobile sync - cors.sh forwards headers to football-data.org)
+    getCorsProxyApiKey() {
+        try {
+            return localStorage.getItem('CORS_PROXY_API_KEY') || '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    setCorsProxyApiKey(key) {
+        try {
+            if (key && key.trim()) {
+                localStorage.setItem('CORS_PROXY_API_KEY', key.trim());
+            } else {
+                localStorage.removeItem('CORS_PROXY_API_KEY');
+            }
+            return true;
+        } catch (e) {
+            console.error('Error saving CORS proxy key:', e);
+            return false;
+        }
+    }
+
 }
 
 export { SettingsManager };

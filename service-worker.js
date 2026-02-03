@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fc25-score-tracker-v110';
+const CACHE_NAME = 'fc25-score-tracker-v111';
 
 // Determine base path from the SW scope.
 // - Root scope is usually "/"  -> BASE_PATH = ""

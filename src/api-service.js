@@ -4,6 +4,7 @@
 
 const API_BASE = 'https://api.football-data.org/v4';
 const CORS_PROXY = 'https://corsproxy.io/?';
+const CORS_SH_PROXY = 'https://proxy.cors.sh/';
 const LEAGUE_CODES = ['PL', 'PD', 'BL1', 'FL1'];
 const LEAGUE_NAMES = {
     PL: 'Premier League',
@@ -27,16 +28,52 @@ function shouldUseProxyFirst() {
     return true;
 }
 
+function getCorsProxyKey() {
+    try {
+        return (typeof localStorage !== 'undefined' && localStorage.getItem('CORS_PROXY_API_KEY')) || '';
+    } catch (e) {
+        return '';
+    }
+}
+
 async function fetchWithCorsFallback(url, headers) {
     const proxyUrl = CORS_PROXY + encodeURIComponent(url);
     const useProxyFirst = shouldUseProxyFirst();
+    const corsShKey = (getCorsProxyKey() || '').trim();
+
+    // proxy.cors.sh forwards headers to the target (needed for X-Auth-Token on mobile)
+    async function doFetchCorsSh() {
+        return fetch(CORS_SH_PROXY + url, {
+            headers: {
+                'x-cors-api-key': corsShKey,
+                'X-Auth-Token': headers['X-Auth-Token'] || ''
+            }
+        });
+    }
 
     async function doFetch(useProxy) {
         const target = useProxy ? proxyUrl : url;
         return fetch(target, { headers });
     }
 
+    if (useProxyFirst && corsShKey) {
+        try {
+            const res = await doFetchCorsSh();
+            if (res.ok || res.status === 401 || res.status === 403) return res;
+            throw new Error(`HTTP ${res.status}`);
+        } catch (err) {
+            const isCorsOrNetwork = !err.message || err.message.includes('Failed to fetch') ||
+                err.message.includes('NetworkError') || err.name === 'TypeError' ||
+                err.message.includes('Load failed');
+            if (isCorsOrNetwork) {
+                return doFetch(true);
+            }
+            throw err;
+        }
+    }
+
     if (useProxyFirst) {
+        // On phone/deployed: try corsproxy.io first; it often fails. Without a cors.sh key we throw a clear error.
         try {
             const res = await doFetch(true);
             if (res.ok || res.status === 401 || res.status === 403) return res;
@@ -46,7 +83,14 @@ async function fetchWithCorsFallback(url, headers) {
                 err.message.includes('NetworkError') || err.name === 'TypeError' ||
                 err.message.includes('Load failed');
             if (isCorsOrNetwork) {
-                return doFetch(false);
+                try {
+                    const res = await doFetch(false);
+                    if (res.ok || res.status === 401 || res.status === 403) return res;
+                    throw new Error(`HTTP ${res.status}`);
+                } catch (err2) {
+                    // Both proxy and direct failed on phone/deployed — tell user to add cors.sh key
+                    throw new Error('CORS_PROXY_NEEDED');
+                }
             }
             throw err;
         }

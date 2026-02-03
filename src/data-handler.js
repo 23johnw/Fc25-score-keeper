@@ -272,8 +272,10 @@ export async function syncTeamsFromOnline(opts = {}) {
         let msg = err?.message || 'Sync failed';
         if (msg.includes('No API key')) {
             msg = 'No API Key found. Add your key in Settings > Data > External Services.';
+        } else if (msg.includes('CORS_PROXY_NEEDED') || msg.includes('401') || msg.includes('Unauthorized')) {
+            msg = 'Sync on this device needs a CORS proxy key. In Settings > Data > External Services add a free key from cors.sh, save, then try Sync again.';
         } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('CORS') || msg.includes('blocked')) {
-            msg = 'Network/CORS error. Try running the app on http://localhost (port 80) or deploy it—football-data.org may block localhost:3000.';
+            msg = 'Sync on this device needs a CORS proxy key. In Settings > Data > External Services add a free key from cors.sh, save, then try Sync again.';
         }
         if (toast) show(msg, 'error', 'Error');
         return { success: false, error: msg };
