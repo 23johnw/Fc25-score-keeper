@@ -136,7 +136,7 @@ So: *vanilla JS + HTML/CSS + localStorage PWA, with Chart.js and jsPDF from CDN.
 | **Split AppController** | ~~Break into screen modules.~~ **Done:** Nine screen modules in `src/screens/` (more, history, settings, players, teams, sequence, match, stats, session). The main controller wires them via `registerScreens()` and `loadScreen()`. See `src/screens/README.md`. |
 | **Centralize DOM IDs** | Replace repeated `document.getElementById('...')` with a small “DOM refs” module or constants so renames and structure changes are easier. |
 | **Remove or gate debug agent** | The inline script in `index.html` that POSTs to `http://127.0.0.1:7249/ingest/...` will fail in production and can clutter the console. Remove or guard with a build flag / env check. |
-| **README vs code** | README still mentions `app.js` and an older structure. Update it to match current entry point (`app-controller.js`) and file layout. |
+| **README vs code** | ~~README still mentions `app.js` and an older structure.~~ **Done:** README now reflects the ES module structure and points at `src/app-controller.js` / `src/screens/`. |
 
 ---
 

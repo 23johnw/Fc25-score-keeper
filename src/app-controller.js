@@ -14,9 +14,18 @@ import { StatisticsDisplay } from './statistics-display.js';
 import { ShareManager } from './share.js';
 import { TouchSwipeHandler } from './touch.js';
 import { STAT_GROUPS } from './stats-calculators.js';
+import { APP_VERSION } from './constants.js';
 import { syncTeamsFromOnline } from './data-handler.js';
 import { SUPPORTED_LEAGUES, getLeagueDisplay } from './api-service.js';
 import { getLogText, clear as clearDebugLog } from './debug-log.js';
+import {
+    initializeByDatePanel as initializeByDatePanelHelper,
+    toggleByDatePanel as toggleByDatePanelHelper,
+    updatePlayedDates as updatePlayedDatesHelper,
+    renderByDateList as renderByDateListHelper,
+    clearByDateFilter as clearByDateFilterHelper,
+    applyByDateFilter as applyByDateFilterHelper
+} from './history-viewer.js';
 import { registerScreens, loadScreen } from './screens/index.js';
 import './stats-view-toggler-global.js';
 
@@ -124,7 +133,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.116.0';
+            bannerVersion.textContent = `Version ${APP_VERSION}`;
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
@@ -658,7 +667,7 @@ class AppController {
 
     addPlayerRow() {
         if (this.playerEditorValues.length >= 4) {
-            alert('Maximum 4 players allowed');
+            this.toastManager.warning('Maximum 4 players allowed');
             return;
         }
         this.playerEditorValues.push('');
@@ -667,6 +676,11 @@ class AppController {
 
     removePlayerRow(index) {
         if (index < 0 || index >= this.playerEditorValues.length) return;
+        const removedName = (this.playerEditorValues[index] || '').trim();
+        if (removedName) {
+            const ok = confirm(`Remove "${removedName}" from the editor? (Not saved until you tap Save)`);
+            if (!ok) return;
+        }
         this.playerEditorValues.splice(index, 1);
         if (this.playerEditorValues.length === 0) {
             this.playerEditorValues = ['', ''];
@@ -1554,134 +1568,27 @@ class AppController {
 
     // By Date / Custom Stats helpers
     initializeByDatePanel() {
-        const closeBtn = document.getElementById('closeByDatePanel');
-        const applyBtn = document.getElementById('applyByDateBtn');
-        const clearBtn = document.getElementById('clearByDateBtn');
-        const listContainer = document.getElementById('byDateList');
-        const fromInput = document.getElementById('byDateFrom');
-        const toInput = document.getElementById('byDateTo');
-
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => this.toggleByDatePanel(false));
-        }
-        if (applyBtn) {
-            applyBtn.addEventListener('click', () => this.applyByDateFilter());
-        }
-        if (clearBtn) {
-            clearBtn.addEventListener('click', () => this.clearByDateFilter());
-        }
-
-        if (listContainer) {
-            this.renderByDateList(listContainer);
-        }
-
-        if (fromInput) {
-            fromInput.addEventListener('change', (e) => {
-                this.currentByDateFilter.from = e.target.value || null;
-                this.currentByDateFilter.selectedDate = null;
-            });
-        }
-        if (toInput) {
-            toInput.addEventListener('change', (e) => {
-                this.currentByDateFilter.to = e.target.value || null;
-                this.currentByDateFilter.selectedDate = null;
-            });
-        }
+        return initializeByDatePanelHelper(this);
     }
 
     toggleByDatePanel(show = false) {
-        const panel = document.getElementById('byDatePanel');
-        if (!panel) return;
-        panel.style.display = show ? 'block' : 'none';
-        if (show) {
-            const listContainer = document.getElementById('byDateList');
-            if (listContainer) {
-                this.renderByDateList(listContainer);
-            }
-        }
+        return toggleByDatePanelHelper(this, show);
     }
 
     updatePlayedDates() {
-        const allMatches = this.statisticsTracker.getAllMatches();
-        const dateSet = new Set();
-        allMatches.forEach(match => {
-            if (match && match.timestamp) {
-                const dateKey = new Date(match.timestamp).toISOString().split('T')[0];
-                dateSet.add(dateKey);
-            }
-        });
-        this.playedDates = Array.from(dateSet).sort((a, b) => new Date(b) - new Date(a));
-
-        const listContainer = document.getElementById('byDateList');
-        const panel = document.getElementById('byDatePanel');
-        if (panel && panel.style.display !== 'none' && listContainer) {
-            this.renderByDateList(listContainer);
-        }
+        return updatePlayedDatesHelper(this);
     }
 
     renderByDateList(container) {
-        container.style.maxHeight = '240px';
-        container.style.overflowY = 'auto';
-        const dates = this.playedDates || [];
-        if (dates.length === 0) {
-            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📅</div><h4>No Dates</h4><p>Play some matches to enable date filtering.</p></div>';
-            return;
-        }
-        container.innerHTML = dates.map(dateStr => {
-            const isSelected = this.currentByDateFilter.selectedDate === dateStr;
-            return `
-                <button class="by-date-pill ${isSelected ? 'selected' : ''}" data-date="${dateStr}">
-                    ${dateStr}
-                </button>
-            `;
-        }).join('');
-
-        container.querySelectorAll('.by-date-pill').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const chosen = btn.dataset.date;
-                this.currentByDateFilter.selectedDate = chosen;
-                this.currentByDateFilter.from = chosen;
-                this.currentByDateFilter.to = chosen;
-                const fromInput = document.getElementById('byDateFrom');
-                const toInput = document.getElementById('byDateTo');
-                if (fromInput) fromInput.value = chosen;
-                if (toInput) toInput.value = chosen;
-                this.renderByDateList(container);
-            });
-        });
+        return renderByDateListHelper(this, container);
     }
 
     clearByDateFilter() {
-        this.currentByDateFilter = { from: null, to: null, selectedDate: null };
-        const fromInput = document.getElementById('byDateFrom');
-        const toInput = document.getElementById('byDateTo');
-        if (fromInput) fromInput.value = '';
-        if (toInput) toInput.value = '';
-        const listContainer = document.getElementById('byDateList');
-        if (listContainer) this.renderByDateList(listContainer);
-        this.updateCustomFilterSummary([]);
-        this.customFilterActive = false;
-        this.setByDateButtonActive(false);
-        this.showNormalStatsTabs();
+        return clearByDateFilterHelper(this);
     }
 
     applyByDateFilter() {
-        const { selectedDate, from, to } = this.currentByDateFilter || {};
-        let rangeFrom = null;
-        let rangeTo = null;
-
-        if (selectedDate) {
-            rangeFrom = selectedDate;
-            rangeTo = selectedDate;
-        } else {
-            rangeFrom = from || null;
-            rangeTo = to || null;
-        }
-
-        this.currentByDateFilter = { selectedDate: selectedDate || null, from: rangeFrom, to: rangeTo };
-        const matches = this.getCustomMatches();
-        this.renderCustomStatsSection(matches);
-        this.toggleByDatePanel(false);
+        return applyByDateFilterHelper(this);
     }
 
     // Undo last recorded match and re-show that matchup for correction
@@ -2184,7 +2091,7 @@ class AppController {
             await this.shareManager.shareImage(imageDataUrl, fileName);
         } catch (error) {
             console.error('Error sharing stats:', error);
-            alert('Error generating shareable image. Please try again.');
+            this.toastManager.error('Error generating shareable image. Please try again.');
         }
     }
 
@@ -2318,11 +2225,7 @@ class AppController {
             if (this.lastPDFBlobUrl) {
                 window.open(this.lastPDFBlobUrl, '_blank');
             } else {
-                if (this.toastManager) {
-                    this.toastManager.error('No PDF available. Please export a PDF first.');
-                } else {
-                    alert('No PDF available. Please export a PDF first.');
-                }
+                this.toastManager.error('No PDF available. Please export a PDF first.');
             }
         } catch (error) {
             console.error('Error viewing PDF:', error);
@@ -2351,7 +2254,7 @@ class AppController {
             await this.shareManager.shareImage(imageDataUrl, fileName);
         } catch (error) {
             console.error('Error sharing match:', error);
-            alert('Error generating shareable image. Please try again.');
+            this.toastManager.error('Error generating shareable image. Please try again.');
         }
     }
 
@@ -3445,7 +3348,7 @@ class AppController {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        alert('Data exported successfully!');
+        this.toastManager.success('Data exported successfully!');
     }
 
     async importData() {
@@ -3484,11 +3387,11 @@ class AppController {
                     this.storage.updateData(data => {
                         Object.assign(data, importedData);
                     });
-                    alert('Data imported successfully! Reloading...');
-                    location.reload();
+                    this.toastManager.success('Data imported successfully! Reloading...');
+                    setTimeout(() => location.reload(), 400);
                 }
             } catch (error) {
-                alert('Error importing data: ' + error.message);
+                this.toastManager.error('Error importing data: ' + error.message);
             }
         };
         reader.readAsText(file);
@@ -3612,7 +3515,7 @@ class AppController {
         if (!trimmed) return;
 
         if (this.playerEditorValues.some(value => (value || '').trim() === trimmed)) {
-            alert(`${trimmed} is already in the list.`);
+            this.toastManager.info(`${trimmed} is already in the list.`);
             return;
         }
 
@@ -3622,7 +3525,7 @@ class AppController {
         } else if (this.playerEditorValues.length < 4) {
             this.playerEditorValues.push(trimmed);
         } else {
-            alert('Maximum 4 players allowed');
+            this.toastManager.warning('Maximum 4 players allowed');
             return;
         }
 
@@ -3735,7 +3638,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.116.0';
+            bannerVersion.textContent = `Version ${APP_VERSION}`;
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
@@ -3746,21 +3649,35 @@ class AppController {
     async displayAppVersion(versionDisplayElement) {
         if (!versionDisplayElement) return;
         
-        // Try to get version from active cache name
+        // Try to get version from cache names.
+        // Important: multiple versions can exist briefly during SW updates (e.g. v116 + v117),
+        // and `caches.keys()` order is not guaranteed. Always pick the highest version.
         if ('caches' in window) {
             try {
                 const cacheNames = await caches.keys();
-                // Find the cache name that matches our pattern: fc25-score-tracker-vXX
-                const cacheName = cacheNames.find(name => name.startsWith('fc25-score-tracker-v'));
-                if (cacheName) {
-                    // Extract version number (e.g., "v72" -> "72")
-                    const versionMatch = cacheName.match(/v(\d+)/);
-                    if (versionMatch) {
-                        const cacheVersion = versionMatch[1];
-                        // Format as version number (e.g., "1.72.0")
-                        versionDisplayElement.textContent = `Version 1.${cacheVersion}.0`;
-                        return;
-                    }
+                const versions = cacheNames
+                    .map(name => {
+                        const m = name.match(/^fc25-score-tracker-v(\d+)$/);
+                        return m ? parseInt(m[1], 10) : null;
+                    })
+                    .filter(v => typeof v === 'number' && !Number.isNaN(v));
+
+                const highestCacheMinor = versions.length ? Math.max(...versions) : null;
+
+                const appMinor = (() => {
+                    const m = String(APP_VERSION || '').match(/^1\.(\d+)\./);
+                    return m ? parseInt(m[1], 10) : null;
+                })();
+
+                // Prefer whichever is higher so we never "downgrade" the UI to an older cached version.
+                const minor = Math.max(
+                    typeof highestCacheMinor === 'number' ? highestCacheMinor : -1,
+                    typeof appMinor === 'number' ? appMinor : -1
+                );
+
+                if (minor >= 0) {
+                    versionDisplayElement.textContent = `Version 1.${minor}.0`;
+                    return;
                 }
             } catch (error) {
                 console.error('Error reading cache names:', error);
@@ -3835,7 +3752,7 @@ class AppController {
         this.renderPlayerLockOptions();
         
         // Show success message
-        alert('Settings saved successfully!');
+        this.toastManager.success('Settings saved successfully!');
     }
 
     resetLabels() {

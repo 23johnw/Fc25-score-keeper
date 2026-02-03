@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fc25-score-tracker-v116';
+const CACHE_NAME = 'fc25-score-tracker-v117';
 
 // Determine base path from the SW scope.
 // - Root scope is usually "/"  -> BASE_PATH = ""
@@ -20,6 +20,7 @@ const urlsToCache = [
   `${BASE_PATH}/src/statistics-tracker.js`,
   `${BASE_PATH}/src/toast.js`,
   `${BASE_PATH}/src/statistics-display.js`,
+  `${BASE_PATH}/src/stats-view-toggler.js`,
   `${BASE_PATH}/src/match.js`,
   `${BASE_PATH}/src/season.js`,
   `${BASE_PATH}/src/share.js`,
@@ -28,10 +29,20 @@ const urlsToCache = [
   `${BASE_PATH}/src/api-service.js`,
   `${BASE_PATH}/src/data-handler.js`,
   `${BASE_PATH}/src/debug-log.js`,
+  `${BASE_PATH}/src/history-viewer.js`,
   `${BASE_PATH}/src/stats-view-toggler-global.js`,
   `${BASE_PATH}/src/main.js`,
-  // Legacy single-bundle (kept for compatibility)
-  `${BASE_PATH}/app.js`,
+  // Screen modules
+  `${BASE_PATH}/src/screens/index.js`,
+  `${BASE_PATH}/src/screens/more-screen.js`,
+  `${BASE_PATH}/src/screens/history-screen.js`,
+  `${BASE_PATH}/src/screens/settings-screen.js`,
+  `${BASE_PATH}/src/screens/players-screen.js`,
+  `${BASE_PATH}/src/screens/teams-screen.js`,
+  `${BASE_PATH}/src/screens/sequence-screen.js`,
+  `${BASE_PATH}/src/screens/match-screen.js`,
+  `${BASE_PATH}/src/screens/stats-screen.js`,
+  `${BASE_PATH}/src/screens/session-screen.js`,
   `${BASE_PATH}/manifest.json`,
   `${BASE_PATH}/icon-192.png`,
   `${BASE_PATH}/icon-512.png`
