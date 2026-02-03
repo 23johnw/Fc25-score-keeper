@@ -23,13 +23,21 @@ A Progressive Web App (PWA) for tracking FC 25 football match scores and statist
 
 ## Local Development
 
-1. **Simple HTTP Server**: Use Python's built-in server:
+1. **npm script (recommended)**:
+
+   ```bash
+   npm run start
+   ```
+
+   Then open `http://localhost:3000` in your browser.
+
+2. **Simple HTTP Server**: Use Python's built-in server:
    ```bash
    python -m http.server 8000
    ```
    Then open `http://localhost:8000` in your browser
 
-2. **Or use any local server**: Serve the files from the project directory
+3. **Or use any local server**: Serve the files from the project directory
 
 ## Usage
 
