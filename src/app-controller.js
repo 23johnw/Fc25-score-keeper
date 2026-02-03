@@ -666,7 +666,7 @@ class AppController {
 
     addPlayerRow() {
         if (this.playerEditorValues.length >= 4) {
-            alert('Maximum 4 players allowed');
+            this.toastManager.warning('Maximum 4 players allowed');
             return;
         }
         this.playerEditorValues.push('');
@@ -675,6 +675,11 @@ class AppController {
 
     removePlayerRow(index) {
         if (index < 0 || index >= this.playerEditorValues.length) return;
+        const removedName = (this.playerEditorValues[index] || '').trim();
+        if (removedName) {
+            const ok = confirm(`Remove "${removedName}" from the editor? (Not saved until you tap Save)`);
+            if (!ok) return;
+        }
         this.playerEditorValues.splice(index, 1);
         if (this.playerEditorValues.length === 0) {
             this.playerEditorValues = ['', ''];
@@ -2085,7 +2090,7 @@ class AppController {
             await this.shareManager.shareImage(imageDataUrl, fileName);
         } catch (error) {
             console.error('Error sharing stats:', error);
-            alert('Error generating shareable image. Please try again.');
+            this.toastManager.error('Error generating shareable image. Please try again.');
         }
     }
 
@@ -2219,11 +2224,7 @@ class AppController {
             if (this.lastPDFBlobUrl) {
                 window.open(this.lastPDFBlobUrl, '_blank');
             } else {
-                if (this.toastManager) {
-                    this.toastManager.error('No PDF available. Please export a PDF first.');
-                } else {
-                    alert('No PDF available. Please export a PDF first.');
-                }
+                this.toastManager.error('No PDF available. Please export a PDF first.');
             }
         } catch (error) {
             console.error('Error viewing PDF:', error);
@@ -2252,7 +2253,7 @@ class AppController {
             await this.shareManager.shareImage(imageDataUrl, fileName);
         } catch (error) {
             console.error('Error sharing match:', error);
-            alert('Error generating shareable image. Please try again.');
+            this.toastManager.error('Error generating shareable image. Please try again.');
         }
     }
 
@@ -3346,7 +3347,7 @@ class AppController {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        alert('Data exported successfully!');
+        this.toastManager.success('Data exported successfully!');
     }
 
     async importData() {
@@ -3385,11 +3386,11 @@ class AppController {
                     this.storage.updateData(data => {
                         Object.assign(data, importedData);
                     });
-                    alert('Data imported successfully! Reloading...');
-                    location.reload();
+                    this.toastManager.success('Data imported successfully! Reloading...');
+                    setTimeout(() => location.reload(), 400);
                 }
             } catch (error) {
-                alert('Error importing data: ' + error.message);
+                this.toastManager.error('Error importing data: ' + error.message);
             }
         };
         reader.readAsText(file);
@@ -3513,7 +3514,7 @@ class AppController {
         if (!trimmed) return;
 
         if (this.playerEditorValues.some(value => (value || '').trim() === trimmed)) {
-            alert(`${trimmed} is already in the list.`);
+            this.toastManager.info(`${trimmed} is already in the list.`);
             return;
         }
 
@@ -3523,7 +3524,7 @@ class AppController {
         } else if (this.playerEditorValues.length < 4) {
             this.playerEditorValues.push(trimmed);
         } else {
-            alert('Maximum 4 players allowed');
+            this.toastManager.warning('Maximum 4 players allowed');
             return;
         }
 
@@ -3736,7 +3737,7 @@ class AppController {
         this.renderPlayerLockOptions();
         
         // Show success message
-        alert('Settings saved successfully!');
+        this.toastManager.success('Settings saved successfully!');
     }
 
     resetLabels() {
