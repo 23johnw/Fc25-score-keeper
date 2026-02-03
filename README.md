@@ -56,7 +56,11 @@ Statistics are modular - new statistics can be easily added by registering new c
 ├── manifest.json       # PWA manifest for installation
 ├── service-worker.js   # Service worker for offline functionality
 ├── styles.css          # Mobile-responsive styling
-├── app.js              # Main application logic
+├── src/                # ES module source (loaded directly by browser)
+│   ├── app-controller.js  # Main controller / app entry module
+│   ├── main.js            # Service worker registration bootstrap
+│   ├── screens/           # One module per screen (Players/Teams/Match/Stats/etc.)
+│   └── ...                # Managers, persistence, stats, sharing, etc.
 └── README.md           # This file
 ```
 
@@ -83,7 +87,7 @@ The statistics system is modular. To add a new statistic:
 
 2. Register it: `StatisticsCalculators.register(yourCalculator)`
 
-See the existing calculators in `app.js` for examples.
+See the existing calculators in `src/stats-calculators.js` and how they are rendered in `src/statistics-display.js`.
 
 ## Future Enhancements
 

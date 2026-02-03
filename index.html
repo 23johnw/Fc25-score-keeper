@@ -14,6 +14,13 @@
     <script>
         // #region agent log
         (function () {
+            // This logger is only useful for local debugging (it posts to localhost).
+            // Keep it fully disabled in production to avoid console noise and wasted work.
+            const enableAgentLog =
+                (location.hostname === 'localhost' || location.hostname === '127.0.0.1') &&
+                /(?:\?|&)agentLog=1(?:&|$)/.test(location.search);
+            if (!enableAgentLog) return;
+
             const endpoint = 'http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a';
             const sessionId = 'debug-session';
             const runId = 'pre-fix';
