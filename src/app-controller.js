@@ -14,6 +14,7 @@ import { StatisticsDisplay } from './statistics-display.js';
 import { ShareManager } from './share.js';
 import { TouchSwipeHandler } from './touch.js';
 import { STAT_GROUPS } from './stats-calculators.js';
+import { APP_VERSION } from './constants.js';
 import { syncTeamsFromOnline } from './data-handler.js';
 import { SUPPORTED_LEAGUES, getLeagueDisplay } from './api-service.js';
 import { getLogText, clear as clearDebugLog } from './debug-log.js';
@@ -132,7 +133,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.116.0';
+            bannerVersion.textContent = `Version ${APP_VERSION}`;
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
@@ -3637,7 +3638,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.116.0';
+            bannerVersion.textContent = `Version ${APP_VERSION}`;
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
