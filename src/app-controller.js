@@ -122,7 +122,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.93.0';
+            bannerVersion.textContent = 'Version 1.113.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
@@ -4162,7 +4162,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.93.0';
+            bannerVersion.textContent = 'Version 1.113.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
