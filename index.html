@@ -11,8 +11,6 @@
     <title>FC 25 Score Tracker</title>
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="styles.css">
-    <!-- Chart.js for Data Visualization -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
         // #region agent log
         (function () {
@@ -63,6 +61,15 @@
     </script>
 </head>
 <body>
+    <!-- First-run onboarding overlay -->
+    <div id="onboardingOverlay" class="onboarding-overlay" style="display: none;" aria-hidden="true">
+        <div class="onboarding-modal">
+            <h2>How it works</h2>
+            <p class="onboarding-steps">Add players → Choose teams → Record matches → View stats</p>
+            <p class="screen-description">Use <strong>Session</strong> for a quick guided flow, or <strong>More</strong> for History and Settings.</p>
+            <button type="button" id="onboardingGotItBtn" class="btn btn-primary">Got it</button>
+        </div>
+    </div>
     <!-- Toast Notification Container -->
     <div id="toastContainer" class="toast-container"></div>
     <div id="byDatePanel" class="by-date-panel" style="display: none;">
@@ -118,7 +125,7 @@
                     <p class="screen-description">Tap Start to begin a guided session</p>
                     <button id="sessionStartBtn" class="btn btn-primary session-start-btn">Start</button>
                 </div>
-                <a href="#" id="sessionAdvancedModeBtn" class="session-advanced-link">Advanced</a>
+                <a href="#" id="sessionAdvancedModeBtn" class="session-advanced-link">Switch to full app</a>
             </div>
 
             <!-- Stepper Header -->
@@ -195,7 +202,7 @@
 
             <!-- Action Bar -->
             <div class="session-actions" id="sessionWizardActions" style="display:none;">
-                <a href="#" id="sessionAdvancedLink" class="session-advanced-link">Advanced Options</a>
+                <a href="#" id="sessionAdvancedLink" class="session-advanced-link">Exit session</a>
                 <button id="sessionContinueBtn" class="btn btn-primary session-continue-btn">Continue</button>
             </div>
         </div>
@@ -319,7 +326,10 @@
             <h2>Record Match</h2>
             <div class="match-info">
                 <div class="game-counter">
-                    <span id="currentGameNumber">1</span> / <span id="totalGames">1</span>
+                    Game <span id="currentGameNumber">1</span> of <span id="totalGames">1</span>
+                </div>
+                <div class="match-progress-bar" aria-hidden="true">
+                    <div class="match-progress-fill" id="matchProgressFill" style="width: 0%;"></div>
                 </div>
                 <div class="match-teams" id="matchTeams">
                     <div class="team-display">
@@ -473,8 +483,25 @@
                 <button id="newSeasonBtn" class="btn btn-primary">Start New Season</button>
                 <button id="exportDataBtn" class="btn btn-secondary">Export Data</button>
                 <button id="importDataBtn" class="btn btn-secondary">Import Data</button>
-                <button id="clearOverallStatsBtn" class="btn btn-secondary" style="background-color: #f44336;">Clear All Statistics (Testing)</button>
-                <button id="backToMenuBtn" class="btn btn-secondary">Back to Menu</button>
+                <button id="backToMenuBtn" class="btn btn-secondary">Back</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- More Screen (History + Settings) -->
+    <section id="moreScreen" class="screen">
+        <div class="screen-content">
+            <h2>More</h2>
+            <p class="screen-description">Match history and app settings</p>
+            <div class="more-options">
+                <button type="button" class="btn btn-primary more-option-btn" data-screen="historyScreen">
+                    <span class="more-option-icon">📋</span>
+                    <span>Match History</span>
+                </button>
+                <button type="button" class="btn btn-secondary more-option-btn" data-screen="settingsScreen">
+                    <span class="more-option-icon">⚙️</span>
+                    <span>Settings</span>
+                </button>
             </div>
         </div>
     </section>
@@ -777,9 +804,10 @@
                         <button id="exportDataSettingsBtn" class="btn btn-primary">Export All Data</button>
                         <button id="importDataSettingsBtn" class="btn btn-secondary">Import Data</button>
                         <button id="clearAllDataBtn" class="btn btn-secondary" style="background-color: #f44336; margin-top: 1rem;">Clear All Data</button>
+                        <button id="clearOverallStatsBtn" class="btn btn-secondary" style="background-color: #f44336; margin-top: 0.5rem;">Clear All Statistics (testing)</button>
                     </div>
                     <p class="settings-description" style="margin-top: 1rem; font-size: 0.85rem; color: #f44336;">
-                        Warning: Clearing all data cannot be undone. This will delete all matches, statistics, and settings.
+                        Warning: Clearing all data cannot be undone. This will delete all matches, statistics, and settings. Clear All Statistics removes stats and match history but keeps players.
                     </p>
                 </div>
                 <div class="settings-section" style="margin-top: 2rem;">
@@ -830,20 +858,15 @@
         <button class="nav-btn" data-screen="statsScreen">
             <span>Stats</span>
         </button>
-        <button class="nav-btn" data-screen="historyScreen">
-            <span>History</span>
-        </button>
-        <button class="nav-btn" data-screen="settingsScreen">
-            <span>Settings</span>
+        <button class="nav-btn" data-screen="moreScreen">
+            <span>More</span>
         </button>
     </nav>
 
     <!-- Hidden file input for import -->
     <input type="file" id="importFileInput" accept=".json" style="display: none;">
 
-    <!-- jsPDF library for PDF export -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    
+    <!-- Chart.js and jsPDF are lazy-loaded when Stats screen or PDF export is used -->
     <!-- Application scripts - single ES module entry point -->
     <script type="module" src="src/app-controller.js"></script>
 </body>

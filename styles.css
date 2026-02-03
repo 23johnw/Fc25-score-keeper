@@ -402,6 +402,8 @@ body.dark-mode .player-editable-item.absent .presence-text {
     min-height: 44px; /* Touch-friendly */
     display: flex;
     align-items: center;
+    justify-content: center;
+    text-align: center;
     position: relative;
     overflow: hidden;
 }
@@ -419,22 +421,27 @@ body.dark-mode .player-editable-item.absent .presence-text {
     transition: width 0.6s, height 0.6s;
 }
 
-.btn:active {
-    transform: scale(0.95);
-    transition: transform 0.1s ease-out;
+.btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
 }
+
+.btn:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease-out;
 }
 
 .btn:active::before {
     width: 300px;
     height: 300px;
-}
-
-.btn:active {
-    transform: scale(0.98);
-}
-    justify-content: center;
-    text-align: center;
 }
 
 .btn:disabled {
@@ -683,7 +690,7 @@ body.dark-mode .player-editable-item.absent .presence-text {
     border: 2px solid var(--border-color);
     border-radius: 8px;
     padding: 1rem;
-    margin-bottom: 0.75rem;
+    margin-bottom: 1rem;
     box-shadow: var(--shadow);
 }
 
@@ -706,6 +713,58 @@ body.dark-mode .player-editable-item.absent .presence-text {
     margin-right: auto;
 }
 
+/* Single-line league/team on sequence screen (deduplicated) */
+.sequence-item .match-league-row.sequence-single,
+.sequence-item .match-name-row.sequence-single {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.sequence-item .match-league-row.sequence-single .team-league,
+.sequence-item .match-name-row.sequence-single .team-name {
+    max-width: none;
+    flex: none;
+}
+
+.sequence-item .match-league-row.sequence-single {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.15rem;
+}
+
+.sequence-item .match-name-row.sequence-single {
+    font-weight: 600;
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Record Match screen: same single-line league/team styling */
+.match-teams .match-league-row.sequence-single,
+.match-teams .match-name-row.sequence-single {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.match-teams .match-league-row.sequence-single .team-league,
+.match-teams .match-name-row.sequence-single .team-name {
+    max-width: none;
+    flex: none;
+}
+
+.match-teams .match-league-row.sequence-single {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.15rem;
+}
+
+.match-teams .match-name-row.sequence-single {
+    font-weight: 600;
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+}
+
 /* Match Recording */
 .match-info {
     background-color: var(--surface-color);
@@ -720,7 +779,25 @@ body.dark-mode .player-editable-item.absent .presence-text {
     font-size: 1.1rem;
     font-weight: 600;
     color: var(--primary-color);
+    margin-bottom: 0.5rem;
+}
+
+.match-progress-bar {
+    height: 6px;
+    background-color: var(--border-color);
+    border-radius: 3px;
+    overflow: hidden;
     margin-bottom: 1rem;
+    max-width: 280px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.match-progress-fill {
+    height: 100%;
+    background-color: var(--primary-color);
+    border-radius: 3px;
+    transition: width 0.25s ease-out;
 }
 
 /* Match teams block: centered, two columns with clear gap */
@@ -2140,6 +2217,51 @@ body.dark-mode .insight-stats span {
     }
 }
 
+/* Onboarding overlay */
+.onboarding-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+    padding: 1rem;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.onboarding-modal {
+    background: var(--surface-color);
+    border-radius: 12px;
+    padding: 2rem;
+    max-width: 400px;
+    width: 100%;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+    text-align: center;
+}
+
+.onboarding-modal h2 {
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+.onboarding-steps {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--primary-color);
+    margin-bottom: 1rem;
+    line-height: 1.5;
+}
+
+.onboarding-modal .btn {
+    margin-top: 0.5rem;
+}
+
+body.dark-mode .onboarding-modal {
+    background: #1E1E1E;
+    color: #E0E0E0;
+}
+
 /* Loading and empty states */
 .empty-state {
     text-align: center;
@@ -2161,9 +2283,34 @@ body.dark-mode .insight-stats span {
 }
 
 .empty-state p {
-    margin-bottom: 1rem;
+    margin-bottom: 1.25rem;
     font-size: 0.95rem;
     line-height: 1.6;
+}
+
+.empty-state-cta {
+    margin-top: 0.5rem;
+}
+
+/* More screen options */
+.more-options {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.more-option-btn {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    font-size: 1.1rem;
+    text-align: left;
+}
+
+.more-option-icon {
+    font-size: 1.5rem;
 }
 
 @keyframes fadeIn {
@@ -2551,7 +2698,11 @@ body.dark-mode .stat-card,
 body.dark-mode .card,
 body.dark-mode .team-combination-card,
 body.dark-mode .round-structure-card,
-body.dark-mode .sequence-item,
+body.dark-mode .sequence-item {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
 .team-name-badge {
     font-size: 0.85rem;
     color: var(--text-secondary);

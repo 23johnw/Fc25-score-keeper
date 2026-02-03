@@ -52,7 +52,7 @@ graph TD
 ## Todos
 
 *   [remove-firestore-files] Delete all Firestore-related files and dependencies.
-*   [refactor-data-input] Create `src/data-handler.js` and move score/player input logic.
-*   [refactor-stats-display] Refactor `src/statistics-display.js` to manage reading/displaying statistics, encapsulating display logic.
-*   [refactor-history-viewer] Create `src/history-viewer.js` and move history viewing/filtering logic from `src/persistence.js`, encapsulating UI and data interaction for history.
-*   [update-app-controller] Update `src/app-controller.js` and other necessary modules to use the new, more modular functions and screen-specific modules.
+*   [refactor-data-input] Create `src/data-handler.js` and move score/player input logic. **Done** – `data-handler.js` exists and is used.
+*   [refactor-stats-display] Refactor `src/statistics-display.js` to manage reading/displaying statistics, encapsulating display logic. **Done** – `statistics-display.js` encapsulates stats rendering.
+*   [refactor-history-viewer] Create `src/history-viewer.js` and move history viewing/filtering logic from `src/persistence.js`, encapsulating UI and data interaction for history. **Done** – `history-viewer.js` exists; persistence still holds some by-date helpers that can be moved later if desired.
+*   [update-app-controller] Update `src/app-controller.js` and other necessary modules to use the new, more modular functions and screen-specific modules. **In progress** – Screen split started: `src/screens/` with `more-screen.js` and `registerScreens()`; further screens (players, teams, match, stats, history, settings) can be extracted into their own modules following the same pattern (see `src/screens/README.md`).

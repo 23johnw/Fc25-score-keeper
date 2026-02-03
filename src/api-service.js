@@ -8,23 +8,41 @@ const API_BASE = 'https://api.football-data.org/v4';
 const CORS_PROXY = 'https://corsproxy.io/?';
 const CORS_SH_PROXY = 'https://proxy.cors.sh/';
 
-/** Supported leagues for sync (code + display name). Free-tier only: football-data.org standings API. */
+/** Supported leagues for sync (code + display name + country). Free-tier only: football-data.org standings API. */
 export const SUPPORTED_LEAGUES = [
-    { code: 'CL', name: 'UEFA Champions League' },
-    { code: 'BL1', name: 'Bundesliga' },
-    { code: 'DED', name: 'Eredivisie' },
-    { code: 'BSA', name: 'Campeonato Brasileiro Série A' },
-    { code: 'PD', name: 'Primera Division' },
-    { code: 'FL1', name: 'Ligue 1' },
-    { code: 'ELC', name: 'Championship' },
-    { code: 'PPL', name: 'Primeira Liga' },
-    { code: 'EC', name: 'European Championship' },
-    { code: 'SA', name: 'Serie A' },
-    { code: 'PL', name: 'Premier League' }
+    { code: 'CL', name: 'UEFA Champions League', country: 'Europe' },
+    { code: 'BL1', name: 'Bundesliga', country: 'Germany' },
+    { code: 'DED', name: 'Eredivisie', country: 'Netherlands' },
+    { code: 'BSA', name: 'Campeonato Brasileiro Série A', country: 'Brazil' },
+    { code: 'PD', name: 'Primera Division', country: 'Spain' },
+    { code: 'FL1', name: 'Ligue 1', country: 'France' },
+    { code: 'ELC', name: 'Championship', country: 'England' },
+    { code: 'PPL', name: 'Primeira Liga', country: 'Portugal' },
+    { code: 'EC', name: 'European Championship', country: 'Europe' },
+    { code: 'SA', name: 'Serie A', country: 'Italy' },
+    { code: 'PL', name: 'Premier League', country: 'England' }
 ];
 
 const LEAGUE_CODES_DEFAULT = ['PL', 'PD', 'BL1', 'FL1'];
 const LEAGUE_NAMES = Object.fromEntries(SUPPORTED_LEAGUES.map(l => [l.code, l.name]));
+
+/** League name → country lookup for display (e.g. "Brazil – Campeonato Brasileiro Série A"). */
+const LEAGUE_COUNTRY_BY_NAME = Object.fromEntries(
+    SUPPORTED_LEAGUES.map(l => [l.name, l.country || ''])
+);
+
+/**
+ * Get display string for a league: "Country – League" when country is known, else league name.
+ * @param {string} leagueName - Stored league name (e.g. from entry.league).
+ * @returns {string}
+ */
+export function getLeagueDisplay(leagueName) {
+    if (!leagueName || typeof leagueName !== 'string') return '';
+    const trimmed = leagueName.trim();
+    if (!trimmed) return '';
+    const country = LEAGUE_COUNTRY_BY_NAME[trimmed];
+    return country ? `${country} – ${trimmed}` : trimmed;
+}
 const DEFAULT_TEAMS_PER_LEAGUE = 5;
 
 /** Presets: Top 4 (current), Top 6 Europe, World mix, International */

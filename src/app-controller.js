@@ -15,8 +15,9 @@ import { ShareManager } from './share.js';
 import { TouchSwipeHandler } from './touch.js';
 import { STAT_GROUPS } from './stats-calculators.js';
 import { syncTeamsFromOnline } from './data-handler.js';
-import { SUPPORTED_LEAGUES, LEAGUE_PRESETS } from './api-service.js';
+import { SUPPORTED_LEAGUES, getLeagueDisplay } from './api-service.js';
 import { getLogText, clear as clearDebugLog } from './debug-log.js';
+import { registerScreens, loadScreen } from './screens/index.js';
 import './stats-view-toggler-global.js';
 
 class AppController {
@@ -123,389 +124,51 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.115.0';
+            bannerVersion.textContent = 'Version 1.116.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
             });
         }
+
+        // Optional first-run onboarding
+        const onboardingKey = 'fc25_onboarding_done';
+        const overlay = document.getElementById('onboardingOverlay');
+        if (overlay && !localStorage.getItem(onboardingKey)) {
+            overlay.style.display = 'flex';
+            overlay.setAttribute('aria-hidden', 'false');
+        }
     }
 
     initializeEventListeners() {
-        // Player screen
-        const saveBtn = document.getElementById('savePlayersBtn');
-        if (saveBtn) {
-            saveBtn.addEventListener('click', () => {
-                this.savePlayers();
-            });
-        } else {
-            console.error('savePlayersBtn not found!');
-        }
-        document.getElementById('startNewSessionBtn').addEventListener('click', () => this.startNewSession());
-        const addPlayerBtn = document.getElementById('addPlayerBtn');
-        if (addPlayerBtn) {
-            addPlayerBtn.addEventListener('click', () => this.addPlayerRow());
-        }
-
-        const editableList = document.getElementById('playerEditableList');
-        if (editableList) {
-            editableList.addEventListener('click', (e) => {
-                const deleteBtn = e.target.closest('.delete-player-btn');
-                if (deleteBtn) {
-                    const index = parseInt(deleteBtn.dataset.index);
-                    this.removePlayerRow(index);
-                }
-            });
-
-            editableList.addEventListener('input', (e) => {
-                const input = e.target.closest('.player-name-input');
-                if (input) {
-                    const index = parseInt(input.dataset.index);
-                    const value = input.value;
-                    this.updatePlayerRow(index, value);
-                }
-            });
-
-            editableList.addEventListener('change', (e) => {
-                const select = e.target.closest('.lock-select');
-                if (select) {
-                    const index = parseInt(select.dataset.index);
-                    const side = select.value;
-                    if (!isNaN(index) && side) {
-                        this.handleInlineLockToggle(index, side);
-                    }
-                }
-                
-                // Handle presence checkbox
-                const checkbox = e.target.closest('.presence-checkbox');
-                if (checkbox) {
-                    const playerName = checkbox.dataset.player;
-                    const isPresent = checkbox.checked;
-                    if (playerName) {
-                        this.playerManager.setPlayerPresence(playerName, isPresent);
-                        this.updatePlayerPresenceDisplay(playerName, isPresent);
-                    }
-                }
-            });
-        }
-
-        const playerLockList = document.getElementById('playerLockList');
-        if (playerLockList) {
-            playerLockList.addEventListener('click', (event) => {
-                const button = event.target.closest('.lock-btn');
-                if (!button || button.disabled) {
-                    return;
-                }
-                const player = button.dataset.player;
-                const side = button.dataset.side;
-                if (player && side) {
-                    this.handleLockSelection(player, side);
-                }
-            });
-        }
-
-        // Team screen
-        document.getElementById('confirmSequenceBtn').addEventListener('click', () => this.confirmSequence());
-        document.getElementById('selectAllCombinationsBtn').addEventListener('click', () => this.selectAllStructures());
-        document.getElementById('randomCombinationBtn').addEventListener('click', () => this.randomSelectStructure());
-        document.getElementById('backToPlayersBtn').addEventListener('click', () => this.showScreen('playerScreen'));
-        const syncTopTeamsBtn = document.getElementById('syncTopTeamsBtn');
-        if (syncTopTeamsBtn) {
-            syncTopTeamsBtn.addEventListener('click', async () => {
-                syncTopTeamsBtn.disabled = true;
-                this.persistSelectedLeaguesFromCheckboxes();
-                const selectedLeagues = this.getSelectedLeaguesFromCheckboxes() ?? (Array.isArray(this.storage.getData().selectedLeagues) ? this.storage.getData().selectedLeagues : []);
-                const result = await syncTeamsFromOnline({ toastManager: this.toastManager, storage: this.storage, selectedLeagues });
-                syncTopTeamsBtn.disabled = false;
-                if (result.success) {
-                    this.updateTeamNamesSavedCountUI();
-                    this.settingsManager.setUseRandomTeams(true);
-                    const useRandomCheck = document.getElementById('useRandomTeamsCheckbox');
-                    if (useRandomCheck) useRandomCheck.checked = true;
-                    this.loadTeamCombinations();
-                    // Clear current season's cached team names so next Confirm Sequence uses only the synced list (no Aston Villa etc)
-                    const currentSeason = this.seasonManager.getCurrentSeason();
-                    this.storage.updateData(data => {
-                        if (data.seasons && data.seasons[currentSeason]) {
-                            const season = data.seasons[currentSeason];
-                            season.teamNames = {};
-                            season.matchTeamNames = undefined;
-                        }
-                    });
-                    if (result.entries && result.entries.length) this.showSyncedTeamsListModal(result.entries);
-                }
-            });
-        }
-        const viewSyncedTeamsListBtn = document.getElementById('viewSyncedTeamsListBtn');
-        if (viewSyncedTeamsListBtn) {
-            viewSyncedTeamsListBtn.addEventListener('click', () => this.showSyncedTeamsListModal());
-        }
-        const leaguePresetTop4 = document.getElementById('leaguePresetTop4');
-        if (leaguePresetTop4) {
-            leaguePresetTop4.addEventListener('click', () => {
-                this.storage.updateData(data => { data.selectedLeagues = [...LEAGUE_PRESETS.top4]; });
-                this.renderLeaguesToSyncCheckboxes();
-            });
-        }
-        const leaguePresetTop6Europe = document.getElementById('leaguePresetTop6Europe');
-        if (leaguePresetTop6Europe) {
-            leaguePresetTop6Europe.addEventListener('click', () => {
-                this.storage.updateData(data => { data.selectedLeagues = [...LEAGUE_PRESETS.top6Europe]; });
-                this.renderLeaguesToSyncCheckboxes();
-            });
-        }
-        const leaguePresetWorldMix = document.getElementById('leaguePresetWorldMix');
-        if (leaguePresetWorldMix) {
-            leaguePresetWorldMix.addEventListener('click', () => {
-                this.storage.updateData(data => { data.selectedLeagues = [...LEAGUE_PRESETS.worldMix]; });
-                this.renderLeaguesToSyncCheckboxes();
-            });
-        }
-        const leaguePresetInternational = document.getElementById('leaguePresetInternational');
-        if (leaguePresetInternational) {
-            leaguePresetInternational.addEventListener('click', () => {
-                this.storage.updateData(data => { data.selectedLeagues = [...LEAGUE_PRESETS.international]; });
-                this.renderLeaguesToSyncCheckboxes();
-            });
-        }
-        const teamsPerLeagueInput = document.getElementById('teamsPerLeagueInput');
-        if (teamsPerLeagueInput) {
-            teamsPerLeagueInput.addEventListener('change', () => {
-                let n = parseInt(teamsPerLeagueInput.value, 10);
-                if (isNaN(n) || n < 1) n = 1;
-                if (n > 20) n = 20;
-                teamsPerLeagueInput.value = n;
-                this.storage.updateData(data => { data.teamsPerLeague = n; });
-            });
-        }
-        const syncedTeamsListModalClose = document.getElementById('syncedTeamsListModalClose');
-        const syncedTeamsListModal = document.getElementById('syncedTeamsListModal');
-        if (syncedTeamsListModalClose) syncedTeamsListModalClose.addEventListener('click', () => this.closeSyncedTeamsListModal());
-        if (syncedTeamsListModal) {
-            syncedTeamsListModal.addEventListener('click', (e) => { if (e.target === syncedTeamsListModal) this.closeSyncedTeamsListModal(); });
-        }
-
-        // Sequence screen
-        document.getElementById('startGamesBtn').addEventListener('click', () => this.startGames());
-        document.getElementById('backToTeamsBtn').addEventListener('click', () => this.showScreen('teamScreen'));
-
-        // Match screen
-        document.getElementById('submitScoreBtn').addEventListener('click', () => this.recordScore());
-        document.getElementById('backToSequenceBtn').addEventListener('click', () => this.showScreen('sequenceScreen'));
-        const undoBtn = document.getElementById('undoLastMatchBtn');
-        if (undoBtn) {
-            undoBtn.addEventListener('click', () => this.undoLastMatch());
-        }
-        
-        // Extra time and penalties checkboxes
-        const extraTimeCheckbox = document.getElementById('wentToExtraTime');
-        const penaltiesCheckbox = document.getElementById('wentToPenalties');
-        if (extraTimeCheckbox) {
-            extraTimeCheckbox.addEventListener('change', (e) => {
-                const extraTimeScores = document.getElementById('extraTimeScores');
-                if (extraTimeScores) {
-                    extraTimeScores.style.display = e.target.checked ? 'flex' : 'none';
-                }
-            });
-        }
-        if (penaltiesCheckbox) {
-            penaltiesCheckbox.addEventListener('change', (e) => {
-                const penaltiesScores = document.getElementById('penaltiesScores');
-                if (penaltiesScores) {
-                    penaltiesScores.style.display = e.target.checked ? 'flex' : 'none';
-                }
-            });
-        }
-
-        // Auto-select score inputs on focus so new typing replaces existing values
-        const autoSelectIds = [
-            // Match screen
-            'team1Score', 'team2Score',
-            'team1ExtraTimeScore', 'team2ExtraTimeScore',
-            'team1PenaltiesScore', 'team2PenaltiesScore',
-            // Edit modal
-            'editTeam1Score', 'editTeam2Score',
-            'editTeam1ExtraTimeScore', 'editTeam2ExtraTimeScore',
-            'editTeam1PenaltiesScore', 'editTeam2PenaltiesScore'
-        ];
-        autoSelectIds.forEach(id => {
-            const el = document.getElementById(id);
-            if (!el) return;
-            el.addEventListener('focus', () => requestAnimationFrame(() => el.select()));
-            // Prevent mouseup/tap from clearing the selection
-            el.addEventListener('mouseup', (e) => e.preventDefault());
+        // Empty-state CTA: navigate to screen when user clicks "Add players", "Record match", etc.
+        document.addEventListener('click', (e) => {
+            const cta = e.target.closest('.empty-state-cta');
+            if (cta && cta.dataset.screen) {
+                e.preventDefault();
+                this.showScreen(cta.dataset.screen);
+            }
         });
 
-        // Stats screen
-        const statsTabSelect = document.getElementById('statsTabSelect');
-        if (statsTabSelect) {
-            statsTabSelect.addEventListener('change', (e) => this.switchStatsTab(e.target.value));
-        }
-        document.querySelectorAll('.mode-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => this.switchStatsMode(e.target.dataset.mode));
-        });
-        document.getElementById('newSeasonBtn').addEventListener('click', () => this.startNewSeason());
-        document.getElementById('exportDataBtn').addEventListener('click', () => this.exportData());
-        document.getElementById('importDataBtn').addEventListener('click', () => this.importData());
-        document.getElementById('clearOverallStatsBtn').addEventListener('click', () => this.clearAllStatistics());
-        document.getElementById('backToMenuBtn').addEventListener('click', () => this.showScreen('playerScreen'));
-        
-        // Share buttons
-        document.getElementById('shareTodayStatsBtn').addEventListener('click', () => this.shareStats('today'));
-        document.getElementById('shareSeasonStatsBtn').addEventListener('click', () => this.shareStats('season'));
-        document.getElementById('shareOverallStatsBtn').addEventListener('click', () => this.shareStats('overall'));
-        const shareCustomBtn = document.getElementById('shareCustomStatsBtn');
-        if (shareCustomBtn) {
-            shareCustomBtn.addEventListener('click', () => this.shareStats('custom'));
-        }
-        document.getElementById('exportTodayPDFBtn').addEventListener('click', () => this.exportPDF());
-        document.getElementById('exportSeasonPDFBtn').addEventListener('click', () => this.exportPDF());
-        document.getElementById('exportOverallPDFBtn').addEventListener('click', () => this.exportPDF());
-        const exportCustomBtn = document.getElementById('exportCustomPDFBtn');
-        if (exportCustomBtn) {
-            exportCustomBtn.addEventListener('click', () => this.exportPDF('custom'));
-        }
-        const viewPdfBtn = document.getElementById('viewLastPDFBtn');
-        if (viewPdfBtn) {
-            viewPdfBtn.addEventListener('click', () => this.viewLastPDF());
-        }
-        const byDateBtn = document.getElementById('byDateStatsBtn');
-        if (byDateBtn) {
-            byDateBtn.addEventListener('click', () => this.toggleByDatePanel(true));
-        }
+        registerScreens(this);
 
-        // History screen
-        document.getElementById('backFromHistoryBtn').addEventListener('click', () => this.showScreen('statsScreen'));
-        
-        // Team Details screen
-        document.getElementById('backFromTeamDetailsBtn').addEventListener('click', () => this.showScreen('statsScreen'));
-        document.getElementById('historyFilter').addEventListener('change', () => this.loadMatchHistory());
-        document.getElementById('historySearch').addEventListener('input', () => this.loadMatchHistory());
-        document.getElementById('historyDateFrom').addEventListener('change', () => this.loadMatchHistory());
-        document.getElementById('historyDateTo').addEventListener('change', () => this.loadMatchHistory());
-        const historySortOrder = document.getElementById('historySortOrder');
-        if (historySortOrder) {
-            historySortOrder.value = this.historySortOrder;
-            historySortOrder.addEventListener('change', (e) => {
-                this.historySortOrder = e.target.value === 'asc' ? 'asc' : 'desc';
-                this.loadMatchHistory();
-            });
-        }
-        document.getElementById('clearHistoryFiltersBtn').addEventListener('click', () => this.clearHistoryFilters());
-        document.getElementById('historyListViewBtn').addEventListener('click', () => this.switchHistoryView('list'));
-        document.getElementById('historyTimelineViewBtn').addEventListener('click', () => this.switchHistoryView('timeline'));
-        const historyFiltersToggle = document.getElementById('historyFiltersToggle');
-        const historyControlsWrapper = document.getElementById('historyControlsWrapper');
-        if (historyFiltersToggle && historyControlsWrapper) {
-            historyFiltersToggle.addEventListener('click', () => {
-                const isCollapsed = historyControlsWrapper.classList.toggle('collapsed');
-                historyControlsWrapper.style.display = isCollapsed ? 'none' : 'grid';
-                historyFiltersToggle.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
-                historyFiltersToggle.textContent = isCollapsed ? 'More filters ▸' : 'More filters ▾';
-            });
-        }
-        document.querySelectorAll('.history-quick-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const filter = btn.dataset.filter || 'all';
-                this.setHistoryQuickFilter(filter);
-            });
-        });
-
-        // Settings screen
-        document.querySelectorAll('.settings-tab-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => this.switchSettingsTab(e.target.dataset.settingsTab));
-        });
-        document.getElementById('saveSettingsBtn').addEventListener('click', () => this.saveSettings());
-        const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
-        if (saveApiKeyBtn) {
-            saveApiKeyBtn.addEventListener('click', () => {
-                const apiKeyInput = document.getElementById('apiKeyInput');
-                const key = apiKeyInput ? apiKeyInput.value : '';
-                this.settingsManager.setFootballApiKey(key);
-                this.toastManager.success('API key saved');
-            });
-        }
-        const saveCorsProxyKeyBtn = document.getElementById('saveCorsProxyKeyBtn');
-        if (saveCorsProxyKeyBtn) {
-            saveCorsProxyKeyBtn.addEventListener('click', () => {
-                const corsProxyKeyInput = document.getElementById('corsProxyKeyInput');
-                const key = corsProxyKeyInput ? corsProxyKeyInput.value : '';
-                this.settingsManager.setCorsProxyApiKey(key);
-                this.toastManager.success(key ? 'CORS proxy key saved – Sync on phone should work' : 'CORS proxy key cleared');
-            });
-        }
-        document.getElementById('backFromSettingsBtn').addEventListener('click', () => this.showScreen('playerScreen'));
-        document.getElementById('resetLabelsBtn').addEventListener('click', () => this.resetLabels());
-        document.getElementById('exportDataSettingsBtn').addEventListener('click', () => this.exportData());
-        document.getElementById('importDataSettingsBtn').addEventListener('click', () => this.importData());
-        document.getElementById('clearAllDataBtn').addEventListener('click', () => this.confirmClearAllData());
-
-        // Debug log (Settings > Data)
-        const copyDebugLogBtn = document.getElementById('copyDebugLogBtn');
-        if (copyDebugLogBtn) {
-            copyDebugLogBtn.addEventListener('click', () => {
-                const text = getLogText();
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    navigator.clipboard.writeText(text).then(() => this.toastManager.success('Log copied to clipboard')).catch(() => this.toastManager.error('Copy failed'));
-                } else {
-                    this.toastManager.error('Copy not supported');
+        const onboardingGotIt = document.getElementById('onboardingGotItBtn');
+        if (onboardingGotIt) {
+            onboardingGotIt.addEventListener('click', () => {
+                const overlay = document.getElementById('onboardingOverlay');
+                if (overlay) {
+                    overlay.style.display = 'none';
+                    overlay.setAttribute('aria-hidden', 'true');
                 }
-            });
-        }
-        const exportDebugLogBtn = document.getElementById('exportDebugLogBtn');
-        if (exportDebugLogBtn) {
-            exportDebugLogBtn.addEventListener('click', () => {
-                const text = getLogText();
-                const filename = 'fc25-debug-log-' + new Date().toISOString().slice(0, 10) + '.txt';
-                const blob = new Blob([text], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                a.click();
-                URL.revokeObjectURL(url);
-                this.toastManager.success('Log exported as ' + filename);
-            });
-        }
-        const clearDebugLogBtn = document.getElementById('clearDebugLogBtn');
-        if (clearDebugLogBtn) {
-            clearDebugLogBtn.addEventListener('click', () => {
-                clearDebugLog();
-                const ta = document.getElementById('debugLogTextarea');
-                if (ta) ta.value = getLogText();
-                this.toastManager.success('Debug log cleared');
+                try {
+                    localStorage.setItem('fc25_onboarding_done', 'true');
+                } catch (e) { /* ignore */ }
             });
         }
 
-        // Admin PIN buttons
-        const adminUnlockBtn = document.getElementById('adminUnlockBtn');
-        if (adminUnlockBtn) adminUnlockBtn.addEventListener('click', () => this.unlockAdminWithPin());
-        const adminSetPinBtn = document.getElementById('adminSetPinBtn');
-        if (adminSetPinBtn) adminSetPinBtn.addEventListener('click', () => this.setAdminPin());
-        const adminLockBtn = document.getElementById('adminLockBtn');
-        if (adminLockBtn) adminLockBtn.addEventListener('click', () => this.lockAdmin());
-        const adminResetPinBtn = document.getElementById('adminResetPinBtn');
-        if (adminResetPinBtn) adminResetPinBtn.addEventListener('click', () => this.resetAdminPin());
-        const copyShareUrlBtn = document.getElementById('copyShareUrlBtn');
-        if (copyShareUrlBtn) {
-            copyShareUrlBtn.addEventListener('click', () => this.copyShareUrl());
-        }
-        
-        const darkModeSetting = document.getElementById('darkModeSetting');
-        if (darkModeSetting) {
-            darkModeSetting.addEventListener('change', (e) => {
-                this.settingsManager.setDarkMode(e.target.checked);
-                this.toggleDarkMode();
-            });
-        }
-        const savePointsSettingsBtn = document.getElementById('savePointsSettingsBtn');
-        if (savePointsSettingsBtn) {
-            savePointsSettingsBtn.addEventListener('click', () => this.savePointsSettings());
-        }
-        const cancelPointsSettingsBtn = document.getElementById('cancelPointsSettingsBtn');
-        if (cancelPointsSettingsBtn) {
-            cancelPointsSettingsBtn.addEventListener('click', () => this.closePointsSettingsModal());
-        }
+        // Player, Team, Sequence, Match, Stats, Session screens: listeners in src/screens/*.js
+
+        // History and Settings screens: listeners in history-screen.js and settings-screen.js
 
         // Edit match modal
         document.getElementById('saveEditMatchBtn').addEventListener('click', () => this.saveEditMatch());
@@ -531,7 +194,8 @@ class AppController {
                 }
             });
         }
-        document.getElementById('importFileInput').addEventListener('change', (e) => this.handleFileImport(e));
+        const importFileInput = document.getElementById('importFileInput');
+        if (importFileInput) importFileInput.addEventListener('change', (e) => this.handleFileImport(e));
 
         // Dark mode toggle
         const darkModeToggle = document.getElementById('darkModeToggle');
@@ -557,66 +221,30 @@ class AppController {
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const screen = e.target.closest('.nav-btn').dataset.screen;
-                const screenOrder = ['sessionScreen', 'homeScreen', 'playerScreen', 'teamScreen', 'sequenceScreen', 'gameScreen', 'statsScreen', 'historyScreen', 'settingsScreen'];
+                const screenOrder = ['sessionScreen', 'homeScreen', 'playerScreen', 'teamScreen', 'sequenceScreen', 'gameScreen', 'statsScreen', 'moreScreen', 'historyScreen', 'settingsScreen'];
                 const currentIndex = screenOrder.indexOf(this.currentScreen);
                 const targetIndex = screenOrder.indexOf(screen);
                 const direction = targetIndex > currentIndex ? 'forward' : 'back';
                 this.showScreen(screen, direction);
             });
         });
+    }
 
-        // Session wizard
-        const sessionContinueBtn = document.getElementById('sessionContinueBtn');
-        if (sessionContinueBtn) {
-            sessionContinueBtn.addEventListener('click', () => this.sessionContinue());
-        }
-
-        const sessionAdvancedLink = document.getElementById('sessionAdvancedLink');
-        if (sessionAdvancedLink) {
-            sessionAdvancedLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.sessionAdvanced();
-            });
-        }
-
-        const sessionAddPlayerBtn = document.getElementById('sessionAddPlayerBtn');
-        if (sessionAddPlayerBtn) {
-            sessionAddPlayerBtn.addEventListener('click', () => this.addNewSessionPlayerInput());
-        }
-
-        const sessionNextMatchBtn = document.getElementById('sessionNextMatchBtn');
-        if (sessionNextMatchBtn) {
-            sessionNextMatchBtn.addEventListener('click', () => this.sessionNextMatch());
-        }
-
-        const sessionStartBtn = document.getElementById('sessionStartBtn');
-        if (sessionStartBtn) {
-            sessionStartBtn.addEventListener('click', () => this.startSessionWizard());
-        }
-
-        const sessionAdvancedModeBtn = document.getElementById('sessionAdvancedModeBtn');
-        if (sessionAdvancedModeBtn) {
-            sessionAdvancedModeBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.setUiMode('advanced');
-                // Jump to the classic players screen to make it obvious
-                this.showScreen('playerScreen');
-            });
-        }
-
-        const goToSessionBtn = document.getElementById('goToSessionBtn');
-        if (goToSessionBtn) {
-            goToSessionBtn.addEventListener('click', () => {
-                this.setUiMode('session');
-                this.sessionStarted = false;
-                this.showScreen('sessionScreen');
-            });
-        }
+    /** Load Chart.js from CDN when needed (Stats screen). Resolves immediately if already loaded. */
+    ensureChartJs() {
+        if (window.Chart) return Promise.resolve();
+        return new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+            s.onload = () => resolve();
+            s.onerror = () => reject(new Error('Failed to load Chart.js'));
+            document.head.appendChild(s);
+        });
     }
 
     showScreen(screenId, direction = 'forward') {
         // Determine animation direction
-        const screenOrder = ['sessionScreen', 'homeScreen', 'playerScreen', 'teamScreen', 'sequenceScreen', 'gameScreen', 'statsScreen', 'historyScreen', 'settingsScreen'];
+        const screenOrder = ['sessionScreen', 'homeScreen', 'playerScreen', 'teamScreen', 'sequenceScreen', 'gameScreen', 'statsScreen', 'moreScreen', 'historyScreen', 'settingsScreen'];
         const currentIndex = this.currentScreen ? screenOrder.indexOf(this.currentScreen) : -1;
         const targetIndex = screenOrder.indexOf(screenId);
         
@@ -650,59 +278,14 @@ class AppController {
         this.currentScreen = screenId;
         this.saveCurrentGameState(); // Save the state when screen changes
 
-        // Update navigation
+        // Update navigation (More is active when on History or Settings)
+        const navActiveScreen = (screenId === 'historyScreen' || screenId === 'settingsScreen') ? 'moreScreen' : screenId;
         document.querySelectorAll('.nav-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.screen === screenId);
+            btn.classList.toggle('active', btn.dataset.screen === navActiveScreen);
         });
 
-        // Load screen-specific data
-        if (screenId === 'sessionScreen') {
-            // Session screen now starts with a splash, unless the wizard was started
-            if (this.uiMode === 'advanced' || !this.sessionStarted) {
-                this.applyUiMode();
-            } else {
-                this.loadSessionWizard();
-            }
-
-            // Hide back to session button on session screen
-            this.updateBackToSessionButton();
-        } else if (screenId === 'teamScreen') {
-            this.loadTeamCombinations();
-        } else if (screenId === 'sequenceScreen') {
-            this.loadSequenceList();
-        } else if (screenId === 'statsScreen') {
-            this.updatePlayedDates();
-            this.loadStatistics();
-            this.updateViewPDFButton();
-            // Initialize swipe gestures for stats tabs
-            setTimeout(() => {
-                this.initializeStatsTabSwipes();
-            }, 100);
-
-            // Show/hide back to session button
-            this.updateBackToSessionButton();
-        } else if (screenId === 'playerScreen') {
-            // Reload players to ensure UI is in sync
-            const players = this.playerManager.getPlayers();
-            this.loadPlayersIntoUI(players);
-            this.updatePlayerNameHistory();
-        } else if (screenId === 'historyScreen') {
-            // Initialize view toggle state
-            const listBtn = document.getElementById('historyListViewBtn');
-            const timelineBtn = document.getElementById('historyTimelineViewBtn');
-            if (listBtn && timelineBtn) {
-                listBtn.classList.toggle('active', this.currentHistoryView === 'list');
-                timelineBtn.classList.toggle('active', this.currentHistoryView === 'timeline');
-                document.getElementById('matchHistoryList').style.display = this.currentHistoryView === 'list' ? 'flex' : 'none';
-                document.getElementById('matchHistoryTimeline').style.display = this.currentHistoryView === 'timeline' ? 'block' : 'none';
-            }
-
-            // Show/hide back to session button
-            this.updateBackToSessionButton();
-            this.loadMatchHistory();
-        } else if (screenId === 'settingsScreen') {
-            this.loadSettingsScreen();
-        }
+        // Screen modules run their load() via loadScreen (session, player, team, sequence, match, stats, history, settings, more)
+        loadScreen(screenId, this);
     }
 
     // Player Management
@@ -788,6 +371,34 @@ class AppController {
         return `
             ${showLeagueRow ? `<div class="match-league-row"><span class="team-league">${league1}</span><span class="vs-spacer"></span><span class="team-league">${league2}</span></div>` : ''}
             ${showNameRow ? `<div class="match-name-row"><span class="team-name">${name1}</span><span class="vs-spacer"></span><span class="team-name">${name2}</span></div>` : ''}
+            <div class="match-players-row team-display"><div class="team-players">${players1Html}</div><span class="vs">VS</span><div class="team-players">${players2Html}</div></div>
+        `;
+    }
+
+    /**
+     * Build sequence-screen match display: deduplicate league/team when same on both sides; show "Country – League" for league.
+     * Single line for league when league1 === league2; single line for team when name1 === name2; always players vs players row.
+     */
+    formatSequenceMatchDisplay(entry1, entry2, players1Html, players2Html, fallback1, fallback2) {
+        const hasEntries = entry1 || entry2;
+        const league1Raw = hasEntries && entry1 && entry1.league ? entry1.league : (hasEntries && entry1 ? '' : '');
+        const league2Raw = hasEntries && entry2 && entry2.league ? entry2.league : (hasEntries && entry2 ? '' : '');
+        const name1 = (entry1 && entry1.name) ? this.escapeHtml(entry1.name) : this.escapeHtml(fallback1 || '');
+        const name2 = (entry2 && entry2.name) ? this.escapeHtml(entry2.name) : this.escapeHtml(fallback2 || '');
+        const sameLeague = league1Raw && league1Raw === league2Raw;
+        const sameTeam = name1 && name1 === name2;
+        const leagueDisplay = sameLeague ? this.escapeHtml(getLeagueDisplay(league1Raw)) : null;
+        const leagueRowHtml = hasEntries && (sameLeague ? leagueDisplay : (league1Raw || league2Raw)) ? (sameLeague
+            ? `<div class="match-league-row sequence-single"><span class="team-league">${leagueDisplay}</span></div>`
+            : `<div class="match-league-row"><span class="team-league">${this.escapeHtml(getLeagueDisplay(league1Raw) || league1Raw)}</span><span class="vs-spacer"></span><span class="team-league">${this.escapeHtml(getLeagueDisplay(league2Raw) || league2Raw)}</span></div>`
+        ) : '';
+        const nameRowHtml = hasEntries && (sameTeam ? name1 : (name1 || name2)) ? (sameTeam
+            ? `<div class="match-name-row sequence-single"><span class="team-name">${name1}</span></div>`
+            : `<div class="match-name-row"><span class="team-name">${name1}</span><span class="vs-spacer"></span><span class="team-name">${name2}</span></div>`
+        ) : '';
+        return `
+            ${leagueRowHtml}
+            ${nameRowHtml}
             <div class="match-players-row team-display"><div class="team-players">${players1Html}</div><span class="vs">VS</span><div class="team-players">${players2Html}</div></div>
         `;
     }
@@ -1367,7 +978,7 @@ class AppController {
         }
         
         if (structures.length === 0) {
-            container.innerHTML = '<div class="empty-state"><p>Need at least 2 players to generate round structures.</p></div>';
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👥</div><h3>Need players</h3><p>Add at least 2 players to see team combinations.</p><button type="button" class="btn btn-primary empty-state-cta" data-screen="playerScreen">Add players</button></div>';
             return;
         }
 
@@ -1746,7 +1357,7 @@ class AppController {
             const e2 = this.getMatchTeamEntry(seasonData, index, this.getTeamId(match.team2));
             const team1PlayersHtml = this.formatTeamWithColors(match.team1);
             const team2PlayersHtml = this.formatTeamWithColors(match.team2);
-            const teamsBlock = this.formatMatchTeamsDisplay(
+            const teamsBlock = this.formatSequenceMatchDisplay(
                 e1, e2, team1PlayersHtml, team2PlayersHtml,
                 this.teamGenerator.formatTeamName(match.team1),
                 this.teamGenerator.formatTeamName(match.team2)
@@ -1779,9 +1390,15 @@ class AppController {
         
         const match = this.selectedStructure.matches[this.currentGameIndex];
         
-        document.getElementById('currentGameNumber').textContent = this.currentGameIndex + 1;
-        document.getElementById('totalGames').textContent = this.selectedStructure.matches.length;
-        
+        const currentNum = this.currentGameIndex + 1;
+        const totalNum = this.selectedStructure.matches.length;
+        document.getElementById('currentGameNumber').textContent = currentNum;
+        document.getElementById('totalGames').textContent = totalNum;
+        const progressFill = document.getElementById('matchProgressFill');
+        if (progressFill) {
+            progressFill.style.width = totalNum > 0 ? ((currentNum / totalNum) * 100) + '%' : '0%';
+        }
+
         const seasonData = this.storage.getData().seasons[this.seasonManager.getCurrentSeason()];
         const e1 = this.getMatchTeamEntry(seasonData, this.currentGameIndex, this.getTeamId(match.team1));
         const e2 = this.getMatchTeamEntry(seasonData, this.currentGameIndex, this.getTeamId(match.team2));
@@ -1792,7 +1409,7 @@ class AppController {
         const team2PlayersHtml = this.formatTeamWithColors(match.team2);
         const matchTeamsEl = document.getElementById('matchTeams');
         if (matchTeamsEl) {
-            matchTeamsEl.innerHTML = this.formatMatchTeamsDisplay(
+            matchTeamsEl.innerHTML = this.formatSequenceMatchDisplay(
                 e1, e2,
                 team1PlayersHtml, team2PlayersHtml,
                 this.teamGenerator.formatTeamName(match.team1),
@@ -2265,6 +1882,7 @@ class AppController {
         }
         if (tab !== 'custom') {
             this.lastStatsTab = tab;
+            this.saveCurrentGameState();
         }
         if (window.currentStatsView === 'team' && typeof window.renderTeamTable === 'function') {
             setTimeout(() => window.renderTeamTable(), 0);
@@ -2511,7 +2129,7 @@ class AppController {
 
         if (confirm('WARNING: This will delete ALL statistics, all seasons, and all match history. This cannot be undone. Continue?')) {
             if (this.storage.clearAllStatistics()) {
-                alert('All statistics cleared. Players are kept.');
+                this.toastManager.success('All statistics cleared. Players are kept.');
                 this.updateSeasonInfo();
                 // Reload the statistics display
                 const activeTab = document.querySelector('.tab-btn.active');
@@ -2834,7 +2452,7 @@ class AppController {
         this.renderFilterStats(allMatches, filter, search, dateFrom, dateTo);
 
         if (allMatches.length === 0) {
-            const emptyMessage = '<div class="empty-state"><div class="empty-state-icon">📅</div><h3>No Matches Found</h3><p>Try adjusting your filters or start recording matches!</p></div>';
+            const emptyMessage = '<div class="empty-state"><div class="empty-state-icon">📅</div><h3>No matches yet</h3><p>Record your first match to see history here.</p><button type="button" class="btn btn-primary empty-state-cta" data-screen="matchScreen">Record a match</button></div>';
             listContainer.innerHTML = emptyMessage;
             timelineContainer.innerHTML = emptyMessage;
             return;
@@ -4117,7 +3735,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.115.0';
+            bannerVersion.textContent = 'Version 1.116.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
@@ -4277,7 +3895,8 @@ class AppController {
             selectedStructure: this.selectedStructure,
             selectedAllStructures: this.selectedAllStructures,
             currentGameIndex: this.currentGameIndex,
-            currentMatch: this.currentMatch
+            currentMatch: this.currentMatch,
+            lastStatsTab: this.lastStatsTab
         };
         this.storage.saveCurrentGameState(gameState);
     }
@@ -4299,6 +3918,9 @@ class AppController {
         this.selectedAllStructures = savedState.selectedAllStructures === true;
         this.currentGameIndex = savedState.currentGameIndex || 0;
         this.currentMatch = savedState.currentMatch;
+        if (savedState.lastStatsTab && ['today', 'season', 'overall'].includes(savedState.lastStatsTab)) {
+            this.lastStatsTab = savedState.lastStatsTab;
+        }
 
         // Validate that the saved structure is still valid with current players
         if (this.selectedStructure && this.selectedStructure.matches) {
