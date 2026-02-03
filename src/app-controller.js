@@ -3649,21 +3649,35 @@ class AppController {
     async displayAppVersion(versionDisplayElement) {
         if (!versionDisplayElement) return;
         
-        // Try to get version from active cache name
+        // Try to get version from cache names.
+        // Important: multiple versions can exist briefly during SW updates (e.g. v116 + v117),
+        // and `caches.keys()` order is not guaranteed. Always pick the highest version.
         if ('caches' in window) {
             try {
                 const cacheNames = await caches.keys();
-                // Find the cache name that matches our pattern: fc25-score-tracker-vXX
-                const cacheName = cacheNames.find(name => name.startsWith('fc25-score-tracker-v'));
-                if (cacheName) {
-                    // Extract version number (e.g., "v72" -> "72")
-                    const versionMatch = cacheName.match(/v(\d+)/);
-                    if (versionMatch) {
-                        const cacheVersion = versionMatch[1];
-                        // Format as version number (e.g., "1.72.0")
-                        versionDisplayElement.textContent = `Version 1.${cacheVersion}.0`;
-                        return;
-                    }
+                const versions = cacheNames
+                    .map(name => {
+                        const m = name.match(/^fc25-score-tracker-v(\d+)$/);
+                        return m ? parseInt(m[1], 10) : null;
+                    })
+                    .filter(v => typeof v === 'number' && !Number.isNaN(v));
+
+                const highestCacheMinor = versions.length ? Math.max(...versions) : null;
+
+                const appMinor = (() => {
+                    const m = String(APP_VERSION || '').match(/^1\.(\d+)\./);
+                    return m ? parseInt(m[1], 10) : null;
+                })();
+
+                // Prefer whichever is higher so we never "downgrade" the UI to an older cached version.
+                const minor = Math.max(
+                    typeof highestCacheMinor === 'number' ? highestCacheMinor : -1,
+                    typeof appMinor === 'number' ? appMinor : -1
+                );
+
+                if (minor >= 0) {
+                    versionDisplayElement.textContent = `Version 1.${minor}.0`;
+                    return;
                 }
             } catch (error) {
                 console.error('Error reading cache names:', error);
