@@ -128,6 +128,7 @@ class LocalStorageManager {
             playerNameHistory: [], // Add this line to store previously used names
             uploadedTeamNames: [], // legacy: array of strings
             uploadedTeamEntries: [], // { league, name }[] from Sync Top Teams
+            selectedLeagues: ['PL', 'PD', 'BL1', 'FL1'], // league codes to sync (default Top 4)
             currentSeason: 1,
             seasons: {},
             overallStats: {
@@ -176,6 +177,7 @@ class LocalStorageManager {
             ...data,
             uploadedTeamNames: Array.isArray(data.uploadedTeamNames) ? data.uploadedTeamNames : defaults.uploadedTeamNames,
             uploadedTeamEntries: Array.isArray(data.uploadedTeamEntries) ? data.uploadedTeamEntries : (defaults.uploadedTeamEntries || []),
+            selectedLeagues: Array.isArray(data.selectedLeagues) ? data.selectedLeagues : (defaults.selectedLeagues || []),
             seasons: data.seasons || defaults.seasons,
             overallStats: {
                 ...defaults.overallStats,

@@ -15,6 +15,7 @@ import { ShareManager } from './share.js';
 import { TouchSwipeHandler } from './touch.js';
 import { STAT_GROUPS } from './stats-calculators.js';
 import { syncTeamsFromOnline } from './data-handler.js';
+import { SUPPORTED_LEAGUES, LEAGUE_PRESETS } from './api-service.js';
 import { getLogText, clear as clearDebugLog } from './debug-log.js';
 import './stats-view-toggler-global.js';
 
@@ -212,7 +213,8 @@ class AppController {
         if (syncTopTeamsBtn) {
             syncTopTeamsBtn.addEventListener('click', async () => {
                 syncTopTeamsBtn.disabled = true;
-                const result = await syncTeamsFromOnline({ toastManager: this.toastManager, storage: this.storage });
+                const selectedLeagues = Array.isArray(this.storage.getData().selectedLeagues) ? this.storage.getData().selectedLeagues : [];
+                const result = await syncTeamsFromOnline({ toastManager: this.toastManager, storage: this.storage, selectedLeagues });
                 syncTopTeamsBtn.disabled = false;
                 if (result.success) {
                     this.updateTeamNamesSavedCountUI();
@@ -236,6 +238,27 @@ class AppController {
         const viewSyncedTeamsListBtn = document.getElementById('viewSyncedTeamsListBtn');
         if (viewSyncedTeamsListBtn) {
             viewSyncedTeamsListBtn.addEventListener('click', () => this.showSyncedTeamsListModal());
+        }
+        const leaguePresetTop4 = document.getElementById('leaguePresetTop4');
+        if (leaguePresetTop4) {
+            leaguePresetTop4.addEventListener('click', () => {
+                this.storage.updateData(data => { data.selectedLeagues = [...LEAGUE_PRESETS.top4]; });
+                this.renderLeaguesToSyncCheckboxes();
+            });
+        }
+        const leaguePresetTop6Europe = document.getElementById('leaguePresetTop6Europe');
+        if (leaguePresetTop6Europe) {
+            leaguePresetTop6Europe.addEventListener('click', () => {
+                this.storage.updateData(data => { data.selectedLeagues = [...LEAGUE_PRESETS.top6Europe]; });
+                this.renderLeaguesToSyncCheckboxes();
+            });
+        }
+        const leaguePresetWorldMix = document.getElementById('leaguePresetWorldMix');
+        if (leaguePresetWorldMix) {
+            leaguePresetWorldMix.addEventListener('click', () => {
+                this.storage.updateData(data => { data.selectedLeagues = [...LEAGUE_PRESETS.worldMix]; });
+                this.renderLeaguesToSyncCheckboxes();
+            });
         }
         const syncedTeamsListModalClose = document.getElementById('syncedTeamsListModalClose');
         const syncedTeamsListModal = document.getElementById('syncedTeamsListModal');
@@ -1255,6 +1278,46 @@ class AppController {
         this.showScreen('teamScreen');
     }
 
+    /**
+     * Persist selected leagues from the league checkboxes in #leaguesToSyncCheckboxes.
+     */
+    persistSelectedLeaguesFromCheckboxes() {
+        const container = document.getElementById('leaguesToSyncCheckboxes');
+        if (!container) return;
+        const selected = [];
+        container.querySelectorAll('input[type="checkbox"][data-league-code]').forEach(cb => {
+            if (cb.checked && cb.dataset.leagueCode) selected.push(cb.dataset.leagueCode);
+        });
+        this.storage.updateData(data => { data.selectedLeagues = selected; });
+    }
+
+    /**
+     * Render "Leagues to sync" checkboxes from SUPPORTED_LEAGUES and selectedLeagues; wire change to persist.
+     */
+    renderLeaguesToSyncCheckboxes() {
+        const container = document.getElementById('leaguesToSyncCheckboxes');
+        if (!container) return;
+        const selected = Array.isArray(this.storage.getData().selectedLeagues) ? this.storage.getData().selectedLeagues : [];
+        container.innerHTML = '';
+        SUPPORTED_LEAGUES.forEach(league => {
+            const label = document.createElement('label');
+            label.className = 'checkbox-label';
+            label.style.cssText = 'display: flex; align-items: center; gap: 0.35rem; cursor: pointer; margin: 0;';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'checkbox-input league-sync-checkbox';
+            cb.dataset.leagueCode = league.code;
+            cb.checked = selected.includes(league.code);
+            cb.addEventListener('change', () => this.persistSelectedLeaguesFromCheckboxes());
+            const span = document.createElement('span');
+            span.textContent = league.name;
+            span.style.fontSize = '0.85rem';
+            label.appendChild(cb);
+            label.appendChild(span);
+            container.appendChild(label);
+        });
+    }
+
     // Round Structures
     loadTeamCombinations() {
         const players = this.playerManager.getPlayers();
@@ -1424,6 +1487,7 @@ class AppController {
             useSameTeamPerRoundCheck.checked = this.settingsManager.getUseSameTeamPerRound();
             useSameTeamPerRoundCheck.onchange = () => this.settingsManager.setUseSameTeamPerRound(useSameTeamPerRoundCheck.checked);
         }
+        this.renderLeaguesToSyncCheckboxes();
         const teamNamesLoadedCount = document.getElementById('teamNamesLoadedCount');
         if (teamNamesLoadedCount) {
             const n = this.getUploadedTeamNamesCount();
@@ -5000,7 +5064,8 @@ class AppController {
         sessionSyncBtn.title = 'Fetch top 5 teams from Premier League, La Liga, Bundesliga, Ligue 1';
         sessionSyncBtn.onclick = async () => {
             sessionSyncBtn.disabled = true;
-            const result = await syncTeamsFromOnline({ toastManager: this.toastManager, storage: this.storage });
+            const selectedLeagues = Array.isArray(this.storage.getData().selectedLeagues) ? this.storage.getData().selectedLeagues : [];
+            const result = await syncTeamsFromOnline({ toastManager: this.toastManager, storage: this.storage, selectedLeagues });
             sessionSyncBtn.disabled = false;
             if (result.success) {
                 this.updateTeamNamesSavedCountUI();

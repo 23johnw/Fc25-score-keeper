@@ -265,12 +265,22 @@
                 <span>Same team per round (e.g. Round 1: Newcastle vs Newcastle, Round 2: Liverpool vs Liverpool)</span>
             </label>
             <p class="screen-description" id="teamSameClubHint" style="margin-left: 1.5rem; margin-top: 0; margin-bottom: 0.5rem; font-size: 0.85rem;">Leave unchecked for a different club each round. If you see the same club every round, uncheck this and click Confirm Sequence again.</p>
+            <div class="settings-section" style="margin-top: 1rem; margin-bottom: 0.75rem;">
+                <h3 style="margin: 0 0 0.25rem 0; font-size: 1rem;">Leagues to sync</h3>
+                <p class="screen-description" style="margin: 0 0 0.5rem 0; font-size: 0.85rem;">Choose leagues; Sync fetches top 5 from each.</p>
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+                    <button type="button" id="leaguePresetTop4" class="btn btn-secondary" style="padding: 0.35rem 0.5rem; font-size: 0.85rem;">Top 4</button>
+                    <button type="button" id="leaguePresetTop6Europe" class="btn btn-secondary" style="padding: 0.35rem 0.5rem; font-size: 0.85rem;">Top 6 Europe</button>
+                    <button type="button" id="leaguePresetWorldMix" class="btn btn-secondary" style="padding: 0.35rem 0.5rem; font-size: 0.85rem;">World mix</button>
+                </div>
+                <div id="leaguesToSyncCheckboxes" style="display: flex; flex-wrap: wrap; gap: 0.5rem 1rem;"></div>
+            </div>
             <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; flex-wrap: wrap;">
-                <button type="button" id="syncTopTeamsBtn" class="btn btn-secondary" title="Fetch top 5 teams from Premier League, La Liga, Bundesliga, Ligue 1">Sync Top Teams</button>
+                <button type="button" id="syncTopTeamsBtn" class="btn btn-secondary" title="Fetch top 5 teams from selected leagues">Sync Top Teams</button>
                 <button type="button" id="viewSyncedTeamsListBtn" class="btn btn-secondary" title="View the list of team names from sync">View list</button>
                 <span id="teamNamesLoadedCount" class="screen-description" style="display: none;"></span>
             </div>
-            <p class="screen-description" style="margin-top: 0; margin-bottom: 1rem; font-size: 0.85rem; color: #666;">Sync Top Teams to download club names from the top 4 leagues; they are used when you randomise.</p>
+            <p class="screen-description" style="margin-top: 0; margin-bottom: 1rem; font-size: 0.85rem; color: #666;">Sync Top Teams downloads club names from the leagues you selected; they are used when you randomise.</p>
             <p class="screen-description" id="teamScreenDescription">Select the order you want to play these matches</p>
             
             <div id="teamCombinations" class="team-combinations-grid"></div>

@@ -241,15 +241,16 @@ export function getTeamId(team) {
 }
 
 /**
- * Sync teams from football-data.org API. Fetches top 5 from PL, PD, BL1, FL1
+ * Sync teams from football-data.org API. Fetches top 5 from selected leagues
  * and overwrites uploadedTeamEntries in persistence (used when randomising team names).
  * Uses opts.storage when provided so the same instance as the app is updated (fixes View list).
- * @param {Object} opts - Options with toastManager and optional storage (same as app controller)
+ * @param {Object} opts - Options with toastManager, optional storage, optional selectedLeagues (league codes)
  * @returns {Promise<{ success: boolean, count?: number, entries?: Array, error?: string }>}
  */
 export async function syncTeamsFromOnline(opts = {}) {
     const toast = opts.toastManager;
     const store = opts.storage ?? storage;
+    const selectedLeagues = opts.selectedLeagues ?? (store.getData().selectedLeagues);
     const show = (msg, type = 'info', title = null) => {
         if (toast && typeof toast[type] === 'function') {
             toast[type](msg, title);
@@ -258,7 +259,7 @@ export async function syncTeamsFromOnline(opts = {}) {
 
     if (toast) show('Syncing...', 'info');
     try {
-        const entries = await fetchTopTeams();
+        const entries = await fetchTopTeams(selectedLeagues);
         if (!entries || entries.length === 0) {
             show('No teams retrieved from API', 'warning');
             return { success: false, error: 'No teams retrieved' };
@@ -267,7 +268,7 @@ export async function syncTeamsFromOnline(opts = {}) {
             data.uploadedTeamEntries = entries;
             data.uploadedTeamNames = []; // clear legacy file list so randomise only uses synced list
         });
-        if (toast) show(`Synced ${entries.length} teams from top 4 leagues!`, 'success', 'Success!');
+        if (toast) show(`Synced ${entries.length} teams from selected leagues!`, 'success', 'Success!');
         return { success: true, count: entries.length, entries };
     } catch (err) {
         let msg = err?.message || 'Sync failed';

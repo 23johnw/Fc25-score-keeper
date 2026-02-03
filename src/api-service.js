@@ -7,14 +7,33 @@ import { push as debugPush } from './debug-log.js';
 const API_BASE = 'https://api.football-data.org/v4';
 const CORS_PROXY = 'https://corsproxy.io/?';
 const CORS_SH_PROXY = 'https://proxy.cors.sh/';
-const LEAGUE_CODES = ['PL', 'PD', 'BL1', 'FL1'];
-const LEAGUE_NAMES = {
-    PL: 'Premier League',
-    PD: 'La Liga',
-    BL1: 'Bundesliga',
-    FL1: 'Ligue 1'
-};
+
+/** Supported leagues for sync (code + display name). football-data.org standings API. */
+export const SUPPORTED_LEAGUES = [
+    { code: 'PL', name: 'Premier League' },
+    { code: 'PD', name: 'La Liga' },
+    { code: 'BL1', name: 'Bundesliga' },
+    { code: 'FL1', name: 'Ligue 1' },
+    { code: 'SA', name: 'Serie A' },
+    { code: 'DED', name: 'Eredivisie' },
+    { code: 'PPL', name: 'Primeira Liga' },
+    { code: 'SPL', name: 'Scottish Premiership' },
+    { code: 'ELC', name: 'Championship' },
+    { code: 'BSA', name: 'Brasil Série A' },
+    { code: 'LMX', name: 'Liga MX' },
+    { code: 'MLS', name: 'MLS' }
+];
+
+const LEAGUE_CODES_DEFAULT = ['PL', 'PD', 'BL1', 'FL1'];
+const LEAGUE_NAMES = Object.fromEntries(SUPPORTED_LEAGUES.map(l => [l.code, l.name]));
 const TOP_TEAMS_COUNT = 5;
+
+/** Presets: Top 4 (current), Top 6 Europe, World mix */
+export const LEAGUE_PRESETS = {
+    top4: ['PL', 'PD', 'BL1', 'FL1'],
+    top6Europe: ['PL', 'PD', 'BL1', 'FL1', 'SA', 'DED'],
+    worldMix: ['PL', 'PD', 'BL1', 'FL1', 'BSA', 'LMX', 'MLS']
+};
 
 /** True when app is on phone or non-localhost (e.g. 192.168.x.x:3000); use proxy first to avoid API blocking. */
 function shouldUseProxyFirst() {
@@ -130,22 +149,24 @@ async function fetchWithCorsFallback(url, headers) {
 }
 
 /**
- * Fetches top 5 teams from each of 4 leagues (PL, PD, BL1, FL1).
+ * Fetches top 5 teams from each selected league.
  * Uses CORS proxy fallback when direct request is blocked.
+ * @param {string[]} [leagueCodes] - League codes to fetch (e.g. ['PL','PD','BL1','FL1']). If omitted, uses default 4.
  * @returns {Promise<Array<{ league: string, name: string }>>} Team entries with league and name
  * @throws {Error} If no API key exists
  */
-export async function fetchTopTeams() {
+export async function fetchTopTeams(leagueCodes) {
     const apiKey = localStorage.getItem('FOOTBALL_API_KEY');
     if (!apiKey || !apiKey.trim()) {
         debugPush('Sync: No Football Data API key', {});
         throw new Error('No API key found');
     }
 
+    const codes = Array.isArray(leagueCodes) && leagueCodes.length > 0 ? leagueCodes : LEAGUE_CODES_DEFAULT;
     const headers = { 'X-Auth-Token': apiKey.trim() };
     const allEntries = [];
 
-    for (const code of LEAGUE_CODES) {
+    for (const code of codes) {
         const url = `${API_BASE}/competitions/${code}/standings`;
         const res = await fetchWithCorsFallback(url, headers);
 
