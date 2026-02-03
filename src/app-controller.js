@@ -17,6 +17,14 @@ import { STAT_GROUPS } from './stats-calculators.js';
 import { syncTeamsFromOnline } from './data-handler.js';
 import { SUPPORTED_LEAGUES, getLeagueDisplay } from './api-service.js';
 import { getLogText, clear as clearDebugLog } from './debug-log.js';
+import {
+    initializeByDatePanel as initializeByDatePanelHelper,
+    toggleByDatePanel as toggleByDatePanelHelper,
+    updatePlayedDates as updatePlayedDatesHelper,
+    renderByDateList as renderByDateListHelper,
+    clearByDateFilter as clearByDateFilterHelper,
+    applyByDateFilter as applyByDateFilterHelper
+} from './history-viewer.js';
 import { registerScreens, loadScreen } from './screens/index.js';
 import './stats-view-toggler-global.js';
 
@@ -1554,134 +1562,27 @@ class AppController {
 
     // By Date / Custom Stats helpers
     initializeByDatePanel() {
-        const closeBtn = document.getElementById('closeByDatePanel');
-        const applyBtn = document.getElementById('applyByDateBtn');
-        const clearBtn = document.getElementById('clearByDateBtn');
-        const listContainer = document.getElementById('byDateList');
-        const fromInput = document.getElementById('byDateFrom');
-        const toInput = document.getElementById('byDateTo');
-
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => this.toggleByDatePanel(false));
-        }
-        if (applyBtn) {
-            applyBtn.addEventListener('click', () => this.applyByDateFilter());
-        }
-        if (clearBtn) {
-            clearBtn.addEventListener('click', () => this.clearByDateFilter());
-        }
-
-        if (listContainer) {
-            this.renderByDateList(listContainer);
-        }
-
-        if (fromInput) {
-            fromInput.addEventListener('change', (e) => {
-                this.currentByDateFilter.from = e.target.value || null;
-                this.currentByDateFilter.selectedDate = null;
-            });
-        }
-        if (toInput) {
-            toInput.addEventListener('change', (e) => {
-                this.currentByDateFilter.to = e.target.value || null;
-                this.currentByDateFilter.selectedDate = null;
-            });
-        }
+        return initializeByDatePanelHelper(this);
     }
 
     toggleByDatePanel(show = false) {
-        const panel = document.getElementById('byDatePanel');
-        if (!panel) return;
-        panel.style.display = show ? 'block' : 'none';
-        if (show) {
-            const listContainer = document.getElementById('byDateList');
-            if (listContainer) {
-                this.renderByDateList(listContainer);
-            }
-        }
+        return toggleByDatePanelHelper(this, show);
     }
 
     updatePlayedDates() {
-        const allMatches = this.statisticsTracker.getAllMatches();
-        const dateSet = new Set();
-        allMatches.forEach(match => {
-            if (match && match.timestamp) {
-                const dateKey = new Date(match.timestamp).toISOString().split('T')[0];
-                dateSet.add(dateKey);
-            }
-        });
-        this.playedDates = Array.from(dateSet).sort((a, b) => new Date(b) - new Date(a));
-
-        const listContainer = document.getElementById('byDateList');
-        const panel = document.getElementById('byDatePanel');
-        if (panel && panel.style.display !== 'none' && listContainer) {
-            this.renderByDateList(listContainer);
-        }
+        return updatePlayedDatesHelper(this);
     }
 
     renderByDateList(container) {
-        container.style.maxHeight = '240px';
-        container.style.overflowY = 'auto';
-        const dates = this.playedDates || [];
-        if (dates.length === 0) {
-            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📅</div><h4>No Dates</h4><p>Play some matches to enable date filtering.</p></div>';
-            return;
-        }
-        container.innerHTML = dates.map(dateStr => {
-            const isSelected = this.currentByDateFilter.selectedDate === dateStr;
-            return `
-                <button class="by-date-pill ${isSelected ? 'selected' : ''}" data-date="${dateStr}">
-                    ${dateStr}
-                </button>
-            `;
-        }).join('');
-
-        container.querySelectorAll('.by-date-pill').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const chosen = btn.dataset.date;
-                this.currentByDateFilter.selectedDate = chosen;
-                this.currentByDateFilter.from = chosen;
-                this.currentByDateFilter.to = chosen;
-                const fromInput = document.getElementById('byDateFrom');
-                const toInput = document.getElementById('byDateTo');
-                if (fromInput) fromInput.value = chosen;
-                if (toInput) toInput.value = chosen;
-                this.renderByDateList(container);
-            });
-        });
+        return renderByDateListHelper(this, container);
     }
 
     clearByDateFilter() {
-        this.currentByDateFilter = { from: null, to: null, selectedDate: null };
-        const fromInput = document.getElementById('byDateFrom');
-        const toInput = document.getElementById('byDateTo');
-        if (fromInput) fromInput.value = '';
-        if (toInput) toInput.value = '';
-        const listContainer = document.getElementById('byDateList');
-        if (listContainer) this.renderByDateList(listContainer);
-        this.updateCustomFilterSummary([]);
-        this.customFilterActive = false;
-        this.setByDateButtonActive(false);
-        this.showNormalStatsTabs();
+        return clearByDateFilterHelper(this);
     }
 
     applyByDateFilter() {
-        const { selectedDate, from, to } = this.currentByDateFilter || {};
-        let rangeFrom = null;
-        let rangeTo = null;
-
-        if (selectedDate) {
-            rangeFrom = selectedDate;
-            rangeTo = selectedDate;
-        } else {
-            rangeFrom = from || null;
-            rangeTo = to || null;
-        }
-
-        this.currentByDateFilter = { selectedDate: selectedDate || null, from: rangeFrom, to: rangeTo };
-        const matches = this.getCustomMatches();
-        this.renderCustomStatsSection(matches);
-        this.toggleByDatePanel(false);
+        return applyByDateFilterHelper(this);
     }
 
     // Undo last recorded match and re-show that matchup for correction
