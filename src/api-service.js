@@ -46,17 +46,23 @@ function urlHost(urlStr) {
     }
 }
 
+/** Ensure header value is ISO-8859-1 only; fetch() throws if value has non-Latin-1 (e.g. pasted smart quotes). */
+function headerSafe(str) {
+    if (typeof str !== 'string') return '';
+    return Array.from(str).filter(c => c.codePointAt(0) <= 0xFF).join('');
+}
+
 async function fetchWithCorsFallback(url, headers) {
     const proxyUrl = CORS_PROXY + encodeURIComponent(url);
     const useProxyFirst = shouldUseProxyFirst();
-    const corsShKey = (getCorsProxyKey() || '').trim();
+    const corsShKey = headerSafe((getCorsProxyKey() || '').trim());
 
     // proxy.cors.sh forwards headers to the target (needed for X-Auth-Token on mobile)
     async function doFetchCorsSh() {
         return fetch(CORS_SH_PROXY + url, {
             headers: {
                 'x-cors-api-key': corsShKey,
-                'X-Auth-Token': headers['X-Auth-Token'] || ''
+                'X-Auth-Token': headerSafe(headers['X-Auth-Token'] || '')
             }
         });
     }

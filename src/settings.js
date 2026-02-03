@@ -2,6 +2,12 @@
 // SettingsManager - Settings Management
 // ============================================================================
 
+/** Keep only ISO-8859-1 code points so values are safe for HTTP headers (avoids fetch error on paste). */
+function headerSafeStr(str) {
+    if (typeof str !== 'string') return '';
+    return Array.from(str).filter(c => c.codePointAt(0) <= 0xFF).join('');
+}
+
 class SettingsManager {
     constructor(storageManager) {
         this.storage = storageManager;
@@ -179,7 +185,7 @@ class SettingsManager {
     setFootballApiKey(key) {
         try {
             if (key && key.trim()) {
-                localStorage.setItem('FOOTBALL_API_KEY', key.trim());
+                localStorage.setItem('FOOTBALL_API_KEY', headerSafeStr(key.trim()));
             } else {
                 localStorage.removeItem('FOOTBALL_API_KEY');
             }
@@ -202,7 +208,7 @@ class SettingsManager {
     setCorsProxyApiKey(key) {
         try {
             if (key && key.trim()) {
-                localStorage.setItem('CORS_PROXY_API_KEY', key.trim());
+                localStorage.setItem('CORS_PROXY_API_KEY', headerSafeStr(key.trim()));
             } else {
                 localStorage.removeItem('CORS_PROXY_API_KEY');
             }
