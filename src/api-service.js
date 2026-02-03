@@ -2,6 +2,8 @@
 // API Service - Football Data.org integration
 // ============================================================================
 
+import { push as debugPush } from './debug-log.js';
+
 const API_BASE = 'https://api.football-data.org/v4';
 const CORS_PROXY = 'https://corsproxy.io/?';
 const CORS_SH_PROXY = 'https://proxy.cors.sh/';
@@ -36,6 +38,14 @@ function getCorsProxyKey() {
     }
 }
 
+function urlHost(urlStr) {
+    try {
+        return new URL(urlStr).host || '';
+    } catch {
+        return '';
+    }
+}
+
 async function fetchWithCorsFallback(url, headers) {
     const proxyUrl = CORS_PROXY + encodeURIComponent(url);
     const useProxyFirst = shouldUseProxyFirst();
@@ -60,12 +70,14 @@ async function fetchWithCorsFallback(url, headers) {
         try {
             const res = await doFetchCorsSh();
             if (res.ok || res.status === 401 || res.status === 403) return res;
+            debugPush('Sync: proxy.cors.sh returned error', { status: res.status, urlHost: urlHost(res.url) });
             throw new Error(`HTTP ${res.status}`);
         } catch (err) {
             const isCorsOrNetwork = !err.message || err.message.includes('Failed to fetch') ||
                 err.message.includes('NetworkError') || err.name === 'TypeError' ||
                 err.message.includes('Load failed');
             if (isCorsOrNetwork) {
+                debugPush('Sync: proxy.cors.sh request failed, trying fallback', { error: err.message });
                 return doFetch(true);
             }
             throw err;
@@ -88,7 +100,7 @@ async function fetchWithCorsFallback(url, headers) {
                     if (res.ok || res.status === 401 || res.status === 403) return res;
                     throw new Error(`HTTP ${res.status}`);
                 } catch (err2) {
-                    // Both proxy and direct failed on phone/deployed — tell user to add cors.sh key
+                    debugPush('Sync: CORS_PROXY_NEEDED (both proxy and direct failed)', { firstError: err.message });
                     throw new Error('CORS_PROXY_NEEDED');
                 }
             }
@@ -120,6 +132,7 @@ async function fetchWithCorsFallback(url, headers) {
 export async function fetchTopTeams() {
     const apiKey = localStorage.getItem('FOOTBALL_API_KEY');
     if (!apiKey || !apiKey.trim()) {
+        debugPush('Sync: No Football Data API key', {});
         throw new Error('No API key found');
     }
 
@@ -132,6 +145,7 @@ export async function fetchTopTeams() {
 
         if (!res.ok) {
             const errText = await res.text();
+            debugPush('Sync: API error', { leagueCode: code, status: res.status, responseHost: urlHost(res.url), bodyPreview: (errText || '').slice(0, 80) });
             throw new Error(`API error (${code}): ${res.status} ${errText || res.statusText}`);
         }
 

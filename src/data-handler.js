@@ -3,6 +3,7 @@ import { LocalStorageManager } from './persistence.js';
 import { SeasonManager } from './season.js';
 import { PlayerManager } from './players.js';
 import { fetchTopTeams } from './api-service.js';
+import { push as debugPush } from './debug-log.js';
 
 const storage = new LocalStorageManager();
 const seasonManager = new SeasonManager(storage);
@@ -277,6 +278,7 @@ export async function syncTeamsFromOnline(opts = {}) {
         } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('CORS') || msg.includes('blocked')) {
             msg = 'Sync on this device needs a CORS proxy key. In Settings > Data > External Services add a free key from cors.sh, save, then try Sync again.';
         }
+        debugPush('Sync: error shown to user', { rawError: err?.message, userMessage: msg });
         if (toast) show(msg, 'error', 'Error');
         return { success: false, error: msg };
     }

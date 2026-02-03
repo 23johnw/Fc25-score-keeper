@@ -15,6 +15,7 @@ import { ShareManager } from './share.js';
 import { TouchSwipeHandler } from './touch.js';
 import { STAT_GROUPS } from './stats-calculators.js';
 import { syncTeamsFromOnline } from './data-handler.js';
+import { getLogText, clear as clearDebugLog } from './debug-log.js';
 import './stats-view-toggler-global.js';
 
 class AppController {
@@ -397,7 +398,44 @@ class AppController {
         document.getElementById('exportDataSettingsBtn').addEventListener('click', () => this.exportData());
         document.getElementById('importDataSettingsBtn').addEventListener('click', () => this.importData());
         document.getElementById('clearAllDataBtn').addEventListener('click', () => this.confirmClearAllData());
-        
+
+        // Debug log (Settings > Data)
+        const copyDebugLogBtn = document.getElementById('copyDebugLogBtn');
+        if (copyDebugLogBtn) {
+            copyDebugLogBtn.addEventListener('click', () => {
+                const text = getLogText();
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(() => this.toastManager.success('Log copied to clipboard')).catch(() => this.toastManager.error('Copy failed'));
+                } else {
+                    this.toastManager.error('Copy not supported');
+                }
+            });
+        }
+        const exportDebugLogBtn = document.getElementById('exportDebugLogBtn');
+        if (exportDebugLogBtn) {
+            exportDebugLogBtn.addEventListener('click', () => {
+                const text = getLogText();
+                const filename = 'fc25-debug-log-' + new Date().toISOString().slice(0, 10) + '.txt';
+                const blob = new Blob([text], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+                this.toastManager.success('Log exported as ' + filename);
+            });
+        }
+        const clearDebugLogBtn = document.getElementById('clearDebugLogBtn');
+        if (clearDebugLogBtn) {
+            clearDebugLogBtn.addEventListener('click', () => {
+                clearDebugLog();
+                const ta = document.getElementById('debugLogTextarea');
+                if (ta) ta.value = getLogText();
+                this.toastManager.success('Debug log cleared');
+            });
+        }
+
         // Admin PIN buttons
         const adminUnlockBtn = document.getElementById('adminUnlockBtn');
         if (adminUnlockBtn) adminUnlockBtn.addEventListener('click', () => this.unlockAdminWithPin());
@@ -4078,6 +4116,12 @@ class AppController {
         const corsProxyKeyInput = document.getElementById('corsProxyKeyInput');
         if (corsProxyKeyInput) {
             corsProxyKeyInput.value = this.settingsManager.getCorsProxyApiKey() || '';
+        }
+
+        // Debug log (Settings > Data)
+        const debugLogTextarea = document.getElementById('debugLogTextarea');
+        if (debugLogTextarea) {
+            debugLogTextarea.value = getLogText();
         }
     }
 

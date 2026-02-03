@@ -768,6 +768,18 @@
                     </p>
                 </div>
                 <div class="settings-section" style="margin-top: 2rem;">
+                    <h3>Debug log</h3>
+                    <p class="settings-description">Errors and Sync/API events. Export to see why Sync fails on your phone.</p>
+                    <div class="settings-group">
+                        <textarea id="debugLogTextarea" readonly class="settings-input" rows="6" style="width: 100%; resize: vertical; font-family: monospace; font-size: 0.85rem;" placeholder="No entries yet. Try Sync Top Teams or other actions."></textarea>
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem;">
+                            <button type="button" id="copyDebugLogBtn" class="btn btn-secondary" style="padding: 0.5rem;">Copy log</button>
+                            <button type="button" id="exportDebugLogBtn" class="btn btn-secondary" style="padding: 0.5rem;">Export as file</button>
+                            <button type="button" id="clearDebugLogBtn" class="btn btn-secondary" style="padding: 0.5rem;">Clear log</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="settings-section" style="margin-top: 2rem;">
                     <h3>App Version</h3>
                     <p class="settings-description">Current version of the app</p>
                     <div class="settings-group">
