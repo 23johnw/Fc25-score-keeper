@@ -251,6 +251,7 @@ export async function syncTeamsFromOnline(opts = {}) {
     const toast = opts.toastManager;
     const store = opts.storage ?? storage;
     const selectedLeagues = opts.selectedLeagues ?? (store.getData().selectedLeagues);
+    const teamsPerLeague = opts.teamsPerLeague ?? (store.getData().teamsPerLeague ?? 5);
     const show = (msg, type = 'info', title = null) => {
         if (toast && typeof toast[type] === 'function') {
             toast[type](msg, title);
@@ -258,8 +259,28 @@ export async function syncTeamsFromOnline(opts = {}) {
     };
 
     if (toast) show('Syncing...', 'info');
+    let rateLimitToast = null;
     try {
-        const entries = await fetchTopTeams(selectedLeagues);
+        const { entries, skipped } = await fetchTopTeams(selectedLeagues, {
+            teamsPerLeague,
+            onRateLimitWait(secondsRemaining, leagueName) {
+                if (!rateLimitToast && toast && typeof toast.showPersistent === 'function') {
+                    rateLimitToast = toast.showPersistent(
+                        `Retrying ${leagueName} in ${secondsRemaining}s…`,
+                        'Rate limited'
+                    );
+                }
+                if (rateLimitToast) {
+                    rateLimitToast.update(secondsRemaining > 0
+                        ? `Retrying ${leagueName} in ${secondsRemaining}s…`
+                        : `Retrying ${leagueName} now…`);
+                }
+            }
+        });
+        if (rateLimitToast) {
+            rateLimitToast.close();
+            rateLimitToast = null;
+        }
         if (!entries || entries.length === 0) {
             show('No teams retrieved from API', 'warning');
             return { success: false, error: 'No teams retrieved' };
@@ -268,8 +289,13 @@ export async function syncTeamsFromOnline(opts = {}) {
             data.uploadedTeamEntries = entries;
             data.uploadedTeamNames = []; // clear legacy file list so randomise only uses synced list
         });
-        if (toast) show(`Synced ${entries.length} teams from selected leagues!`, 'success', 'Success!');
-        return { success: true, count: entries.length, entries };
+        if (toast) {
+            const msg = skipped.length > 0
+                ? `Synced ${entries.length} teams. ${skipped.map(s => s.name).join(', ')} skipped (rate limit or not in API plan).`
+                : `Synced ${entries.length} teams from selected leagues!`;
+            show(msg, skipped.length > 0 ? 'warning' : 'success', 'Success!');
+        }
+        return { success: true, count: entries.length, entries, skipped };
     } catch (err) {
         let msg = err?.message || 'Sync failed';
         if (msg.includes('No API key')) {
@@ -282,5 +308,10 @@ export async function syncTeamsFromOnline(opts = {}) {
         debugPush('Sync: error shown to user', { rawError: err?.message, userMessage: msg });
         if (toast) show(msg, 'error', 'Error');
         return { success: false, error: msg };
+    } finally {
+        if (rateLimitToast) {
+            rateLimitToast.close();
+            rateLimitToast = null;
+        }
     }
 }

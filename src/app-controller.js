@@ -123,7 +123,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.113.0';
+            bannerVersion.textContent = 'Version 1.115.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
@@ -213,7 +213,8 @@ class AppController {
         if (syncTopTeamsBtn) {
             syncTopTeamsBtn.addEventListener('click', async () => {
                 syncTopTeamsBtn.disabled = true;
-                const selectedLeagues = Array.isArray(this.storage.getData().selectedLeagues) ? this.storage.getData().selectedLeagues : [];
+                this.persistSelectedLeaguesFromCheckboxes();
+                const selectedLeagues = this.getSelectedLeaguesFromCheckboxes() ?? (Array.isArray(this.storage.getData().selectedLeagues) ? this.storage.getData().selectedLeagues : []);
                 const result = await syncTeamsFromOnline({ toastManager: this.toastManager, storage: this.storage, selectedLeagues });
                 syncTopTeamsBtn.disabled = false;
                 if (result.success) {
@@ -258,6 +259,23 @@ class AppController {
             leaguePresetWorldMix.addEventListener('click', () => {
                 this.storage.updateData(data => { data.selectedLeagues = [...LEAGUE_PRESETS.worldMix]; });
                 this.renderLeaguesToSyncCheckboxes();
+            });
+        }
+        const leaguePresetInternational = document.getElementById('leaguePresetInternational');
+        if (leaguePresetInternational) {
+            leaguePresetInternational.addEventListener('click', () => {
+                this.storage.updateData(data => { data.selectedLeagues = [...LEAGUE_PRESETS.international]; });
+                this.renderLeaguesToSyncCheckboxes();
+            });
+        }
+        const teamsPerLeagueInput = document.getElementById('teamsPerLeagueInput');
+        if (teamsPerLeagueInput) {
+            teamsPerLeagueInput.addEventListener('change', () => {
+                let n = parseInt(teamsPerLeagueInput.value, 10);
+                if (isNaN(n) || n < 1) n = 1;
+                if (n > 20) n = 20;
+                teamsPerLeagueInput.value = n;
+                this.storage.updateData(data => { data.teamsPerLeague = n; });
             });
         }
         const syncedTeamsListModalClose = document.getElementById('syncedTeamsListModalClose');
@@ -767,9 +785,6 @@ class AppController {
         const name2 = (entry2 && entry2.name) ? this.escapeHtml(entry2.name) : (fallback2 || '');
         const showLeagueRow = hasEntries;
         const showNameRow = hasEntries;
-        // #region agent log
-        if (hasEntries) fetch('http://127.0.0.1:7242/ingest/08043545-943c-47f4-96ac-88ee42089f72',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app-controller.js:formatMatchTeamsDisplay',message:'display args',data:{entry1,entry2,league1,league2,showLeagueRow},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
-        // #endregion
         return `
             ${showLeagueRow ? `<div class="match-league-row"><span class="team-league">${league1}</span><span class="vs-spacer"></span><span class="team-league">${league2}</span></div>` : ''}
             ${showNameRow ? `<div class="match-name-row"><span class="team-name">${name1}</span><span class="vs-spacer"></span><span class="team-name">${name2}</span></div>` : ''}
@@ -1279,15 +1294,26 @@ class AppController {
     }
 
     /**
+     * Read selected league codes from the league checkboxes (current UI state). Returns null if no checkboxes rendered.
+     */
+    getSelectedLeaguesFromCheckboxes() {
+        const container = document.getElementById('leaguesToSyncCheckboxes');
+        if (!container) return null;
+        const checkboxes = container.querySelectorAll('input[type="checkbox"][data-league-code]');
+        if (checkboxes.length === 0) return null;
+        const selected = [];
+        checkboxes.forEach(cb => {
+            if (cb.checked && cb.dataset.leagueCode) selected.push(cb.dataset.leagueCode);
+        });
+        return selected;
+    }
+
+    /**
      * Persist selected leagues from the league checkboxes in #leaguesToSyncCheckboxes.
      */
     persistSelectedLeaguesFromCheckboxes() {
-        const container = document.getElementById('leaguesToSyncCheckboxes');
-        if (!container) return;
-        const selected = [];
-        container.querySelectorAll('input[type="checkbox"][data-league-code]').forEach(cb => {
-            if (cb.checked && cb.dataset.leagueCode) selected.push(cb.dataset.leagueCode);
-        });
+        const selected = this.getSelectedLeaguesFromCheckboxes();
+        if (selected === null) return;
         this.storage.updateData(data => { data.selectedLeagues = selected; });
     }
 
@@ -1488,6 +1514,12 @@ class AppController {
             useSameTeamPerRoundCheck.onchange = () => this.settingsManager.setUseSameTeamPerRound(useSameTeamPerRoundCheck.checked);
         }
         this.renderLeaguesToSyncCheckboxes();
+        const teamsPerLeagueInput = document.getElementById('teamsPerLeagueInput');
+        if (teamsPerLeagueInput) {
+            const n = this.storage.getData().teamsPerLeague ?? 5;
+            const val = Math.max(1, Math.min(20, typeof n === 'number' ? n : 5));
+            teamsPerLeagueInput.value = String(val);
+        }
         const teamNamesLoadedCount = document.getElementById('teamNamesLoadedCount');
         if (teamNamesLoadedCount) {
             const n = this.getUploadedTeamNamesCount();
@@ -1654,10 +1686,6 @@ class AppController {
     }
 
     async confirmSequence() {
-        // #region agent log
-        const useRandom = this.settingsManager.getUseRandomTeams();
-        fetch('http://127.0.0.1:7242/ingest/08043545-943c-47f4-96ac-88ee42089f72',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app-controller.js:confirmSequence',message:'confirmSequence entry',data:{useRandomTeams:useRandom,useSameTeamName:this.settingsManager.getUseSameTeamName(),useSameTeamPerRound:this.settingsManager.getUseSameTeamPerRound()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
-        // #endregion
         console.log('confirmSequence called');
         console.log('selectedStructureIndex:', this.selectedStructureIndex);
         console.log('selectedStructure:', this.selectedStructure);
@@ -1671,9 +1699,6 @@ class AppController {
 
         if (this.settingsManager.getUseRandomTeams() && this.selectedStructure && this.selectedStructure.matches) {
             const entries = await this.getTeamNamesForRandom();
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/08043545-943c-47f4-96ac-88ee42089f72',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app-controller.js:confirmSequence entries',message:'entries from getTeamNamesForRandom',data:{entriesLen:entries.length,firstEntry:entries[0]?{league:entries[0].league,name:entries[0].name}:null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
-            // #endregion
             const { assigned, needCount } = await this.assignRandomTeamNamesToCurrentSeason(entries);
             if (assigned) {
                 // already updated in assignRandomTeamNamesToCurrentSeason
@@ -1698,13 +1723,6 @@ class AppController {
                     season.matchTeamNames = undefined;
                 }
             });
-            // #region agent log
-            const seasons = this.storage.getData().seasons || {};
-            const season = seasons[currentSeason];
-            const hasTeamNames = season && typeof season.teamNames === 'object' && Object.keys(season.teamNames || {}).length > 0;
-            const hasMatchTeamNames = season && Array.isArray(season.matchTeamNames) && season.matchTeamNames.length > 0;
-            fetch('http://127.0.0.1:7242/ingest/08043545-943c-47f4-96ac-88ee42089f72',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app-controller.js:confirmSequence',message:'useRandomTeams false cleared',data:{useRandomTeams:false,hasTeamNamesAfterClear:hasTeamNames,hasMatchTeamNamesAfterClear:hasMatchTeamNames},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1',runId:'post-fix'})}).catch(()=>{});
-            // #endregion
         }
 
         console.log('Structure confirmed, switching to sequence screen');
@@ -2946,20 +2964,6 @@ class AppController {
     }
 
     showTeamDetails(teamPlayers) {
-        // #region agent log
-        fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                location: 'src/app-controller.js:showTeamDetails',
-                message: 'showTeamDetails called',
-                data: { teamPlayers },
-                timestamp: Date.now(),
-                sessionId: 'debug-session'
-            })
-        }).catch(() => {});
-        // #endregion
-
         // Update title and subtitle
         const teamName = teamPlayers.length === 1 ? teamPlayers[0] : teamPlayers.join(' & ');
         document.getElementById('teamDetailsTitle').textContent = teamName;
@@ -2993,20 +2997,6 @@ class AppController {
     }
 
     filterMatchesForTeam(matches, teamPlayers) {
-        // #region agent log
-        fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                location: 'src/app-controller.js:filterMatchesForTeam',
-                message: 'filterMatchesForTeam called',
-                data: { teamPlayers, matchesCount: matches.length },
-                timestamp: Date.now(),
-                sessionId: 'debug-session'
-            })
-        }).catch(() => {});
-        // #endregion
-
         // Strict partnership filtering: Only show matches where Player A, Player B, or both are on the SAME team
         const filtered = [];
         const [playerA, playerB] = teamPlayers; // Get the two partnership players
@@ -3039,30 +3029,6 @@ class AppController {
             const team1HasBOnly = team1.includes(playerB) && !team1.includes(playerA) && team1.length === 1;
             const team2HasBOnly = team2.includes(playerB) && !team2.includes(playerA) && team2.length === 1;
             
-            // #region agent log
-            fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    location: 'src/app-controller.js:filterMatchesForTeam',
-                    message: 'filterMatchesForTeam - match analysis',
-                    data: { 
-                        team1,
-                        team2,
-                        team1HasBoth,
-                        team2HasBoth,
-                        team1HasAOnly,
-                        team2HasAOnly,
-                        team1HasBOnly,
-                        team2HasBOnly,
-                        playersOnOppositeTeams
-                    },
-                    timestamp: Date.now(),
-                    sessionId: 'debug-session'
-                })
-            }).catch(() => {});
-            // #endregion
-            
             // Include if:
             // 1. Both players together on same team (Full Team)
             // 2. One player solo (team size = 1) - includes both true solo and Ghost Proxy matches
@@ -3072,43 +3038,10 @@ class AppController {
             }
         }
         
-        // #region agent log
-        fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                location: 'src/app-controller.js:filterMatchesForTeam',
-                message: 'filterMatchesForTeam completed',
-                data: { filteredCount: filtered.length },
-                timestamp: Date.now(),
-                sessionId: 'debug-session'
-            })
-        }).catch(() => {});
-        // #endregion
-        
         return filtered;
     }
 
     classifyMatch(match, teamPlayers) {
-        // #region agent log
-        fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                location: 'src/app-controller.js:classifyMatch',
-                message: 'classifyMatch called',
-                data: { 
-                    teamPlayers,
-                    team1: match.team1,
-                    team2: match.team2,
-                    result: match.result
-                },
-                timestamp: Date.now(),
-                sessionId: 'debug-session'
-            })
-        }).catch(() => {});
-        // #endregion
-
         const team1 = Array.isArray(match.team1) ? match.team1 : [match.team1];
         const team2 = Array.isArray(match.team2) ? match.team2 : [match.team2];
         const [playerA, playerB] = teamPlayers;
@@ -3146,20 +3079,6 @@ class AppController {
                 result = 'Loss';
             }
             
-            // #region agent log
-            fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    location: 'src/app-controller.js:classifyMatch',
-                    message: 'classifyMatch - full team match',
-                    data: { type: 'team', result, isTeam1, isGhostProxy },
-                    timestamp: Date.now(),
-                    sessionId: 'debug-session'
-                })
-            }).catch(() => {});
-            // #endregion
-            
             return { type: 'team', result, soloPlayer: null };
         } else {
             // Solo match - only one player from partnership played AND they are truly alone (team size = 1)
@@ -3193,20 +3112,6 @@ class AppController {
                     result = 'Loss';
                 }
                 
-                // #region agent log
-                fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        location: 'src/app-controller.js:classifyMatch',
-                        message: 'classifyMatch - solo match',
-                        data: { type: 'solo', result, soloPlayer, isTeam1 },
-                        timestamp: Date.now(),
-                        sessionId: 'debug-session'
-                    })
-                }).catch(() => {});
-                // #endregion
-                
                 return { type: 'solo', result, soloPlayer };
             }
         }
@@ -3215,20 +3120,6 @@ class AppController {
     }
 
     renderTeamDetailsMatches(matches, teamPlayers, totalGames = null) {
-        // #region agent log
-        fetch('http://127.0.0.1:7249/ingest/12f9232d-c1a6-4b9d-9176-f23ba151eb7a', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                location: 'src/app-controller.js:renderTeamDetailsMatches',
-                message: 'renderTeamDetailsMatches called',
-                data: { matchesCount: matches.length },
-                timestamp: Date.now(),
-                sessionId: 'debug-session'
-            })
-        }).catch(() => {});
-        // #endregion
-
         const container = document.getElementById('teamDetailsMatchList');
         if (!container) return;
         
@@ -4226,7 +4117,7 @@ class AppController {
         const bannerVersion = document.getElementById('appVersionBanner');
         if (bannerVersion) {
             // Set version immediately (synchronously)
-            bannerVersion.textContent = 'Version 1.113.0';
+            bannerVersion.textContent = 'Version 1.115.0';
             // Then try to update from cache (async)
             this.displayAppVersion(bannerVersion).catch(err => {
                 console.error('Error displaying app version:', err);
@@ -5064,7 +4955,8 @@ class AppController {
         sessionSyncBtn.title = 'Fetch top 5 teams from Premier League, La Liga, Bundesliga, Ligue 1';
         sessionSyncBtn.onclick = async () => {
             sessionSyncBtn.disabled = true;
-            const selectedLeagues = Array.isArray(this.storage.getData().selectedLeagues) ? this.storage.getData().selectedLeagues : [];
+            this.persistSelectedLeaguesFromCheckboxes();
+            const selectedLeagues = this.getSelectedLeaguesFromCheckboxes() ?? (Array.isArray(this.storage.getData().selectedLeagues) ? this.storage.getData().selectedLeagues : []);
             const result = await syncTeamsFromOnline({ toastManager: this.toastManager, storage: this.storage, selectedLeagues });
             sessionSyncBtn.disabled = false;
             if (result.success) {

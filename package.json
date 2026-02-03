@@ -1,6 +1,6 @@
 {
   "name": "fc25-score-tracker",
-  "version": "1.113.0",
+  "version": "1.115.0",
   "private": true,
   "scripts": {
     "start": "npx serve -l 3000"

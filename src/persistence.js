@@ -129,6 +129,7 @@ class LocalStorageManager {
             uploadedTeamNames: [], // legacy: array of strings
             uploadedTeamEntries: [], // { league, name }[] from Sync Top Teams
             selectedLeagues: ['PL', 'PD', 'BL1', 'FL1'], // league codes to sync (default Top 4)
+            teamsPerLeague: 5, // how many teams to fetch per league when syncing (1–20)
             currentSeason: 1,
             seasons: {},
             overallStats: {
@@ -178,6 +179,9 @@ class LocalStorageManager {
             uploadedTeamNames: Array.isArray(data.uploadedTeamNames) ? data.uploadedTeamNames : defaults.uploadedTeamNames,
             uploadedTeamEntries: Array.isArray(data.uploadedTeamEntries) ? data.uploadedTeamEntries : (defaults.uploadedTeamEntries || []),
             selectedLeagues: Array.isArray(data.selectedLeagues) ? data.selectedLeagues : (defaults.selectedLeagues || []),
+            teamsPerLeague: typeof data.teamsPerLeague === 'number' && data.teamsPerLeague >= 1 && data.teamsPerLeague <= 20
+                ? data.teamsPerLeague
+                : (defaults.teamsPerLeague ?? 5),
             seasons: data.seasons || defaults.seasons,
             overallStats: {
                 ...defaults.overallStats,

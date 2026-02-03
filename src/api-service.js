@@ -8,31 +8,31 @@ const API_BASE = 'https://api.football-data.org/v4';
 const CORS_PROXY = 'https://corsproxy.io/?';
 const CORS_SH_PROXY = 'https://proxy.cors.sh/';
 
-/** Supported leagues for sync (code + display name). football-data.org standings API. */
+/** Supported leagues for sync (code + display name). Free-tier only: football-data.org standings API. */
 export const SUPPORTED_LEAGUES = [
-    { code: 'PL', name: 'Premier League' },
-    { code: 'PD', name: 'La Liga' },
+    { code: 'CL', name: 'UEFA Champions League' },
     { code: 'BL1', name: 'Bundesliga' },
-    { code: 'FL1', name: 'Ligue 1' },
-    { code: 'SA', name: 'Serie A' },
     { code: 'DED', name: 'Eredivisie' },
-    { code: 'PPL', name: 'Primeira Liga' },
-    { code: 'SPL', name: 'Scottish Premiership' },
+    { code: 'BSA', name: 'Campeonato Brasileiro Série A' },
+    { code: 'PD', name: 'Primera Division' },
+    { code: 'FL1', name: 'Ligue 1' },
     { code: 'ELC', name: 'Championship' },
-    { code: 'BSA', name: 'Brasil Série A' },
-    { code: 'LMX', name: 'Liga MX' },
-    { code: 'MLS', name: 'MLS' }
+    { code: 'PPL', name: 'Primeira Liga' },
+    { code: 'EC', name: 'European Championship' },
+    { code: 'SA', name: 'Serie A' },
+    { code: 'PL', name: 'Premier League' }
 ];
 
 const LEAGUE_CODES_DEFAULT = ['PL', 'PD', 'BL1', 'FL1'];
 const LEAGUE_NAMES = Object.fromEntries(SUPPORTED_LEAGUES.map(l => [l.code, l.name]));
-const TOP_TEAMS_COUNT = 5;
+const DEFAULT_TEAMS_PER_LEAGUE = 5;
 
-/** Presets: Top 4 (current), Top 6 Europe, World mix */
+/** Presets: Top 4 (current), Top 6 Europe, World mix, International */
 export const LEAGUE_PRESETS = {
     top4: ['PL', 'PD', 'BL1', 'FL1'],
     top6Europe: ['PL', 'PD', 'BL1', 'FL1', 'SA', 'DED'],
-    worldMix: ['PL', 'PD', 'BL1', 'FL1', 'BSA', 'LMX', 'MLS']
+    worldMix: ['PL', 'PD', 'BL1', 'FL1', 'BSA'],
+    international: ['CL', 'EC']
 };
 
 /** True when app is on phone or non-localhost (e.g. 192.168.x.x:3000); use proxy first to avoid API blocking. */
@@ -148,23 +148,44 @@ async function fetchWithCorsFallback(url, headers) {
     }
 }
 
+/** Parse wait seconds from 429 response (body or Retry-After header). Minimum 60s. */
+function parse429WaitSeconds(errText, retryAfterHeader) {
+    const minWait = 60;
+    if (retryAfterHeader) {
+        const n = parseInt(retryAfterHeader.trim(), 10);
+        if (!isNaN(n) && n > 0) return Math.max(minWait, n);
+    }
+    if (!errText) return minWait;
+    try {
+        const m = errText.match(/Wait\s+(\d+)\s+seconds?/i) || (typeof errText === 'string' && errText.includes('"message"') ? errText.match(/(\d+)\s+seconds?/i) : null);
+        if (m && m[1]) return Math.max(minWait, parseInt(m[1], 10));
+    } catch (e) {}
+    return minWait;
+}
+
+function sleep(ms) {
+    return new Promise(r => setTimeout(r, ms));
+}
+
 /**
- * Fetches top 5 teams from each selected league.
- * Uses CORS proxy fallback when direct request is blocked.
- * @param {string[]} [leagueCodes] - League codes to fetch (e.g. ['PL','PD','BL1','FL1']). If omitted, uses default 4.
- * @returns {Promise<Array<{ league: string, name: string }>>} Team entries with league and name
- * @throws {Error} If no API key exists
+ * Fetches top N teams from each selected league. 403 leagues skipped; 429 triggers wait + retry (with optional countdown).
+ * @param {string[]} [leagueCodes] - League codes to fetch.
+ * @param {{ onRateLimitWait?: (secondsRemaining: number, leagueName: string) => void, teamsPerLeague?: number }} [opts] - Optional: countdown callback; teamsPerLeague (default 5).
+ * @returns {Promise<{ entries: Array<{ league: string, name: string }>, skipped: Array<{ code: string, name: string }> }>}
  */
-export async function fetchTopTeams(leagueCodes) {
+export async function fetchTopTeams(leagueCodes, opts = {}) {
     const apiKey = localStorage.getItem('FOOTBALL_API_KEY');
     if (!apiKey || !apiKey.trim()) {
         debugPush('Sync: No Football Data API key', {});
         throw new Error('No API key found');
     }
 
-    const codes = Array.isArray(leagueCodes) && leagueCodes.length > 0 ? leagueCodes : LEAGUE_CODES_DEFAULT;
+    const requested = Array.isArray(leagueCodes) && leagueCodes.length > 0 ? leagueCodes : LEAGUE_CODES_DEFAULT;
+    const codes = requested.filter(code => LEAGUE_NAMES[code]);
+    const teamsPerLeague = Math.max(1, Math.min(20, parseInt(opts.teamsPerLeague, 10) || DEFAULT_TEAMS_PER_LEAGUE));
     const headers = { 'X-Auth-Token': apiKey.trim() };
     const allEntries = [];
+    const skipped = [];
 
     for (const code of codes) {
         const url = `${API_BASE}/competitions/${code}/standings`;
@@ -172,6 +193,41 @@ export async function fetchTopTeams(leagueCodes) {
 
         if (!res.ok) {
             const errText = await res.text();
+            if (res.status === 403) {
+                debugPush('Sync: league skipped (not in API plan)', { leagueCode: code, status: 403 });
+                skipped.push({ code, name: LEAGUE_NAMES[code] || code, reason: 'plan' });
+                continue;
+            }
+            if (res.status === 429) {
+                const leagueName = LEAGUE_NAMES[code] || code;
+                const waitSeconds = parse429WaitSeconds(errText, res.headers.get('Retry-After'));
+                debugPush('Sync: rate limited, waiting then retry', { leagueCode: code, waitSeconds });
+                const onTick = opts.onRateLimitWait;
+                for (let s = waitSeconds; s >= 0; s--) {
+                    if (onTick) onTick(s, leagueName);
+                    if (s > 0) await sleep(1000);
+                }
+                const retryRes = await fetchWithCorsFallback(url, headers);
+                if (!retryRes.ok) {
+                    const retryText = await retryRes.text();
+                    if (retryRes.status === 429) {
+                        debugPush('Sync: league skipped (rate limit after retry)', { leagueCode: code });
+                        skipped.push({ code, name: leagueName, reason: 'rate_limit' });
+                        continue;
+                    }
+                    debugPush('Sync: API error after retry', { leagueCode: code, status: retryRes.status });
+                    throw new Error(`API error (${code}): ${retryRes.status} ${retryText || retryRes.statusText}`);
+                }
+                const data = await retryRes.json();
+                const table = data.standings?.[0]?.table ?? data.table ?? [];
+                const topTeams = table.slice(0, teamsPerLeague);
+                for (const row of topTeams) {
+                    const team = row.team ?? row;
+                    const name = team.name ?? team.shortName ?? String(team);
+                    if (name) allEntries.push({ league: leagueName, name });
+                }
+                continue;
+            }
             debugPush('Sync: API error', { leagueCode: code, status: res.status, responseHost: urlHost(res.url), bodyPreview: (errText || '').slice(0, 80) });
             throw new Error(`API error (${code}): ${res.status} ${errText || res.statusText}`);
         }
@@ -180,7 +236,7 @@ export async function fetchTopTeams(leagueCodes) {
         const leagueName = LEAGUE_NAMES[code] || code;
         const table = data.standings?.[0]?.table ?? data.table ?? [];
 
-        const topTeams = table.slice(0, TOP_TEAMS_COUNT);
+        const topTeams = table.slice(0, teamsPerLeague);
         for (const row of topTeams) {
             const team = row.team ?? row;
             const name = team.name ?? team.shortName ?? String(team);
@@ -190,5 +246,5 @@ export async function fetchTopTeams(leagueCodes) {
         }
     }
 
-    return allEntries;
+    return { entries: allEntries, skipped };
 }
