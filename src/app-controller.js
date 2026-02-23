@@ -44,7 +44,7 @@ class AppController {
         this.sessionSelectedStructureIndex = null;
         this.sessionAvailableStructures = [];
         this.sessionStarted = false;
-        this.uiMode = 'session'; // 'session' | 'advanced'
+        this.uiMode = 'advanced'; // Session mode disabled; keep full app mode only
         this.seasonManager = new SeasonManager(this.storage);
         this.matchRecorder = new MatchRecorder(this.storage, this.seasonManager, this.playerManager);
         this.statisticsTracker = new StatisticsTracker(this.storage, this.settingsManager);
@@ -97,23 +97,16 @@ class AppController {
         // Load settings into form fields (regardless of current screen)
         this.loadSettingsIntoForm();
 
-        // UI mode (session vs advanced) should be known before we decide default screen
+        // UI mode should be known before we decide default screen
         this.loadUiMode();
         this.applyUiMode();
 
         // Try to restore saved game state
         this.restoreSavedGameState();
 
-        // Default screen selection:
-        // - Session mode: always land on Session splash (no tabs)
-        // - Advanced mode: restore saved screen, otherwise Players
-        if (this.uiMode === 'session') {
-            // Always show session screen in session mode, ignore saved state
-            this.currentScreen = null;
-            this.showScreen('sessionScreen');
-        } else if (!this.currentScreen) {
-            this.showScreen('playerScreen');
-        }
+        // Session mode is disabled; always land on Players for a predictable startup state.
+        this.currentScreen = null;
+        this.showScreen('playerScreen');
         
         this.updateSeasonInfo();
         this.updatePlayerNameHistory(); // Add this line
@@ -723,10 +716,12 @@ class AppController {
         if (players.length > 0) {
             container.style.display = 'block';
             list.innerHTML = players.map(p => `<li>${p}</li>`).join('');
-            document.getElementById('startNewSessionBtn').style.display = 'block';
+            const playerScreenStartBtn = document.querySelector('#playerScreen #startNewSessionBtn');
+            if (playerScreenStartBtn) playerScreenStartBtn.style.display = 'block';
         } else {
             container.style.display = 'none';
-            document.getElementById('startNewSessionBtn').style.display = 'none';
+            const playerScreenStartBtn = document.querySelector('#playerScreen #startNewSessionBtn');
+            if (playerScreenStartBtn) playerScreenStartBtn.style.display = 'none';
         }
         this.renderPlayerLockOptions();
     }
@@ -3080,6 +3075,285 @@ class AppController {
         this.loadMatchHistory();
     }
 
+    getEditTeamEntries() {
+        const data = this.storage.getData();
+        const entries = [];
+        const seen = new Set();
+
+        const pushEntry = (league, name) => {
+            const normalizedLeague = String(league || '').trim();
+            const normalizedName = String(name || '').trim();
+            if (!normalizedName) return;
+            const key = `${normalizedLeague}|${normalizedName}`.toLowerCase();
+            if (seen.has(key)) return;
+            seen.add(key);
+            entries.push({
+                league: normalizedLeague,
+                name: normalizedName,
+                label: normalizedLeague ? `${normalizedLeague} - ${normalizedName}` : normalizedName
+            });
+        };
+
+        const uploadedEntries = Array.isArray(data.uploadedTeamEntries) ? data.uploadedTeamEntries : [];
+        uploadedEntries.forEach(entry => {
+            if (!entry || typeof entry !== 'object') return;
+            pushEntry(entry.league, entry.name);
+        });
+
+        const legacyNames = Array.isArray(data.uploadedTeamNames) ? data.uploadedTeamNames : [];
+        legacyNames.forEach(name => pushEntry('', name));
+
+        return entries;
+    }
+
+    renderEditLineupRows(teamKey) {
+        if (!this.editMatchDraft) return;
+        const isTeam1 = teamKey === 'team1';
+        const ownKey = isTeam1 ? 'team1Players' : 'team2Players';
+        const otherKey = isTeam1 ? 'team2Players' : 'team1Players';
+        const containerId = isTeam1 ? 'editTeam1LineupList' : 'editTeam2LineupList';
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        const ownPlayers = this.editMatchDraft[ownKey];
+        const otherPlayersSet = new Set(this.editMatchDraft[otherKey]);
+        const allPlayers = this.editMatchDraft.allPlayers;
+        const removeDisabled = ownPlayers.length <= 1;
+
+        container.innerHTML = ownPlayers.map((player, index) => {
+            const options = allPlayers
+                .filter(name => !otherPlayersSet.has(name) || name === player)
+                .map(name => `<option value="${this.escapeHtml(name)}" ${name === player ? 'selected' : ''}>${this.escapeHtml(name)}</option>`)
+                .join('');
+            const isPresent = player ? (this.editMatchDraft.playerPresence[player] !== false) : true;
+
+            return `
+                <div class="score-input-container" style="align-items:center; margin-top:0.4rem;">
+                    <div class="score-input-group" style="flex:1;">
+                        <select class="settings-input edit-lineup-player-select"
+                                data-team="${isTeam1 ? 'team1' : 'team2'}"
+                                data-index="${index}">
+                            <option value="">Select player</option>
+                            ${options}
+                        </select>
+                        <label style="display:flex; align-items:center; gap:0.4rem; margin-top:0.35rem; font-size:0.9rem;">
+                            <input type="checkbox"
+                                   class="edit-lineup-presence-toggle"
+                                   data-team="${isTeam1 ? 'team1' : 'team2'}"
+                                   data-index="${index}"
+                                   data-player="${this.escapeHtml(player || '')}"
+                                   ${player ? '' : 'disabled'}
+                                   ${isPresent ? 'checked' : ''}>
+                            Present
+                        </label>
+                    </div>
+                    <button type="button"
+                            class="btn btn-secondary edit-lineup-move-btn"
+                            data-team="${isTeam1 ? 'team1' : 'team2'}"
+                            data-index="${index}">
+                        Move
+                    </button>
+                    <button type="button"
+                            class="btn btn-secondary edit-lineup-remove-btn"
+                            data-team="${isTeam1 ? 'team1' : 'team2'}"
+                            data-index="${index}"
+                            ${removeDisabled ? 'disabled' : ''}>
+                        Remove
+                    </button>
+                </div>
+            `;
+        }).join('');
+    }
+
+    renderEditMatchLineups() {
+        this.renderEditLineupRows('team1');
+        this.renderEditLineupRows('team2');
+    }
+
+    syncEditDraftPresence() {
+        if (!this.editMatchDraft) return;
+        const inLineups = new Set([
+            ...this.editMatchDraft.team1Players.filter(Boolean),
+            ...this.editMatchDraft.team2Players.filter(Boolean)
+        ]);
+        const nextPresence = {};
+        inLineups.forEach(player => {
+            nextPresence[player] = this.editMatchDraft.playerPresence[player] !== false;
+        });
+        this.editMatchDraft.playerPresence = nextPresence;
+    }
+
+    bindEditMatchControls() {
+        const team1List = document.getElementById('editTeam1LineupList');
+        const team2List = document.getElementById('editTeam2LineupList');
+        const addTeam1Btn = document.getElementById('editAddTeam1PlayerBtn');
+        const addTeam2Btn = document.getElementById('editAddTeam2PlayerBtn');
+        const swapTeamsBtn = document.getElementById('editSwapTeamsBtn');
+        const team1Select = document.getElementById('editTeam1EntrySelect');
+        const team2Select = document.getElementById('editTeam2EntrySelect');
+        const team1LeagueInput = document.getElementById('editTeam1LeagueInput');
+        const team1NameInput = document.getElementById('editTeam1NameInput');
+        const team2LeagueInput = document.getElementById('editTeam2LeagueInput');
+        const team2NameInput = document.getElementById('editTeam2NameInput');
+
+        const handleLineupAction = (e) => {
+            if (!this.editMatchDraft) return;
+            const select = e.target.closest('.edit-lineup-player-select');
+            if (select) {
+                const team = select.dataset.team;
+                const index = parseInt(select.dataset.index, 10);
+                if (Number.isNaN(index)) return;
+                const key = team === 'team1' ? 'team1Players' : 'team2Players';
+                const previousPlayer = this.editMatchDraft[key][index];
+                const nextPlayer = select.value.trim();
+                this.editMatchDraft[key][index] = nextPlayer;
+                if (nextPlayer && this.editMatchDraft.playerPresence[nextPlayer] === undefined) {
+                    this.editMatchDraft.playerPresence[nextPlayer] = true;
+                }
+                if (previousPlayer && previousPlayer !== nextPlayer) {
+                    this.syncEditDraftPresence();
+                }
+                this.renderEditMatchLineups();
+                return;
+            }
+
+            const presenceToggle = e.target.closest('.edit-lineup-presence-toggle');
+            if (presenceToggle) {
+                const player = (presenceToggle.dataset.player || '').trim();
+                if (!player) return;
+                this.editMatchDraft.playerPresence[player] = presenceToggle.checked;
+                return;
+            }
+
+            const moveBtn = e.target.closest('.edit-lineup-move-btn');
+            if (moveBtn) {
+                const team = moveBtn.dataset.team;
+                const index = parseInt(moveBtn.dataset.index, 10);
+                if (Number.isNaN(index)) return;
+                const fromKey = team === 'team1' ? 'team1Players' : 'team2Players';
+                const toKey = team === 'team1' ? 'team2Players' : 'team1Players';
+                if (this.editMatchDraft[fromKey].length <= 1) {
+                    this.toastManager.error('Each team must keep at least one player');
+                    return;
+                }
+                const [player] = this.editMatchDraft[fromKey].splice(index, 1);
+                if (player && this.editMatchDraft[toKey].includes(player)) {
+                    this.editMatchDraft[fromKey].splice(index, 0, player);
+                    this.toastManager.error(`${player} is already on the other team`);
+                    return;
+                }
+                this.editMatchDraft[toKey].push(player || '');
+                this.syncEditDraftPresence();
+                this.renderEditMatchLineups();
+                return;
+            }
+
+            const removeBtn = e.target.closest('.edit-lineup-remove-btn');
+            if (removeBtn) {
+                const team = removeBtn.dataset.team;
+                const index = parseInt(removeBtn.dataset.index, 10);
+                if (Number.isNaN(index)) return;
+                const key = team === 'team1' ? 'team1Players' : 'team2Players';
+                if (this.editMatchDraft[key].length <= 1) {
+                    this.toastManager.error('Each team must have at least one player');
+                    return;
+                }
+                this.editMatchDraft[key].splice(index, 1);
+                this.syncEditDraftPresence();
+                this.renderEditMatchLineups();
+            }
+        };
+
+        if (team1List) {
+            team1List.onchange = handleLineupAction;
+            team1List.onclick = handleLineupAction;
+        }
+        if (team2List) {
+            team2List.onchange = handleLineupAction;
+            team2List.onclick = handleLineupAction;
+        }
+
+        if (addTeam1Btn) {
+            addTeam1Btn.onclick = () => {
+                this.editMatchDraft.team1Players.push('');
+                this.renderEditMatchLineups();
+            };
+        }
+        if (addTeam2Btn) {
+            addTeam2Btn.onclick = () => {
+                this.editMatchDraft.team2Players.push('');
+                this.renderEditMatchLineups();
+            };
+        }
+        if (swapTeamsBtn) {
+            swapTeamsBtn.onclick = () => {
+                const temp = this.editMatchDraft.team1Players;
+                this.editMatchDraft.team1Players = this.editMatchDraft.team2Players;
+                this.editMatchDraft.team2Players = temp;
+                this.syncEditDraftPresence();
+                this.renderEditMatchLineups();
+            };
+        }
+
+        const entryMap = new Map((this.editMatchDraft.teamEntries || []).map((entry, idx) => [String(idx), entry]));
+        if (team1Select) {
+            team1Select.onchange = () => {
+                const entry = entryMap.get(team1Select.value);
+                if (!entry) return;
+                if (team1LeagueInput) team1LeagueInput.value = entry.league || '';
+                if (team1NameInput) team1NameInput.value = entry.name || '';
+            };
+        }
+        if (team2Select) {
+            team2Select.onchange = () => {
+                const entry = entryMap.get(team2Select.value);
+                if (!entry) return;
+                if (team2LeagueInput) team2LeagueInput.value = entry.league || '';
+                if (team2NameInput) team2NameInput.value = entry.name || '';
+            };
+        }
+    }
+
+    setEditValidationMessage(message) {
+        const validation = document.getElementById('editMatchValidation');
+        if (!validation) return;
+        validation.textContent = message || '';
+        validation.style.display = message ? 'block' : 'none';
+    }
+
+    getValidatedEditedLineups() {
+        if (!this.editMatchDraft) return null;
+        const knownPlayers = new Set(this.editMatchDraft.allPlayers || []);
+        const team1Players = this.editMatchDraft.team1Players.map(p => (p || '').trim()).filter(Boolean);
+        const team2Players = this.editMatchDraft.team2Players.map(p => (p || '').trim()).filter(Boolean);
+
+        if (team1Players.length === 0 || team2Players.length === 0) {
+            this.setEditValidationMessage('Each team must have at least one player.');
+            return null;
+        }
+
+        const unknown = [...team1Players, ...team2Players].find(player => !knownPlayers.has(player));
+        if (unknown) {
+            this.setEditValidationMessage(`Unknown player selected: ${unknown}.`);
+            return null;
+        }
+
+        const all = [...team1Players, ...team2Players];
+        const unique = new Set(all);
+        if (unique.size !== all.length) {
+            this.setEditValidationMessage('A player cannot appear on both teams.');
+            return null;
+        }
+
+        this.setEditValidationMessage('');
+        const playerPresence = {};
+        all.forEach(player => {
+            playerPresence[player] = this.editMatchDraft.playerPresence[player] !== false;
+        });
+
+        return { team1Players, team2Players, playerPresence };
+    }
+
     async editMatch(timestamp) {
         // Check if match can be edited (admin can always edit, or match is not locked)
         const matchDate = new Date(timestamp);
@@ -3118,8 +3392,8 @@ class AppController {
         
         this.editingMatchTimestamp = timestamp;
 
-        const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
-        const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
+        const team1Players = Array.isArray(match.team1) ? [...match.team1] : [match.team1];
+        const team2Players = Array.isArray(match.team2) ? [...match.team2] : [match.team2];
         const entry1 = (match.team1Name != null || match.team1League != null) ? { league: match.team1League || '', name: match.team1Name || '' } : null;
         const entry2 = (match.team2Name != null || match.team2League != null) ? { league: match.team2League || '', name: match.team2Name || '' } : null;
         const p1 = this.formatTeamWithColors(match.team1);
@@ -3129,6 +3403,41 @@ class AppController {
         document.getElementById('editMatchTeams').innerHTML = `<div class="match-teams-block">${teamsBlock}</div>`;
         document.getElementById('editTeam1Score').value = match.team1Score || 0;
         document.getElementById('editTeam2Score').value = match.team2Score || 0;
+
+        const allPlayers = this.playerManager.getPlayers();
+        this.editMatchDraft = {
+            allPlayers: [...allPlayers],
+            teamEntries: this.getEditTeamEntries(),
+            team1Players,
+            team2Players,
+            playerPresence: {}
+        };
+        const matchPresence = (match.playerPresence && typeof match.playerPresence === 'object') ? match.playerPresence : {};
+        [...team1Players, ...team2Players].forEach(player => {
+            this.editMatchDraft.playerPresence[player] = matchPresence[player] !== false;
+        });
+        this.syncEditDraftPresence();
+
+        const entryOptions = ['<option value="">Custom</option>', ...this.editMatchDraft.teamEntries.map((entry, index) =>
+            `<option value="${index}">${this.escapeHtml(entry.label)}</option>`
+        )].join('');
+        const team1EntrySelect = document.getElementById('editTeam1EntrySelect');
+        const team2EntrySelect = document.getElementById('editTeam2EntrySelect');
+        if (team1EntrySelect) team1EntrySelect.innerHTML = entryOptions;
+        if (team2EntrySelect) team2EntrySelect.innerHTML = entryOptions;
+
+        const team1LeagueInput = document.getElementById('editTeam1LeagueInput');
+        const team1NameInput = document.getElementById('editTeam1NameInput');
+        const team2LeagueInput = document.getElementById('editTeam2LeagueInput');
+        const team2NameInput = document.getElementById('editTeam2NameInput');
+        if (team1LeagueInput) team1LeagueInput.value = match.team1League || '';
+        if (team1NameInput) team1NameInput.value = match.team1Name || '';
+        if (team2LeagueInput) team2LeagueInput.value = match.team2League || '';
+        if (team2NameInput) team2NameInput.value = match.team2Name || '';
+
+        this.renderEditMatchLineups();
+        this.bindEditMatchControls();
+        this.setEditValidationMessage('');
         
         // Set extra time if exists
         const hasExtraTime = match.team1ExtraTimeScore !== undefined && match.team2ExtraTimeScore !== undefined;
@@ -3208,6 +3517,14 @@ class AppController {
         const team1Score = parseInt(document.getElementById('editTeam1Score').value) || 0;
         const team2Score = parseInt(document.getElementById('editTeam2Score').value) || 0;
 
+        const validatedLineups = this.getValidatedEditedLineups();
+        if (!validatedLineups) return;
+
+        const team1League = (document.getElementById('editTeam1LeagueInput')?.value || '').trim();
+        const team2League = (document.getElementById('editTeam2LeagueInput')?.value || '').trim();
+        const team1Name = (document.getElementById('editTeam1NameInput')?.value || '').trim();
+        const team2Name = (document.getElementById('editTeam2NameInput')?.value || '').trim();
+
         // Get extra time scores if applicable
         const wentToExtraTime = document.getElementById('editWentToExtraTime').checked;
         let team1ExtraTimeScore = null;
@@ -3226,15 +3543,21 @@ class AppController {
             team2PenaltiesScore = parseInt(document.getElementById('editTeam2PenaltiesScore').value) || 0;
         }
 
-        if (this.matchRecorder.updateMatch(
-            this.editingMatchTimestamp, 
-            team1Score, 
+        if (this.matchRecorder.updateMatch(this.editingMatchTimestamp, {
+            team1: validatedLineups.team1Players,
+            team2: validatedLineups.team2Players,
+            playerPresence: validatedLineups.playerPresence,
+            team1Name: team1Name || undefined,
+            team2Name: team2Name || undefined,
+            team1League: team1League || undefined,
+            team2League: team2League || undefined,
+            team1Score,
             team2Score,
             team1ExtraTimeScore,
             team2ExtraTimeScore,
             team1PenaltiesScore,
             team2PenaltiesScore
-        )) {
+        })) {
             // Haptic feedback
             this.vibrate([50]);
             this.toastManager.success('Match updated successfully', 'Match Saved');
@@ -3318,6 +3641,8 @@ class AppController {
     closeEditModal() {
         document.getElementById('editMatchModal').style.display = 'none';
         this.editingMatchTimestamp = null;
+        this.editMatchDraft = null;
+        this.setEditValidationMessage('');
     }
 
     // Helper method to redirect to admin unlock with context
@@ -4100,21 +4425,22 @@ class AppController {
     loadUiMode() {
         try {
             const saved = this.storage.loadData('uiMode');
-            if (saved === 'advanced' || saved === 'session') {
+            if (saved === 'advanced') {
                 this.uiMode = saved;
             } else {
-                this.uiMode = 'session';
+                this.uiMode = 'advanced';
             }
         } catch (e) {
-            this.uiMode = 'session';
+            this.uiMode = 'advanced';
         }
     }
 
     setUiMode(mode) {
-        if (mode !== 'advanced' && mode !== 'session') return;
-        this.uiMode = mode;
+        // Session mode is disabled; keep advanced mode only.
+        if (mode !== 'advanced') return;
+        this.uiMode = 'advanced';
         try {
-            this.storage.saveData('uiMode', mode);
+            this.storage.saveData('uiMode', 'advanced');
         } catch (e) {
             // ignore
         }
@@ -4143,18 +4469,9 @@ class AppController {
             bottomNav.style.display = 'flex';
         }
 
-        // Header "Session" quick-return button only in advanced mode or session mode on stats/history
-        const goToSessionBtn = document.getElementById('goToSessionBtn');
-        if (goToSessionBtn) {
-            const shouldShow = this.uiMode === 'advanced' ||
-                              (this.uiMode === 'session' &&
-                               (this.currentScreen === 'statsScreen' || this.currentScreen === 'historyScreen'));
-            goToSessionBtn.style.display = shouldShow ? 'inline-flex' : 'none';
-
-            // Save session state when leaving session screen
-            if (this.uiMode === 'session' && this.currentScreen !== 'sessionScreen') {
-                this.saveSessionState();
-            }
+        // Save session state when leaving session screen (legacy support while session code remains).
+        if (this.uiMode === 'session' && this.currentScreen !== 'sessionScreen') {
+            this.saveSessionState();
         }
     }
 

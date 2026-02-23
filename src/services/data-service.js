@@ -140,8 +140,8 @@ export class DataService {
         return recordMatchToStore(matchData);
     }
 
-    async updateMatch(timestamp, newTeam1Score, newTeam2Score, newTeam1ExtraTimeScore = null, newTeam2ExtraTimeScore = null, newTeam1PenaltiesScore = null, newTeam2PenaltiesScore = null) {
-        return updateMatchInStore(timestamp, newTeam1Score, newTeam2Score, newTeam1ExtraTimeScore, newTeam2ExtraTimeScore, newTeam1PenaltiesScore, newTeam2PenaltiesScore);
+    async updateMatch(timestamp, updateOrTeam1Score, newTeam2Score = null, newTeam1ExtraTimeScore = null, newTeam2ExtraTimeScore = null, newTeam1PenaltiesScore = null, newTeam2PenaltiesScore = null) {
+        return updateMatchInStore(timestamp, updateOrTeam1Score, newTeam2Score, newTeam1ExtraTimeScore, newTeam2ExtraTimeScore, newTeam1PenaltiesScore, newTeam2PenaltiesScore);
     }
 
     async deleteMatch(timestamp) {

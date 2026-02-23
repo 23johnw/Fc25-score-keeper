@@ -12,7 +12,7 @@ export function init(controller) {
         saveBtn.addEventListener('click', () => controller.savePlayers());
     }
 
-    const startNewSessionBtn = document.getElementById('startNewSessionBtn');
+    const startNewSessionBtn = document.querySelector('#playerScreen #startNewSessionBtn');
     if (startNewSessionBtn) {
         startNewSessionBtn.addEventListener('click', () => controller.startNewSession());
     }

@@ -44,14 +44,6 @@ export function init(controller) {
         });
     }
 
-    const goToSessionBtn = document.getElementById('goToSessionBtn');
-    if (goToSessionBtn) {
-        goToSessionBtn.addEventListener('click', () => {
-            controller.setUiMode('session');
-            controller.sessionStarted = false;
-            controller.showScreen('sessionScreen');
-        });
-    }
 }
 
 /**

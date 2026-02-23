@@ -17,6 +17,7 @@ class LocalStorageManager {
                 this.data = data;
                 // Run migrations to fix old data
                 this.migratePlayerPresence(data);
+                this.migrateOverallStatsForPresence(data);
                 return this.data;
             }
         } catch (error) {
@@ -119,6 +120,102 @@ class LocalStorageManager {
             console.log(`Migration: Updated ${updated} player presence entries for Ghost Proxy system`);
             this.data = data;
             this.saveData();
+        }
+    }
+
+    /**
+     * Migration: Recompute overallStats.players from match history using playerPresence.
+     * Team/match totals stay unchanged; absent players should not receive individual attribution.
+     */
+    migrateOverallStatsForPresence(data) {
+        if (!data || !data.seasons) return;
+
+        const makeEmptyStats = () => ({ wins: 0, losses: 0, draws: 0, goalsFor: 0, goalsAgainst: 0 });
+        const computed = {};
+
+        const ensurePlayer = (player) => {
+            if (!computed[player]) {
+                computed[player] = makeEmptyStats();
+            }
+            return computed[player];
+        };
+
+        const updatePlayerStats = (player, wins, losses, draws, goalsFor, goalsAgainst) => {
+            const s = ensurePlayer(player);
+            s.wins += wins;
+            s.losses += losses;
+            s.draws += draws;
+            s.goalsFor += goalsFor;
+            s.goalsAgainst += goalsAgainst;
+        };
+
+        Object.values(data.seasons).forEach(season => {
+            if (!season || !Array.isArray(season.matches)) return;
+            season.matches.forEach(match => {
+                const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
+                const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
+                const presence = (match && typeof match.playerPresence === 'object' && match.playerPresence) ? match.playerPresence : {};
+                const isPresent = (player) => presence[player] !== false;
+
+                let finalTeam1Score = Number(match.team1Score) || 0;
+                let finalTeam2Score = Number(match.team2Score) || 0;
+
+                const hasPens = match.team1PenaltiesScore != null && match.team2PenaltiesScore != null;
+                const hasExtra = match.team1ExtraTimeScore != null && match.team2ExtraTimeScore != null;
+                if (hasPens) {
+                    finalTeam1Score = Number(match.team1PenaltiesScore) || 0;
+                    finalTeam2Score = Number(match.team2PenaltiesScore) || 0;
+                } else if (hasExtra) {
+                    finalTeam1Score = Number(match.team1ExtraTimeScore) || 0;
+                    finalTeam2Score = Number(match.team2ExtraTimeScore) || 0;
+                }
+
+                const result = finalTeam1Score > finalTeam2Score
+                    ? 'team1'
+                    : (finalTeam2Score > finalTeam1Score ? 'team2' : 'draw');
+
+                if (result === 'team1') {
+                    team1Players.forEach(p => {
+                        if (isPresent(p)) updatePlayerStats(p, 1, 0, 0, finalTeam1Score, finalTeam2Score);
+                    });
+                    team2Players.forEach(p => {
+                        if (isPresent(p)) updatePlayerStats(p, 0, 1, 0, finalTeam2Score, finalTeam1Score);
+                    });
+                } else if (result === 'team2') {
+                    team1Players.forEach(p => {
+                        if (isPresent(p)) updatePlayerStats(p, 0, 1, 0, finalTeam1Score, finalTeam2Score);
+                    });
+                    team2Players.forEach(p => {
+                        if (isPresent(p)) updatePlayerStats(p, 1, 0, 0, finalTeam2Score, finalTeam1Score);
+                    });
+                } else {
+                    team1Players.forEach(p => {
+                        if (isPresent(p)) updatePlayerStats(p, 0, 0, 1, finalTeam1Score, finalTeam2Score);
+                    });
+                    team2Players.forEach(p => {
+                        if (isPresent(p)) updatePlayerStats(p, 0, 0, 1, finalTeam2Score, finalTeam1Score);
+                    });
+                }
+            });
+        });
+
+        // Keep zeroed entries for known players so profile rows remain available.
+        const knownPlayers = new Set([
+            ...(Array.isArray(data.players) ? data.players : []),
+            ...Object.keys((data.overallStats && data.overallStats.players) || {})
+        ]);
+        knownPlayers.forEach(player => ensurePlayer(player));
+
+        const previous = JSON.stringify((data.overallStats && data.overallStats.players) || {});
+        const next = JSON.stringify(computed);
+        if (previous !== next) {
+            if (!data.overallStats || typeof data.overallStats !== 'object') {
+                data.overallStats = { players: {}, totalMatches: 0 };
+            }
+            data.overallStats.players = computed;
+            this.data = data;
+            this.saveData();
+            console.log('Migration: Recomputed overall player stats with attendance-aware attribution');
         }
     }
 

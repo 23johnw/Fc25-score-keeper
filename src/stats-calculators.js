@@ -661,7 +661,7 @@ StatisticsCalculators.register({
 
             // Team 1 players
             team1Players.forEach(p => {
-                if (stats[p]) {
+                if (stats[p] && wasPlayerPresentInMatch(match, p)) {
                     stats[p].goalsFor += team1Score;
                     stats[p].goalsAgainst += team2Score;
                 }
@@ -669,7 +669,7 @@ StatisticsCalculators.register({
 
             // Team 2 players
             team2Players.forEach(p => {
-                if (stats[p]) {
+                if (stats[p] && wasPlayerPresentInMatch(match, p)) {
                     stats[p].goalsFor += team2Score;
                     stats[p].goalsAgainst += team1Score;
                 }
@@ -786,7 +786,7 @@ StatisticsCalculators.register({
             if (result === 'team1') {
                 // Team 1 wins
                 team1Players.forEach(p => {
-                    if (stats[p]) {
+                    if (stats[p] && wasPlayerPresentInMatch(match, p)) {
                         stats[p].points += winPts;
                         stats[p].wins++;
                         stats[p].games++;
@@ -795,7 +795,7 @@ StatisticsCalculators.register({
                     }
                 });
                 team2Players.forEach(p => {
-                    if (stats[p]) {
+                    if (stats[p] && wasPlayerPresentInMatch(match, p)) {
                         stats[p].points += lossPts;
                         stats[p].losses++;
                         stats[p].games++;
@@ -806,7 +806,7 @@ StatisticsCalculators.register({
             } else if (result === 'team2') {
                 // Team 2 wins
                 team2Players.forEach(p => {
-                    if (stats[p]) {
+                    if (stats[p] && wasPlayerPresentInMatch(match, p)) {
                         stats[p].points += winPts;
                         stats[p].wins++;
                         stats[p].games++;
@@ -815,7 +815,7 @@ StatisticsCalculators.register({
                     }
                 });
                 team1Players.forEach(p => {
-                    if (stats[p]) {
+                    if (stats[p] && wasPlayerPresentInMatch(match, p)) {
                         stats[p].points += lossPts;
                         stats[p].losses++;
                         stats[p].games++;
@@ -826,7 +826,7 @@ StatisticsCalculators.register({
             } else if (result === 'draw') {
                 // Draw
                 [...team1Players, ...team2Players].forEach(p => {
-                    if (stats[p]) {
+                    if (stats[p] && wasPlayerPresentInMatch(match, p)) {
                         stats[p].points += drawPts;
                         stats[p].draws++;
                         stats[p].games++;
@@ -1348,6 +1348,7 @@ StatisticsCalculators.register({
                 const inTeam2 = team2Players.includes(player);
                 
                 if (!inTeam1 && !inTeam2) continue;
+                if (!wasPlayerPresentInMatch(match, player)) continue;
                 
                 let outcome = '';
                 if (result === 'draw') {
@@ -2219,6 +2220,7 @@ StatisticsCalculators.register({
                 const inTeam1 = team1.includes(player);
                 const inTeam2 = team2.includes(player);
                 if (!inTeam1 && !inTeam2) return;
+                if (!wasPlayerPresentInMatch(match, player)) return;
                 stats[player].games += 1;
                 if ((match.result === 'team1' && inTeam1) || (match.result === 'team2' && inTeam2)) {
                     stats[player].wins += 1;

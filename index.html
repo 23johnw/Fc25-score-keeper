@@ -109,7 +109,6 @@
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <h1>FC 25 Score Tracker</h1>
             <div style="display: flex; gap: 0.5rem;">
-                <button id="goToSessionBtn" class="btn btn-secondary" style="display:none; padding: 0.4rem 0.7rem; font-size: 0.9rem;" title="Back to Session">Session</button>
                 <button id="refreshAppBtn" class="dark-mode-toggle" title="Check for Updates" style="font-size: 1rem;">🔄</button>
                 <button id="darkModeToggle" class="dark-mode-toggle" title="Toggle Dark Mode">🌙</button>
             </div>
@@ -123,7 +122,7 @@
     </header>
 
     <!-- Session Wizard Screen -->
-    <section id="sessionScreen" class="screen active">
+    <section id="sessionScreen" class="screen">
         <div class="screen-content">
             <!-- Session Splash (default) -->
             <div id="sessionSplash" class="session-splash">
@@ -166,7 +165,7 @@
                         </div>
                         <div class="session-player-actions">
                             <button id="sessionAddPlayerBtn" class="btn btn-secondary btn-small">+ Add Player</button>
-                            <button id="startNewSessionBtn" class="btn btn-secondary btn-small">Start New Session</button>
+                            <button id="sessionStartNewSessionBtn" class="btn btn-secondary btn-small">Start New Session</button>
                         </div>
                     </div>
 
@@ -216,7 +215,7 @@
     </section>
 
     <!-- Player Management Screen -->
-    <section id="playerScreen" class="screen">
+    <section id="playerScreen" class="screen active">
         <div class="screen-content">
             <h2>Add Players</h2>
             <p class="screen-description">Enter 1-4 player names to get started. Use the "Present/Absent" toggle to mark players who can't make it - their individual stats will freeze while their teams continue earning points.</p>
@@ -614,57 +613,103 @@
             <div class="match-info">
                 <div id="editMatchTeams"></div>
             </div>
-            <div class="score-input-container">
-                <div class="score-input-group">
-                    <label for="editTeam1Score">Team 1 Score</label>
-                    <input type="number" id="editTeam1Score" min="0" max="99" value="0" class="score-input">
+
+            <details class="settings-section" style="margin-top: 1rem;" open>
+                <summary style="cursor: pointer; font-weight: 600;">Team Identity</summary>
+                <div class="score-input-container" style="align-items: flex-start; margin-top: 0.75rem;">
+                    <div class="score-input-group" style="flex: 1;">
+                        <label for="editTeam1EntrySelect">Team 1 Preset</label>
+                        <select id="editTeam1EntrySelect" class="settings-input"></select>
+                        <label for="editTeam1LeagueInput" style="margin-top: 0.5rem;">Team 1 League</label>
+                        <input type="text" id="editTeam1LeagueInput" class="settings-input" maxlength="30" placeholder="League (optional)">
+                        <label for="editTeam1NameInput" style="margin-top: 0.5rem;">Team 1 Name</label>
+                        <input type="text" id="editTeam1NameInput" class="settings-input" maxlength="50" placeholder="Team name">
+                    </div>
+                    <div class="score-input-group" style="flex: 1;">
+                        <label for="editTeam2EntrySelect">Team 2 Preset</label>
+                        <select id="editTeam2EntrySelect" class="settings-input"></select>
+                        <label for="editTeam2LeagueInput" style="margin-top: 0.5rem;">Team 2 League</label>
+                        <input type="text" id="editTeam2LeagueInput" class="settings-input" maxlength="30" placeholder="League (optional)">
+                        <label for="editTeam2NameInput" style="margin-top: 0.5rem;">Team 2 Name</label>
+                        <input type="text" id="editTeam2NameInput" class="settings-input" maxlength="50" placeholder="Team name">
+                    </div>
                 </div>
-                <span class="score-separator">-</span>
-                <div class="score-input-group">
-                    <label for="editTeam2Score">Team 2 Score</label>
-                    <input type="number" id="editTeam2Score" min="0" max="99" value="0" class="score-input">
+            </details>
+
+            <details class="settings-section" style="margin-top: 1rem;">
+                <summary style="cursor: pointer; font-weight: 600;">Lineups</summary>
+                <div class="score-input-container" style="align-items: flex-start; margin-top: 0.75rem;">
+                    <div class="score-input-group" style="flex: 1;">
+                        <label>Team 1 Players</label>
+                        <div id="editTeam1LineupList"></div>
+                        <button id="editAddTeam1PlayerBtn" type="button" class="btn btn-secondary" style="margin-top: 0.5rem;">+ Add Team 1 Player</button>
+                    </div>
+                    <div class="score-input-group" style="flex: 1;">
+                        <label>Team 2 Players</label>
+                        <div id="editTeam2LineupList"></div>
+                        <button id="editAddTeam2PlayerBtn" type="button" class="btn btn-secondary" style="margin-top: 0.5rem;">+ Add Team 2 Player</button>
+                    </div>
                 </div>
-            </div>
-            
-            <!-- Extra Time Section -->
-            <div class="extra-time-section" id="editExtraTimeSection" style="margin-top: 1rem;">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="editWentToExtraTime" class="checkbox-input">
-                    <span>Went to Extra Time</span>
-                </label>
-                <p class="score-hint" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0.5rem;">Enter the total score after extra time (full time + extra time goals)</p>
-                <div class="score-input-container" id="editExtraTimeScores" style="display: none; margin-top: 0.75rem;">
-                        <div class="score-input-group">
-                            <label for="editTeam1ExtraTimeScore">Team 1 (Total)</label>
-                            <input type="number" id="editTeam1ExtraTimeScore" min="0" max="99" value="0" class="score-input">
-                        </div>
-                        <span class="score-separator">-</span>
-                        <div class="score-input-group">
-                            <label for="editTeam2ExtraTimeScore">Team 2 (Total)</label>
-                            <input type="number" id="editTeam2ExtraTimeScore" min="0" max="99" value="0" class="score-input">
-                        </div>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap;">
+                    <button id="editSwapTeamsBtn" type="button" class="btn btn-secondary">Swap Teams</button>
                 </div>
-            </div>
-            
-            <!-- Penalties Section -->
-            <div class="penalties-section" id="editPenaltiesSection" style="margin-top: 1rem;">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="editWentToPenalties" class="checkbox-input">
-                    <span>Went to Penalties</span>
-                </label>
-                <p class="score-hint" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0.5rem;">Enter only the penalties scored (e.g., 5-4)</p>
-                <div class="score-input-container" id="editPenaltiesScores" style="display: none; margin-top: 0.75rem;">
-                        <div class="score-input-group">
-                            <label for="editTeam1PenaltiesScore">Team 1 (Pens)</label>
-                            <input type="number" id="editTeam1PenaltiesScore" min="0" max="20" value="0" class="score-input">
-                        </div>
-                        <span class="score-separator">-</span>
-                        <div class="score-input-group">
-                            <label for="editTeam2PenaltiesScore">Team 2 (Pens)</label>
-                            <input type="number" id="editTeam2PenaltiesScore" min="0" max="20" value="0" class="score-input">
-                        </div>
+                <p id="editMatchValidation" class="settings-description" style="display:none; color:#f44336; margin-top:0.5rem;"></p>
+            </details>
+
+            <details class="settings-section" style="margin-top: 1rem;" open>
+                <summary style="cursor: pointer; font-weight: 600;">Score & Result</summary>
+                <div class="score-input-container" style="margin-top: 0.75rem;">
+                    <div class="score-input-group">
+                        <label for="editTeam1Score">Team 1 Score</label>
+                        <input type="number" id="editTeam1Score" min="0" max="99" value="0" class="score-input">
+                    </div>
+                    <span class="score-separator">-</span>
+                    <div class="score-input-group">
+                        <label for="editTeam2Score">Team 2 Score</label>
+                        <input type="number" id="editTeam2Score" min="0" max="99" value="0" class="score-input">
+                    </div>
                 </div>
-            </div>
+
+                <!-- Extra Time Section -->
+                <div class="extra-time-section" id="editExtraTimeSection" style="margin-top: 1rem;">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="editWentToExtraTime" class="checkbox-input">
+                        <span>Went to Extra Time</span>
+                    </label>
+                    <p class="score-hint" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0.5rem;">Enter the total score after extra time (full time + extra time goals)</p>
+                    <div class="score-input-container" id="editExtraTimeScores" style="display: none; margin-top: 0.75rem;">
+                            <div class="score-input-group">
+                                <label for="editTeam1ExtraTimeScore">Team 1 (Total)</label>
+                                <input type="number" id="editTeam1ExtraTimeScore" min="0" max="99" value="0" class="score-input">
+                            </div>
+                            <span class="score-separator">-</span>
+                            <div class="score-input-group">
+                                <label for="editTeam2ExtraTimeScore">Team 2 (Total)</label>
+                                <input type="number" id="editTeam2ExtraTimeScore" min="0" max="99" value="0" class="score-input">
+                            </div>
+                    </div>
+                </div>
+
+                <!-- Penalties Section -->
+                <div class="penalties-section" id="editPenaltiesSection" style="margin-top: 1rem;">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="editWentToPenalties" class="checkbox-input">
+                        <span>Went to Penalties</span>
+                    </label>
+                    <p class="score-hint" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; margin-bottom: 0.5rem;">Enter only the penalties scored (e.g., 5-4)</p>
+                    <div class="score-input-container" id="editPenaltiesScores" style="display: none; margin-top: 0.75rem;">
+                            <div class="score-input-group">
+                                <label for="editTeam1PenaltiesScore">Team 1 (Pens)</label>
+                                <input type="number" id="editTeam1PenaltiesScore" min="0" max="20" value="0" class="score-input">
+                            </div>
+                            <span class="score-separator">-</span>
+                            <div class="score-input-group">
+                                <label for="editTeam2PenaltiesScore">Team 2 (Pens)</label>
+                                <input type="number" id="editTeam2PenaltiesScore" min="0" max="20" value="0" class="score-input">
+                            </div>
+                    </div>
+                </div>
+            </details>
             
             <div class="button-group">
                 <button id="saveEditMatchBtn" class="btn btn-primary">Save Changes</button>
@@ -850,10 +895,7 @@
 
     <!-- Navigation -->
     <nav class="bottom-nav">
-        <button class="nav-btn active" data-screen="sessionScreen">
-            <span>Session</span>
-        </button>
-        <button class="nav-btn" data-screen="playerScreen">
+        <button class="nav-btn active" data-screen="playerScreen">
             <span>Players</span>
         </button>
         <button class="nav-btn" data-screen="teamScreen">

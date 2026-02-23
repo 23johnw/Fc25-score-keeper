@@ -97,16 +97,29 @@ export function recordMatch(matchData) {
 
         const team1Players = Array.isArray(matchData.team1) ? matchData.team1 : [matchData.team1];
         const team2Players = Array.isArray(matchData.team2) ? matchData.team2 : [matchData.team2];
+        const isPresent = (player) => playerPresence[player] !== false;
 
         if (match.result === 'team1') {
-            team1Players.forEach(p => updatePlayerStats(p, 1, 0, 0, finalTeam1Score, finalTeam2Score));
-            team2Players.forEach(p => updatePlayerStats(p, 0, 1, 0, finalTeam2Score, finalTeam1Score));
+            team1Players.forEach(p => {
+                if (isPresent(p)) updatePlayerStats(p, 1, 0, 0, finalTeam1Score, finalTeam2Score);
+            });
+            team2Players.forEach(p => {
+                if (isPresent(p)) updatePlayerStats(p, 0, 1, 0, finalTeam2Score, finalTeam1Score);
+            });
         } else if (match.result === 'team2') {
-            team1Players.forEach(p => updatePlayerStats(p, 0, 1, 0, finalTeam1Score, finalTeam2Score));
-            team2Players.forEach(p => updatePlayerStats(p, 1, 0, 0, finalTeam2Score, finalTeam1Score));
+            team1Players.forEach(p => {
+                if (isPresent(p)) updatePlayerStats(p, 0, 1, 0, finalTeam1Score, finalTeam2Score);
+            });
+            team2Players.forEach(p => {
+                if (isPresent(p)) updatePlayerStats(p, 1, 0, 0, finalTeam2Score, finalTeam1Score);
+            });
         } else {
-            team1Players.forEach(p => updatePlayerStats(p, 0, 0, 1, finalTeam1Score, finalTeam2Score));
-            team2Players.forEach(p => updatePlayerStats(p, 0, 0, 1, finalTeam2Score, finalTeam1Score));
+            team1Players.forEach(p => {
+                if (isPresent(p)) updatePlayerStats(p, 0, 0, 1, finalTeam1Score, finalTeam2Score);
+            });
+            team2Players.forEach(p => {
+                if (isPresent(p)) updatePlayerStats(p, 0, 0, 1, finalTeam2Score, finalTeam1Score);
+            });
         }
 
     });
@@ -134,19 +147,39 @@ export function findMatch(timestamp) {
     return null;
 }
 
-export function updateMatch(timestamp, newTeam1Score, newTeam2Score, newTeam1ExtraTimeScore = null, newTeam2ExtraTimeScore = null, newTeam1PenaltiesScore = null, newTeam2PenaltiesScore = null) {
+export function updateMatch(timestamp, updateOrTeam1Score, newTeam2Score = null, newTeam1ExtraTimeScore = null, newTeam2ExtraTimeScore = null, newTeam1PenaltiesScore = null, newTeam2PenaltiesScore = null) {
     const matchInfo = findMatch(timestamp);
     if (!matchInfo) return false;
 
-    let finalTeam1Score = newTeam1Score;
-    let finalTeam2Score = newTeam2Score;
+    const update = (typeof updateOrTeam1Score === 'object' && updateOrTeam1Score !== null)
+        ? updateOrTeam1Score
+        : {
+            team1Score: updateOrTeam1Score,
+            team2Score: newTeam2Score,
+            team1ExtraTimeScore: newTeam1ExtraTimeScore,
+            team2ExtraTimeScore: newTeam2ExtraTimeScore,
+            team1PenaltiesScore: newTeam1PenaltiesScore,
+            team2PenaltiesScore: newTeam2PenaltiesScore
+        };
+
+    const nextTeam1 = Array.isArray(update.team1) ? [...update.team1] : null;
+    const nextTeam2 = Array.isArray(update.team2) ? [...update.team2] : null;
+    const nextTeam1Score = Number(update.team1Score) || 0;
+    const nextTeam2Score = Number(update.team2Score) || 0;
+    const nextTeam1Extra = update.team1ExtraTimeScore != null ? (Number(update.team1ExtraTimeScore) || 0) : null;
+    const nextTeam2Extra = update.team2ExtraTimeScore != null ? (Number(update.team2ExtraTimeScore) || 0) : null;
+    const nextTeam1Pens = update.team1PenaltiesScore != null ? (Number(update.team1PenaltiesScore) || 0) : null;
+    const nextTeam2Pens = update.team2PenaltiesScore != null ? (Number(update.team2PenaltiesScore) || 0) : null;
+
+    let finalTeam1Score = nextTeam1Score;
+    let finalTeam2Score = nextTeam2Score;
     
-    if (newTeam1PenaltiesScore !== null && newTeam2PenaltiesScore !== null) {
-        finalTeam1Score = newTeam1PenaltiesScore;
-        finalTeam2Score = newTeam2PenaltiesScore;
-    } else if (newTeam1ExtraTimeScore !== null && newTeam2ExtraTimeScore !== null) {
-        finalTeam1Score = newTeam1ExtraTimeScore;
-        finalTeam2Score = newTeam2ExtraTimeScore;
+    if (nextTeam1Pens !== null && nextTeam2Pens !== null) {
+        finalTeam1Score = nextTeam1Pens;
+        finalTeam2Score = nextTeam2Pens;
+    } else if (nextTeam1Extra !== null && nextTeam2Extra !== null) {
+        finalTeam1Score = nextTeam1Extra;
+        finalTeam2Score = nextTeam2Extra;
     }
     
     let newResult;
@@ -162,25 +195,61 @@ export function updateMatch(timestamp, newTeam1Score, newTeam2Score, newTeam1Ext
         const season = data.seasons[matchInfo.season];
         if (season && season.matches[matchInfo.index]) {
             const match = season.matches[matchInfo.index];
-            match.team1Score = newTeam1Score;
-            match.team2Score = newTeam2Score;
+            if (nextTeam1) match.team1 = nextTeam1;
+            if (nextTeam2) match.team2 = nextTeam2;
+            match.team1Score = nextTeam1Score;
+            match.team2Score = nextTeam2Score;
             match.result = newResult;
             
-            if (newTeam1ExtraTimeScore !== null && newTeam2ExtraTimeScore !== null) {
-                match.team1ExtraTimeScore = newTeam1ExtraTimeScore;
-                match.team2ExtraTimeScore = newTeam2ExtraTimeScore;
+            if (nextTeam1Extra !== null && nextTeam2Extra !== null) {
+                match.team1ExtraTimeScore = nextTeam1Extra;
+                match.team2ExtraTimeScore = nextTeam2Extra;
             } else {
                 delete match.team1ExtraTimeScore;
                 delete match.team2ExtraTimeScore;
             }
             
-            if (newTeam1PenaltiesScore !== null && newTeam2PenaltiesScore !== null) {
-                match.team1PenaltiesScore = newTeam1PenaltiesScore;
-                match.team2PenaltiesScore = newTeam2PenaltiesScore;
+            if (nextTeam1Pens !== null && nextTeam2Pens !== null) {
+                match.team1PenaltiesScore = nextTeam1Pens;
+                match.team2PenaltiesScore = nextTeam2Pens;
             } else {
                 delete match.team1PenaltiesScore;
                 delete match.team2PenaltiesScore;
             }
+
+            if (update.team1Name !== undefined) {
+                if (update.team1Name) match.team1Name = String(update.team1Name);
+                else delete match.team1Name;
+            }
+            if (update.team2Name !== undefined) {
+                if (update.team2Name) match.team2Name = String(update.team2Name);
+                else delete match.team2Name;
+            }
+            if (update.team1League !== undefined) {
+                if (update.team1League) match.team1League = String(update.team1League);
+                else delete match.team1League;
+            }
+            if (update.team2League !== undefined) {
+                if (update.team2League) match.team2League = String(update.team2League);
+                else delete match.team2League;
+            }
+
+            const oldPresence = (match.playerPresence && typeof match.playerPresence === 'object') ? match.playerPresence : {};
+            const explicitPresence = (update.playerPresence && typeof update.playerPresence === 'object') ? update.playerPresence : null;
+            const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
+            const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
+            const allPlayers = [...new Set([...team1Players, ...team2Players])];
+            const rebuiltPresence = {};
+            allPlayers.forEach(player => {
+                if (explicitPresence && (explicitPresence[player] === false || explicitPresence[player] === true)) {
+                    rebuiltPresence[player] = explicitPresence[player];
+                } else if (oldPresence[player] === false || oldPresence[player] === true) {
+                    rebuiltPresence[player] = oldPresence[player];
+                } else {
+                    rebuiltPresence[player] = playerManager.isPlayerPresent(player);
+                }
+            });
+            match.playerPresence = rebuiltPresence;
         }
     });
 }

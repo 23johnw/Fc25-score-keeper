@@ -68,7 +68,7 @@ class StatisticsDisplay {
         const message = customEmptyMessage || (
             isToday 
                 ? '<div class="empty-state"><div class="empty-state-icon">📊</div><h3>No matches today</h3><p>Start playing to see today\'s statistics.</p><button type="button" class="btn btn-primary empty-state-cta" data-screen="matchScreen">Record a match</button></div>'
-                : '<div class="empty-state"><div class="empty-state-icon">📊</div><h3>No statistics yet</h3><p>Play some matches to see stats here.</p><button type="button" class="btn btn-primary empty-state-cta" data-screen="sessionScreen">Start session</button></div>'
+                : '<div class="empty-state"><div class="empty-state-icon">📊</div><h3>No statistics yet</h3><p>Play some matches to see stats here.</p><button type="button" class="btn btn-primary empty-state-cta" data-screen="playerScreen">Add players</button></div>'
         );
         container.innerHTML = message;
         return;
