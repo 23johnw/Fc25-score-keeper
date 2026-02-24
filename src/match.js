@@ -3,6 +3,13 @@
 // Mirrors data-handler.js record/find/update/delete for apps that load scripts without ES modules.
 // ============================================================================
 
+import {
+    toTeamArray,
+    resolveFinalScores,
+    determineMatchResult,
+    recomputeOverallPlayersFromData
+} from './utils/match-derived-stats.js';
+
 class MatchRecorder {
     constructor(storage, seasonManager, playerManager) {
         this.storage = storage;
@@ -11,8 +18,8 @@ class MatchRecorder {
     }
 
     _getPlayerPresenceSnapshot(team1, team2) {
-        const team1Arr = Array.isArray(team1) ? team1 : [team1];
-        const team2Arr = Array.isArray(team2) ? team2 : [team2];
+        const team1Arr = toTeamArray(team1);
+        const team2Arr = toTeamArray(team2);
         const allPlayers = [...new Set([...team1Arr, ...team2Arr])];
         const snapshot = {};
         allPlayers.forEach(player => {
@@ -24,21 +31,8 @@ class MatchRecorder {
     }
 
     recordMatch(matchData) {
-        let finalTeam1Score = matchData.score1;
-        let finalTeam2Score = matchData.score2;
-
-        if (matchData.penaltiesScore1 != null && matchData.penaltiesScore2 != null) {
-            finalTeam1Score = matchData.penaltiesScore1;
-            finalTeam2Score = matchData.penaltiesScore2;
-        } else if (matchData.extraTimeScore1 != null && matchData.extraTimeScore2 != null) {
-            finalTeam1Score = matchData.extraTimeScore1;
-            finalTeam2Score = matchData.extraTimeScore2;
-        }
-
-        let result;
-        if (finalTeam1Score > finalTeam2Score) result = 'team1';
-        else if (finalTeam2Score > finalTeam1Score) result = 'team2';
-        else result = 'draw';
+        const finalScores = resolveFinalScores(matchData);
+        const result = determineMatchResult(finalScores.team1, finalScores.team2);
 
         const timestamp = matchData.timestamp || new Date().toISOString();
         const playerPresence = this._getPlayerPresenceSnapshot(matchData.team1, matchData.team2);
@@ -85,30 +79,30 @@ class MatchRecorder {
                 p.goalsAgainst += goalsAgainst;
             };
 
-            const team1Players = Array.isArray(matchData.team1) ? matchData.team1 : [matchData.team1];
-            const team2Players = Array.isArray(matchData.team2) ? matchData.team2 : [matchData.team2];
+            const team1Players = toTeamArray(matchData.team1);
+            const team2Players = toTeamArray(matchData.team2);
             const isPresent = (player) => playerPresence[player] !== false;
 
             if (match.result === 'team1') {
                 team1Players.forEach(p => {
-                    if (isPresent(p)) updatePlayerStats(p, 1, 0, 0, finalTeam1Score, finalTeam2Score);
+                    if (isPresent(p)) updatePlayerStats(p, 1, 0, 0, finalScores.team1, finalScores.team2);
                 });
                 team2Players.forEach(p => {
-                    if (isPresent(p)) updatePlayerStats(p, 0, 1, 0, finalTeam2Score, finalTeam1Score);
+                    if (isPresent(p)) updatePlayerStats(p, 0, 1, 0, finalScores.team2, finalScores.team1);
                 });
             } else if (match.result === 'team2') {
                 team1Players.forEach(p => {
-                    if (isPresent(p)) updatePlayerStats(p, 0, 1, 0, finalTeam1Score, finalTeam2Score);
+                    if (isPresent(p)) updatePlayerStats(p, 0, 1, 0, finalScores.team1, finalScores.team2);
                 });
                 team2Players.forEach(p => {
-                    if (isPresent(p)) updatePlayerStats(p, 1, 0, 0, finalTeam2Score, finalTeam1Score);
+                    if (isPresent(p)) updatePlayerStats(p, 1, 0, 0, finalScores.team2, finalScores.team1);
                 });
             } else {
                 team1Players.forEach(p => {
-                    if (isPresent(p)) updatePlayerStats(p, 0, 0, 1, finalTeam1Score, finalTeam2Score);
+                    if (isPresent(p)) updatePlayerStats(p, 0, 0, 1, finalScores.team1, finalScores.team2);
                 });
                 team2Players.forEach(p => {
-                    if (isPresent(p)) updatePlayerStats(p, 0, 0, 1, finalTeam2Score, finalTeam1Score);
+                    if (isPresent(p)) updatePlayerStats(p, 0, 0, 1, finalScores.team2, finalScores.team1);
                 });
             }
         });
@@ -153,17 +147,15 @@ class MatchRecorder {
         const nextTeam1Pens = update.team1PenaltiesScore != null ? (Number(update.team1PenaltiesScore) || 0) : null;
         const nextTeam2Pens = update.team2PenaltiesScore != null ? (Number(update.team2PenaltiesScore) || 0) : null;
 
-        let finalTeam1 = nextTeam1Score;
-        let finalTeam2 = nextTeam2Score;
-        if (nextTeam1Pens != null && nextTeam2Pens != null) {
-            finalTeam1 = nextTeam1Pens;
-            finalTeam2 = nextTeam2Pens;
-        } else if (nextTeam1Extra != null && nextTeam2Extra != null) {
-            finalTeam1 = nextTeam1Extra;
-            finalTeam2 = nextTeam2Extra;
-        }
-
-        const newResult = finalTeam1 > finalTeam2 ? 'team1' : (finalTeam2 > finalTeam1 ? 'team2' : 'draw');
+        const finalScores = resolveFinalScores({
+            team1Score: nextTeam1Score,
+            team2Score: nextTeam2Score,
+            team1ExtraTimeScore: nextTeam1Extra,
+            team2ExtraTimeScore: nextTeam2Extra,
+            team1PenaltiesScore: nextTeam1Pens,
+            team2PenaltiesScore: nextTeam2Pens
+        });
+        const newResult = determineMatchResult(finalScores.team1, finalScores.team2);
 
         return this.storage.updateData(data => {
             const season = data.seasons[matchInfo.season];
@@ -225,6 +217,7 @@ class MatchRecorder {
                     }
                 });
                 match.playerPresence = rebuiltPresence;
+                data.overallStats.players = recomputeOverallPlayersFromData(data);
             }
         });
     }
@@ -239,6 +232,7 @@ class MatchRecorder {
                 if (data.overallStats.totalMatches > 0) {
                     data.overallStats.totalMatches--;
                 }
+                data.overallStats.players = recomputeOverallPlayersFromData(data);
             }
         });
     }

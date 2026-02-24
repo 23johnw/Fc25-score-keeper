@@ -71,9 +71,12 @@ class TouchSwipeHandler {
         if (!item || !deleteCallback) return;
 
         let startX = 0;
+        let startY = 0;
         let currentX = 0;
+        let currentY = 0;
         let isSwipeActive = false;
-        const deleteThreshold = 100; // Distance to swipe before showing delete option
+        const deleteThreshold = 140; // Distance to swipe before showing delete option
+        const maxVerticalDrift = 70;
 
         item.style.position = 'relative';
         item.style.transition = 'transform 0.3s ease-out';
@@ -124,13 +127,21 @@ class TouchSwipeHandler {
 
         item.addEventListener('touchstart', (e) => {
             startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
             isSwipeActive = true;
         }, { passive: true });
 
         item.addEventListener('touchmove', (e) => {
             if (!isSwipeActive) return;
             currentX = e.touches[0].clientX;
+            currentY = e.touches[0].clientY;
             const deltaX = currentX - startX;
+            const deltaY = currentY - startY;
+
+            if (Math.abs(deltaY) > maxVerticalDrift) {
+                resetPosition();
+                return;
+            }
 
             // Only allow swiping left (negative deltaX)
             if (deltaX < 0) {
@@ -150,8 +161,9 @@ class TouchSwipeHandler {
         item.addEventListener('touchend', () => {
             if (!isSwipeActive) return;
             const deltaX = Math.abs(currentX - startX);
+            const deltaY = Math.abs(currentY - startY);
 
-            if (deltaX < deleteThreshold) {
+            if (deltaX < deleteThreshold || deltaY > maxVerticalDrift) {
                 resetPosition();
             } else {
                 // Lock in the delete button position

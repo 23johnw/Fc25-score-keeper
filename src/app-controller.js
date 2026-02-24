@@ -27,6 +27,7 @@ import {
     applyByDateFilter as applyByDateFilterHelper
 } from './history-viewer.js';
 import { registerScreens, loadScreen } from './screens/index.js';
+import { playIconicScoreSound } from './iconic-sounds.js';
 import './stats-view-toggler-global.js';
 
 class AppController {
@@ -72,6 +73,8 @@ class AppController {
         this.currentByDateFilter = { from: null, to: null, selectedDate: null };
         this.playedDates = [];
         this.lastRecordedMatch = null; // Store last recorded match for undo
+        this.editMatchInitialSnapshot = null;
+        this.editAdminBypassForCurrentModal = false;
         
         // Initialize lock labels before anything else that might use them
         this.updateLockLabels();
@@ -198,6 +201,11 @@ class AppController {
         }
         const importFileInput = document.getElementById('importFileInput');
         if (importFileInput) importFileInput.addEventListener('change', (e) => this.handleFileImport(e));
+
+        window.addEventListener('fc25-storage-error', (e) => {
+            const msg = e?.detail?.message || 'Data could not be saved.';
+            this.toastManager.error(msg);
+        });
 
         // Dark mode toggle
         const darkModeToggle = document.getElementById('darkModeToggle');
@@ -1534,6 +1542,8 @@ class AppController {
             // Track last recorded match for undo
             this.lastRecordedMatch = { match: savedMatch, gameIndex: matchIndex };
 
+            playIconicScoreSound(team1Score, team2Score);
+
             // Reset score inputs
             document.getElementById('team1Score').value = 0;
             document.getElementById('team2Score').value = 0;
@@ -2030,6 +2040,7 @@ class AppController {
         }
 
         if (confirm('WARNING: This will delete ALL statistics, all seasons, and all match history. This cannot be undone. Continue?')) {
+            await this.createSafetyBackup('before-clear-statistics');
             if (this.storage.clearAllStatistics()) {
                 this.toastManager.success('All statistics cleared. Players are kept.');
                 this.updateSeasonInfo();
@@ -3354,6 +3365,49 @@ class AppController {
         return { team1Players, team2Players, playerPresence };
     }
 
+    getEditMatchSnapshot() {
+        const editExtraTimeCheckbox = document.getElementById('editWentToExtraTime');
+        const editPenaltiesCheckbox = document.getElementById('editWentToPenalties');
+        return {
+            draft: this.editMatchDraft ? {
+                team1Players: [...(this.editMatchDraft.team1Players || [])],
+                team2Players: [...(this.editMatchDraft.team2Players || [])],
+                playerPresence: { ...(this.editMatchDraft.playerPresence || {}) }
+            } : null,
+            team1Name: (document.getElementById('editTeam1NameInput')?.value || '').trim(),
+            team2Name: (document.getElementById('editTeam2NameInput')?.value || '').trim(),
+            team1League: (document.getElementById('editTeam1LeagueInput')?.value || '').trim(),
+            team2League: (document.getElementById('editTeam2LeagueInput')?.value || '').trim(),
+            team1Score: document.getElementById('editTeam1Score')?.value ?? '',
+            team2Score: document.getElementById('editTeam2Score')?.value ?? '',
+            extraEnabled: !!editExtraTimeCheckbox?.checked,
+            team1Extra: document.getElementById('editTeam1ExtraTimeScore')?.value ?? '',
+            team2Extra: document.getElementById('editTeam2ExtraTimeScore')?.value ?? '',
+            pensEnabled: !!editPenaltiesCheckbox?.checked,
+            team1Pens: document.getElementById('editTeam1PenaltiesScore')?.value ?? '',
+            team2Pens: document.getElementById('editTeam2PenaltiesScore')?.value ?? ''
+        };
+    }
+
+    hasUnsavedEditMatchChanges() {
+        if (!this.editMatchInitialSnapshot || !this.editingMatchTimestamp) return false;
+        const current = this.getEditMatchSnapshot();
+        return JSON.stringify(current) !== JSON.stringify(this.editMatchInitialSnapshot);
+    }
+
+    parseBoundedScore(inputId, min, max, label) {
+        const raw = document.getElementById(inputId)?.value ?? '';
+        const trimmed = String(raw).trim();
+        if (trimmed === '') return 0;
+        const parsed = Number(trimmed);
+        if (!Number.isFinite(parsed) || parsed < min || parsed > max || !Number.isInteger(parsed)) {
+            this.setEditValidationMessage(`${label} must be an integer between ${min} and ${max}.`);
+            this.toastManager.error(`${label} must be between ${min} and ${max}`);
+            return null;
+        }
+        return parsed;
+    }
+
     async editMatch(timestamp) {
         // Check if match can be edited (admin can always edit, or match is not locked)
         const matchDate = new Date(timestamp);
@@ -3383,6 +3437,7 @@ class AppController {
             this.updateAdminUI();
             this.toastManager.success('Admin access granted for this action');
         }
+        this.editAdminBypassForCurrentModal = isTodayMatch || this.isAdmin;
 
         // Open the edit modal
         const matchInfo = this.matchRecorder.findMatch(timestamp);
@@ -3438,6 +3493,7 @@ class AppController {
         this.renderEditMatchLineups();
         this.bindEditMatchControls();
         this.setEditValidationMessage('');
+        this.editMatchInitialSnapshot = this.getEditMatchSnapshot();
         
         // Set extra time if exists
         const hasExtraTime = match.team1ExtraTimeScore !== undefined && match.team2ExtraTimeScore !== undefined;
@@ -3490,13 +3546,8 @@ class AppController {
 
         const isTodayMatch = startOfMatchDay.getTime() === startOfToday.getTime();
 
-        console.log('Edit check - timestamp:', this.editingMatchTimestamp);
-        console.log('  matchDate:', matchDate, 'startOfMatchDay:', startOfMatchDay);
-        console.log('  today:', today, 'startOfToday:', startOfToday);
-        console.log('  isTodayMatch:', isTodayMatch, '(same day check)');
-
-        // If match is from today, allow editing directly
-        if (isTodayMatch || this.isAdmin) {
+        // If match is from today or already authorized when opening modal, allow save directly.
+        if (isTodayMatch || this.isAdmin || this.editAdminBypassForCurrentModal) {
             // Continue with normal edit logic
         } else {
             // Match is from previous day(s) - require admin PIN
@@ -3514,8 +3565,9 @@ class AppController {
             this.toastManager.success('Admin access granted for this action');
         }
 
-        const team1Score = parseInt(document.getElementById('editTeam1Score').value) || 0;
-        const team2Score = parseInt(document.getElementById('editTeam2Score').value) || 0;
+        const team1Score = this.parseBoundedScore('editTeam1Score', 0, 99, 'Team 1 score');
+        const team2Score = this.parseBoundedScore('editTeam2Score', 0, 99, 'Team 2 score');
+        if (team1Score == null || team2Score == null) return;
 
         const validatedLineups = this.getValidatedEditedLineups();
         if (!validatedLineups) return;
@@ -3530,8 +3582,14 @@ class AppController {
         let team1ExtraTimeScore = null;
         let team2ExtraTimeScore = null;
         if (wentToExtraTime) {
-            team1ExtraTimeScore = parseInt(document.getElementById('editTeam1ExtraTimeScore').value) || 0;
-            team2ExtraTimeScore = parseInt(document.getElementById('editTeam2ExtraTimeScore').value) || 0;
+            team1ExtraTimeScore = this.parseBoundedScore('editTeam1ExtraTimeScore', 0, 99, 'Team 1 extra-time total');
+            team2ExtraTimeScore = this.parseBoundedScore('editTeam2ExtraTimeScore', 0, 99, 'Team 2 extra-time total');
+            if (team1ExtraTimeScore == null || team2ExtraTimeScore == null) return;
+            if (team1ExtraTimeScore < team1Score || team2ExtraTimeScore < team2Score) {
+                this.setEditValidationMessage('Extra-time totals cannot be lower than full-time scores.');
+                this.toastManager.error('Extra-time totals must be >= full-time scores');
+                return;
+            }
         }
 
         // Get penalties scores if applicable
@@ -3539,8 +3597,9 @@ class AppController {
         let team1PenaltiesScore = null;
         let team2PenaltiesScore = null;
         if (wentToPenalties) {
-            team1PenaltiesScore = parseInt(document.getElementById('editTeam1PenaltiesScore').value) || 0;
-            team2PenaltiesScore = parseInt(document.getElementById('editTeam2PenaltiesScore').value) || 0;
+            team1PenaltiesScore = this.parseBoundedScore('editTeam1PenaltiesScore', 0, 20, 'Team 1 penalties');
+            team2PenaltiesScore = this.parseBoundedScore('editTeam2PenaltiesScore', 0, 20, 'Team 2 penalties');
+            if (team1PenaltiesScore == null || team2PenaltiesScore == null) return;
         }
 
         if (this.matchRecorder.updateMatch(this.editingMatchTimestamp, {
@@ -3561,7 +3620,7 @@ class AppController {
             // Haptic feedback
             this.vibrate([50]);
             this.toastManager.success('Match updated successfully', 'Match Saved');
-            this.closeEditModal();
+            this.closeEditModal(true);
             this.loadMatchHistory();
             // Refresh stats if on stats screen
             if (this.currentScreen === 'statsScreen') {
@@ -3592,10 +3651,22 @@ class AppController {
         const isTodayMatch = startOfMatchDay.getTime() === startOfToday.getTime();
 
 
+        const matchInfo = this.matchRecorder.findMatch(matchTimestamp);
+        let details = '';
+        if (matchInfo) {
+            const data = this.storage.getData();
+            const match = data?.seasons?.[matchInfo.season]?.matches?.[matchInfo.index];
+            if (match) {
+                const t1 = this.teamGenerator.formatTeamName(match.team1);
+                const t2 = this.teamGenerator.formatTeamName(match.team2);
+                details = `\n\nMatch: ${t1} ${match.team1Score ?? 0}-${match.team2Score ?? 0} ${t2}\nDate: ${new Date(matchTimestamp).toLocaleString()}`;
+            }
+        }
+
         // If match is from today, allow deletion directly
         if (isTodayMatch || this.isAdmin) {
-        if (confirm('Delete this match? This cannot be undone.')) {
-                this.deleteMatch(matchTimestamp);
+        if (confirm(`Delete this match? This cannot be undone.${details}`)) {
+                await this.deleteMatch(matchTimestamp);
             }
             return;
         }
@@ -3610,22 +3681,23 @@ class AppController {
         if (isValid) {
             this.updateAdminUI();
             this.toastManager.success('Admin access granted for this action');
-            if (confirm('Delete this match? This cannot be undone.')) {
-                this.deleteMatch(matchTimestamp);
+            if (confirm(`Delete this match? This cannot be undone.${details}`)) {
+                await this.deleteMatch(matchTimestamp);
             }
         } else {
             this.toastManager.error('Incorrect PIN');
         }
     }
 
-    deleteMatch(timestamp) {
+    async deleteMatch(timestamp) {
         console.log('Attempting to delete match with timestamp:', timestamp, 'isAdmin:', this.isAdmin);
+        await this.createSafetyBackup('before-delete-match');
 
         if (this.matchRecorder.deleteMatch(timestamp)) {
             // Haptic feedback
             this.vibrate([100, 50, 100]);
             this.toastManager.success('Match deleted successfully', 'Match Removed');
-            this.closeEditModal();
+            this.closeEditModal(true);
             this.loadMatchHistory();
             // Refresh stats if on stats screen
             if (this.currentScreen === 'statsScreen') {
@@ -3638,14 +3710,68 @@ class AppController {
         }
     }
 
-    closeEditModal() {
+    closeEditModal(force = false) {
+        if (!force && this.hasUnsavedEditMatchChanges()) {
+            if (!confirm('Discard unsaved match changes?')) {
+                return;
+            }
+        }
         document.getElementById('editMatchModal').style.display = 'none';
         this.editingMatchTimestamp = null;
         this.editMatchDraft = null;
+        this.editMatchInitialSnapshot = null;
+        this.editAdminBypassForCurrentModal = false;
         this.setEditValidationMessage('');
     }
 
     // Helper method to redirect to admin unlock with context
+
+    async downloadBackupFile(data, suffix = 'backup') {
+        const json = JSON.stringify(data, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `fc25-score-tracker-${suffix}-${stamp}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    async createSafetyBackup(reason = 'backup') {
+        try {
+            await this.downloadBackupFile(this.storage.getData(), reason);
+            this.toastManager.info('Safety backup downloaded.');
+            return true;
+        } catch (error) {
+            console.error('Backup failed:', error);
+            this.toastManager.warning('Could not create backup file automatically.');
+            return false;
+        }
+    }
+
+    validateAndNormalizeImportData(importedData) {
+        if (!importedData || typeof importedData !== 'object') {
+            throw new Error('Imported file must be a JSON object.');
+        }
+        if (!Array.isArray(importedData.players)) {
+            throw new Error('Imported data is missing a valid players list.');
+        }
+        if (importedData.seasons != null && typeof importedData.seasons !== 'object') {
+            throw new Error('Imported data contains invalid seasons format.');
+        }
+
+        const normalizedPlayers = importedData.players.map(p => String(p || '').trim()).filter(Boolean);
+        if (normalizedPlayers.length !== importedData.players.length) {
+            throw new Error('Imported players contain empty values.');
+        }
+
+        const normalized = this.storage.applyDefaults(importedData);
+        normalized.players = normalizedPlayers;
+        return normalized;
+    }
 
     // Export/Import Data
     async exportData() {
@@ -3663,16 +3789,7 @@ class AppController {
             this.updateAdminUI();
         }
         const data = this.storage.getData();
-        const json = JSON.stringify(data, null, 2);
-        const blob = new Blob([json], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `fc25-score-tracker-backup-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        await this.downloadBackupFile(data, 'manual-export');
         this.toastManager.success('Data exported successfully!');
     }
 
@@ -3701,17 +3818,18 @@ class AppController {
         reader.onload = async (e) => {
             try {
                 const importedData = JSON.parse(e.target.result);
-                
-                // Basic validation
-                if (!importedData.players || !Array.isArray(importedData.players)) {
-                    throw new Error('Invalid data format');
-                }
+                const normalizedImport = this.validateAndNormalizeImportData(importedData);
 
                 // Replace local storage with imported data
                 if (confirm('This will replace ALL your current LOCAL data on this device. Continue?')) {
-                    this.storage.updateData(data => {
-                        Object.assign(data, importedData);
+                    await this.createSafetyBackup('before-import');
+                    const saved = this.storage.updateData(data => {
+                        Object.keys(data).forEach(key => delete data[key]);
+                        Object.assign(data, normalizedImport);
                     });
+                    if (!saved) {
+                        throw new Error('Import could not be saved. Storage may be full.');
+                    }
                     this.toastManager.success('Data imported successfully! Reloading...');
                     setTimeout(() => location.reload(), 400);
                 }
@@ -4106,6 +4224,7 @@ class AppController {
 
         if (confirm('Are you sure you want to clear ALL data? This cannot be undone!\n\nThis will delete:\n- All matches\n- All statistics\n- All settings\n- All player data')) {
             if (confirm('This is your last chance. Are you absolutely sure?')) {
+                await this.createSafetyBackup('before-clear-all');
                 // Clear local storage
                 this.storage.clearAll();
                 this.settingsManager.resetAll();
@@ -5288,6 +5407,8 @@ class AppController {
         if (savedMatch) {
             // Track last recorded match for undo
             this.lastRecordedMatch = { match: savedMatch, gameIndex: matchIndex };
+
+            playIconicScoreSound(team1Score, team2Score);
 
             // Update played dates and stats
             this.updatePlayedDates();

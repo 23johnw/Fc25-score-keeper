@@ -4,6 +4,12 @@ import { SeasonManager } from './season.js';
 import { PlayerManager } from './players.js';
 import { fetchTopTeams } from './api-service.js';
 import { push as debugPush } from './debug-log.js';
+import {
+    toTeamArray,
+    resolveFinalScores,
+    determineMatchResult,
+    recomputeOverallPlayersFromData
+} from './utils/match-derived-stats.js';
 
 const storage = new LocalStorageManager();
 const seasonManager = new SeasonManager(storage);
@@ -19,28 +25,8 @@ export function addPlayer(playerData) {
 }
 
 export function recordMatch(matchData) {
-    // Determine result from scores (use penalties if available, otherwise extra time, otherwise full time)
-    let finalTeam1Score = matchData.score1;
-    let finalTeam2Score = matchData.score2;
-    
-    if (matchData.penaltiesScore1 !== null && matchData.penaltiesScore2 !== null) {
-        // Use penalties score for result determination
-        finalTeam1Score = matchData.penaltiesScore1;
-        finalTeam2Score = matchData.penaltiesScore2;
-    } else if (matchData.extraTimeScore1 !== null && matchData.extraTimeScore2 !== null) {
-        // Use extra time score for result determination
-        finalTeam1Score = matchData.extraTimeScore1;
-        finalTeam2Score = matchData.extraTimeScore2;
-    }
-    
-    let result;
-    if (finalTeam1Score > finalTeam2Score) {
-        result = 'team1';
-    } else if (finalTeam2Score > finalTeam1Score) {
-        result = 'team2';
-    } else {
-        result = 'draw';
-    }
+    const finalScores = resolveFinalScores(matchData);
+    const result = determineMatchResult(finalScores.team1, finalScores.team2);
 
     const timestamp = matchData.timestamp || new Date().toISOString();
     
@@ -95,30 +81,30 @@ export function recordMatch(matchData) {
             data.overallStats.players[player].goalsAgainst += goalsAgainst;
         };
 
-        const team1Players = Array.isArray(matchData.team1) ? matchData.team1 : [matchData.team1];
-        const team2Players = Array.isArray(matchData.team2) ? matchData.team2 : [matchData.team2];
+        const team1Players = toTeamArray(matchData.team1);
+        const team2Players = toTeamArray(matchData.team2);
         const isPresent = (player) => playerPresence[player] !== false;
 
         if (match.result === 'team1') {
             team1Players.forEach(p => {
-                if (isPresent(p)) updatePlayerStats(p, 1, 0, 0, finalTeam1Score, finalTeam2Score);
+                if (isPresent(p)) updatePlayerStats(p, 1, 0, 0, finalScores.team1, finalScores.team2);
             });
             team2Players.forEach(p => {
-                if (isPresent(p)) updatePlayerStats(p, 0, 1, 0, finalTeam2Score, finalTeam1Score);
+                if (isPresent(p)) updatePlayerStats(p, 0, 1, 0, finalScores.team2, finalScores.team1);
             });
         } else if (match.result === 'team2') {
             team1Players.forEach(p => {
-                if (isPresent(p)) updatePlayerStats(p, 0, 1, 0, finalTeam1Score, finalTeam2Score);
+                if (isPresent(p)) updatePlayerStats(p, 0, 1, 0, finalScores.team1, finalScores.team2);
             });
             team2Players.forEach(p => {
-                if (isPresent(p)) updatePlayerStats(p, 1, 0, 0, finalTeam2Score, finalTeam1Score);
+                if (isPresent(p)) updatePlayerStats(p, 1, 0, 0, finalScores.team2, finalScores.team1);
             });
         } else {
             team1Players.forEach(p => {
-                if (isPresent(p)) updatePlayerStats(p, 0, 0, 1, finalTeam1Score, finalTeam2Score);
+                if (isPresent(p)) updatePlayerStats(p, 0, 0, 1, finalScores.team1, finalScores.team2);
             });
             team2Players.forEach(p => {
-                if (isPresent(p)) updatePlayerStats(p, 0, 0, 1, finalTeam2Score, finalTeam1Score);
+                if (isPresent(p)) updatePlayerStats(p, 0, 0, 1, finalScores.team2, finalScores.team1);
             });
         }
 
@@ -171,25 +157,15 @@ export function updateMatch(timestamp, updateOrTeam1Score, newTeam2Score = null,
     const nextTeam1Pens = update.team1PenaltiesScore != null ? (Number(update.team1PenaltiesScore) || 0) : null;
     const nextTeam2Pens = update.team2PenaltiesScore != null ? (Number(update.team2PenaltiesScore) || 0) : null;
 
-    let finalTeam1Score = nextTeam1Score;
-    let finalTeam2Score = nextTeam2Score;
-    
-    if (nextTeam1Pens !== null && nextTeam2Pens !== null) {
-        finalTeam1Score = nextTeam1Pens;
-        finalTeam2Score = nextTeam2Pens;
-    } else if (nextTeam1Extra !== null && nextTeam2Extra !== null) {
-        finalTeam1Score = nextTeam1Extra;
-        finalTeam2Score = nextTeam2Extra;
-    }
-    
-    let newResult;
-    if (finalTeam1Score > finalTeam2Score) {
-        newResult = 'team1';
-    } else if (finalTeam2Score > finalTeam1Score) {
-        newResult = 'team2';
-    } else {
-        newResult = 'draw';
-    }
+    const finalScores = resolveFinalScores({
+        team1Score: nextTeam1Score,
+        team2Score: nextTeam2Score,
+        team1ExtraTimeScore: nextTeam1Extra,
+        team2ExtraTimeScore: nextTeam2Extra,
+        team1PenaltiesScore: nextTeam1Pens,
+        team2PenaltiesScore: nextTeam2Pens
+    });
+    const newResult = determineMatchResult(finalScores.team1, finalScores.team2);
 
     return storage.updateData(data => {
         const season = data.seasons[matchInfo.season];
@@ -250,6 +226,9 @@ export function updateMatch(timestamp, updateOrTeam1Score, newTeam2Score = null,
                 }
             });
             match.playerPresence = rebuiltPresence;
+
+            // Keep derived stats consistent after edits.
+            data.overallStats.players = recomputeOverallPlayersFromData(data);
         }
     });
 }
@@ -265,6 +244,7 @@ export function deleteMatch(timestamp) {
             if (data.overallStats.totalMatches > 0) {
                 data.overallStats.totalMatches--;
             }
+            data.overallStats.players = recomputeOverallPlayersFromData(data);
         }
     });
 }
@@ -297,6 +277,7 @@ export function deleteLastMatch() {
             if (d.overallStats.totalMatches > 0) {
                 d.overallStats.totalMatches--;
             }
+            d.overallStats.players = recomputeOverallPlayersFromData(d);
         }
     });
 

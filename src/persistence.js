@@ -2,6 +2,8 @@
 // LocalStorageManager - Data Persistence
 // ============================================================================
 
+import { recomputeOverallPlayersFromData } from './utils/match-derived-stats.js';
+
 class LocalStorageManager {
     constructor() {
         this.storageKey = 'fc25_score_tracker';
@@ -16,8 +18,7 @@ class LocalStorageManager {
                 // Set this.data first so migration can save if needed
                 this.data = data;
                 // Run migrations to fix old data
-                this.migratePlayerPresence(data);
-                this.migrateOverallStatsForPresence(data);
+                this.runMigrations(data);
                 return this.data;
             }
         } catch (error) {
@@ -32,6 +33,32 @@ class LocalStorageManager {
      * Migration: Retroactively mark players as absent in old matches where their partner was solo
      * This ensures the Ghost Proxy system works correctly for historical data
      */
+    runMigrations(data) {
+        if (!data || typeof data !== 'object') return;
+        if (!data.migrations || typeof data.migrations !== 'object') {
+            data.migrations = {};
+        }
+
+        let shouldSave = false;
+
+        if (data.migrations.playerPresenceV1 !== true) {
+            this.migratePlayerPresence(data);
+            data.migrations.playerPresenceV1 = true;
+            shouldSave = true;
+        }
+
+        if (data.migrations.overallStatsPresenceV1 !== true) {
+            this.migrateOverallStatsForPresence(data);
+            data.migrations.overallStatsPresenceV1 = true;
+            shouldSave = true;
+        }
+
+        if (shouldSave) {
+            this.data = data;
+            this.saveData();
+        }
+    }
+
     migratePlayerPresence(data) {
         if (!data.seasons) return;
         
@@ -118,9 +145,9 @@ class LocalStorageManager {
         
         if (needsSave && updated > 0) {
             console.log(`Migration: Updated ${updated} player presence entries for Ghost Proxy system`);
-            this.data = data;
-            this.saveData();
         }
+
+        return needsSave && updated > 0;
     }
 
     /**
@@ -129,82 +156,7 @@ class LocalStorageManager {
      */
     migrateOverallStatsForPresence(data) {
         if (!data || !data.seasons) return;
-
-        const makeEmptyStats = () => ({ wins: 0, losses: 0, draws: 0, goalsFor: 0, goalsAgainst: 0 });
-        const computed = {};
-
-        const ensurePlayer = (player) => {
-            if (!computed[player]) {
-                computed[player] = makeEmptyStats();
-            }
-            return computed[player];
-        };
-
-        const updatePlayerStats = (player, wins, losses, draws, goalsFor, goalsAgainst) => {
-            const s = ensurePlayer(player);
-            s.wins += wins;
-            s.losses += losses;
-            s.draws += draws;
-            s.goalsFor += goalsFor;
-            s.goalsAgainst += goalsAgainst;
-        };
-
-        Object.values(data.seasons).forEach(season => {
-            if (!season || !Array.isArray(season.matches)) return;
-            season.matches.forEach(match => {
-                const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
-                const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
-                const presence = (match && typeof match.playerPresence === 'object' && match.playerPresence) ? match.playerPresence : {};
-                const isPresent = (player) => presence[player] !== false;
-
-                let finalTeam1Score = Number(match.team1Score) || 0;
-                let finalTeam2Score = Number(match.team2Score) || 0;
-
-                const hasPens = match.team1PenaltiesScore != null && match.team2PenaltiesScore != null;
-                const hasExtra = match.team1ExtraTimeScore != null && match.team2ExtraTimeScore != null;
-                if (hasPens) {
-                    finalTeam1Score = Number(match.team1PenaltiesScore) || 0;
-                    finalTeam2Score = Number(match.team2PenaltiesScore) || 0;
-                } else if (hasExtra) {
-                    finalTeam1Score = Number(match.team1ExtraTimeScore) || 0;
-                    finalTeam2Score = Number(match.team2ExtraTimeScore) || 0;
-                }
-
-                const result = finalTeam1Score > finalTeam2Score
-                    ? 'team1'
-                    : (finalTeam2Score > finalTeam1Score ? 'team2' : 'draw');
-
-                if (result === 'team1') {
-                    team1Players.forEach(p => {
-                        if (isPresent(p)) updatePlayerStats(p, 1, 0, 0, finalTeam1Score, finalTeam2Score);
-                    });
-                    team2Players.forEach(p => {
-                        if (isPresent(p)) updatePlayerStats(p, 0, 1, 0, finalTeam2Score, finalTeam1Score);
-                    });
-                } else if (result === 'team2') {
-                    team1Players.forEach(p => {
-                        if (isPresent(p)) updatePlayerStats(p, 0, 1, 0, finalTeam1Score, finalTeam2Score);
-                    });
-                    team2Players.forEach(p => {
-                        if (isPresent(p)) updatePlayerStats(p, 1, 0, 0, finalTeam2Score, finalTeam1Score);
-                    });
-                } else {
-                    team1Players.forEach(p => {
-                        if (isPresent(p)) updatePlayerStats(p, 0, 0, 1, finalTeam1Score, finalTeam2Score);
-                    });
-                    team2Players.forEach(p => {
-                        if (isPresent(p)) updatePlayerStats(p, 0, 0, 1, finalTeam2Score, finalTeam1Score);
-                    });
-                }
-            });
-        });
-
-        // Keep zeroed entries for known players so profile rows remain available.
-        const knownPlayers = new Set([
-            ...(Array.isArray(data.players) ? data.players : []),
-            ...Object.keys((data.overallStats && data.overallStats.players) || {})
-        ]);
-        knownPlayers.forEach(player => ensurePlayer(player));
+        const computed = recomputeOverallPlayersFromData(data);
 
         const previous = JSON.stringify((data.overallStats && data.overallStats.players) || {});
         const next = JSON.stringify(computed);
@@ -213,10 +165,10 @@ class LocalStorageManager {
                 data.overallStats = { players: {}, totalMatches: 0 };
             }
             data.overallStats.players = computed;
-            this.data = data;
-            this.saveData();
             console.log('Migration: Recomputed overall player stats with attendance-aware attribution');
+            return true;
         }
+        return false;
     }
 
     getDefaultData() {
@@ -244,6 +196,10 @@ class LocalStorageManager {
                 currentGameIndex: 0, // Which match in the sequence they're on
                 currentMatch: null, // Current match being played (if any)
                 enteredScores: null // Any scores that were entered but not submitted
+            },
+            migrations: {
+                playerPresenceV1: false,
+                overallStatsPresenceV1: false
             }
         };
     }
@@ -285,7 +241,11 @@ class LocalStorageManager {
                 ...(data.overallStats || {})
             },
             playerLock: data.playerLock || defaults.playerLock,
-            currentGameState: data.currentGameState || defaults.currentGameState
+            currentGameState: data.currentGameState || defaults.currentGameState,
+            migrations: {
+                ...defaults.migrations,
+                ...(data.migrations || {})
+            }
         };
 
         if (!merged.playerLock || typeof merged.playerLock !== 'object') {
@@ -306,7 +266,26 @@ class LocalStorageManager {
             localStorage.setItem(this.storageKey, JSON.stringify(this.data));
             return true;
         } catch (error) {
+            if (error && error.name === 'QuotaExceededError') {
+                console.error('Storage quota exceeded. Export data or clear old matches to continue saving.');
+                if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+                    window.dispatchEvent(new CustomEvent('fc25-storage-error', {
+                        detail: {
+                            type: 'quota',
+                            message: 'Storage is full. Export data or clear old matches to continue saving.'
+                        }
+                    }));
+                }
+            }
             console.error('Error saving data:', error);
+            if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+                window.dispatchEvent(new CustomEvent('fc25-storage-error', {
+                    detail: {
+                        type: 'save_failed',
+                        message: 'Failed to save data. Please export a backup and refresh.'
+                    }
+                }));
+            }
             return false;
         }
     }
