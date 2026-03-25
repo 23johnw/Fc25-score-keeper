@@ -5,10 +5,11 @@
 import { StatisticsCalculators, StatDescriptions } from './stats-calculators.js';
 
 class ShareManager {
-    constructor(storageManager, statisticsTracker, seasonManager) {
+    constructor(storageManager, statisticsTracker, seasonManager, settingsManager) {
         this.storage = storageManager;
         this.tracker = statisticsTracker;
         this.seasonManager = seasonManager;
+        this.settingsManager = settingsManager || null;
     }
 
     // Generate shareable image from statistics
@@ -302,8 +303,9 @@ class ShareManager {
         // Get player color from settings (if available)
         const getPlayerColor = (playerName) => {
             try {
-                if (window.appController && window.appController.settingsManager) {
-                    const color = window.appController.settingsManager.getPlayerColor(playerName);
+                const sm = this.settingsManager || (window.appController && window.appController.settingsManager);
+                if (sm) {
+                    const color = sm.getPlayerColor(playerName);
                     if (color) {
                         // Convert hex to RGB array
                         const hex = color.replace('#', '');

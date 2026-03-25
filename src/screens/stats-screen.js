@@ -41,13 +41,13 @@ export function init(controller) {
     if (shareCustomBtn) shareCustomBtn.addEventListener('click', () => controller.shareStats('custom'));
 
     const exportTodayPDFBtn = document.getElementById('exportTodayPDFBtn');
-    if (exportTodayPDFBtn) exportTodayPDFBtn.addEventListener('click', () => controller.exportPDF());
+    if (exportTodayPDFBtn) exportTodayPDFBtn.addEventListener('click', () => controller.exportPDF('today'));
 
     const exportSeasonPDFBtn = document.getElementById('exportSeasonPDFBtn');
-    if (exportSeasonPDFBtn) exportSeasonPDFBtn.addEventListener('click', () => controller.exportPDF());
+    if (exportSeasonPDFBtn) exportSeasonPDFBtn.addEventListener('click', () => controller.exportPDF('season'));
 
     const exportOverallPDFBtn = document.getElementById('exportOverallPDFBtn');
-    if (exportOverallPDFBtn) exportOverallPDFBtn.addEventListener('click', () => controller.exportPDF());
+    if (exportOverallPDFBtn) exportOverallPDFBtn.addEventListener('click', () => controller.exportPDF('overall'));
 
     const exportCustomBtn = document.getElementById('exportCustomPDFBtn');
     if (exportCustomBtn) exportCustomBtn.addEventListener('click', () => controller.exportPDF('custom'));
@@ -70,14 +70,9 @@ export function load(controller) {
     if (statsTabSelect && controller.lastStatsTab) {
         statsTabSelect.value = controller.lastStatsTab;
     }
-    controller.ensureChartJs().then(() => {
-        controller.updatePlayedDates();
-        controller.loadStatistics();
-        controller.updateViewPDFButton();
-        setTimeout(() => controller.initializeStatsTabSwipes(), 100);
-        controller.updateBackToSessionButton();
-    }).catch(() => {
+    controller.ensureChartJs().catch(() => {
         controller.toastManager.error('Could not load charts. Check your connection.');
+    }).finally(() => {
         controller.updatePlayedDates();
         controller.loadStatistics();
         controller.updateViewPDFButton();

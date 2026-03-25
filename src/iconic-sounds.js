@@ -73,8 +73,6 @@ function createProceduralCrowdBuffer(durationSec) {
 function playStadiumCheer(options = {}) {
     const loop = !!options.loop;
     const stopFn = { stop: () => {} };
-                const stopAt = now + STADIUM_CHEER_DURATION_S;
-                const t = setTimeout(() => {}, 0);
 
     getCrowdBuffer().then((buffer) => {
         const buf = buffer || createProceduralCrowdBuffer(STADIUM_CHEER_DURATION_S);
@@ -180,11 +178,33 @@ function playCrowdScoreCelebration(s1, s2) {
 }
 
 /**
+ * Laughing mockery when one team scores nothing (clean sheet).
+ */
+function playCleanSheetMockery(s1, s2) {
+    playCrowdClip();
+    const goals = Math.max(s1, s2);
+    const text = `Ha ha ha ha ha! We scored ${goals} and you scored none! Ha ha ha ha ha! ${goals} nil! You scored absolutely nothing! Ha ha ha ha ha!`;
+    speak(text, 1.1);
+}
+
+/**
+ * Thrashing callout for wins by 5+ goals (e.g. 7-2, 8-1).
+ */
+function playThrashingCallout(s1, s2) {
+    playCrowdClip();
+    const high = Math.max(s1, s2);
+    const low = Math.min(s1, s2);
+    const text = `${high} ${low}! That is an absolute demolition! ${high} goals to ${low}! What a thrashing!`;
+    speak(text, 1.1);
+}
+
+/**
  * Callout for 4-5 / 5-4: speak exact score then special phrase.
  */
 function playRare45ScoreCallout(s1, s2) {
     playCrowdClip();
-    const text = `${s1}... ${s2}. It's not often you see a score like that.`;
+    const phrase = `${s1}... ${s2}. It's not often you see a score like that.`;
+    const text = [phrase, phrase, phrase].join(' ... ');
     speak(text, 0.95);
 }
 
@@ -192,6 +212,8 @@ function playRare45ScoreCallout(s1, s2) {
 const ICONIC_RULES = [
     { check: (a, b) => (a === 4 && b === 5) || (a === 5 && b === 4), play: playRare45ScoreCallout },
     { check: (a, b) => a >= 10 || b >= 10, play: playCrowdScoreCelebration },
+    { check: (a, b) => (a === 0 || b === 0) && (a + b > 0), play: playCleanSheetMockery },
+    { check: (a, b) => Math.abs(a - b) >= 5, play: playThrashingCallout },
     { check: (a, b) => (a === 6 && b === 7) || (a === 7 && b === 6), play: playThriller67Chant }
 ];
 

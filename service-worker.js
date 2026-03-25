@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fc25-score-tracker-v118';
+const CACHE_NAME = 'fc25-score-tracker-v122';
 
 // Determine base path from the SW scope.
 // - Root scope is usually "/"  -> BASE_PATH = ""
@@ -31,6 +31,9 @@ const urlsToCache = [
   `${BASE_PATH}/src/debug-log.js`,
   `${BASE_PATH}/src/history-viewer.js`,
   `${BASE_PATH}/src/stats-view-toggler-global.js`,
+  `${BASE_PATH}/src/iconic-sounds.js`,
+  `${BASE_PATH}/src/utils/match-derived-stats.js`,
+  `${BASE_PATH}/src/services/data-service.js`,
   `${BASE_PATH}/src/main.js`,
   // Screen modules
   `${BASE_PATH}/src/screens/index.js`,

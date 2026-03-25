@@ -74,6 +74,76 @@ body {
 .season-info {
     font-size: 0.875rem;
     opacity: 0.9;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.season-progress {
+    font-size: 0.75rem;
+    opacity: 0.7;
+}
+
+/* Season picker dropdown on stats screen */
+.season-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.85rem;
+}
+.season-picker-row label {
+    font-weight: 500;
+    opacity: 0.8;
+    white-space: nowrap;
+}
+.season-picker-select {
+    min-width: 160px;
+    font-size: 0.85rem;
+    padding: 0.35rem 0.5rem;
+}
+
+/* Per-pairing progress on stats screen */
+.season-pairing-progress {
+    background: linear-gradient(135deg, rgba(21,101,192,0.08) 0%, rgba(30,58,95,0.06) 100%);
+    border: 1px solid rgba(21,101,192,0.15);
+    border-radius: var(--radius-lg, 12px);
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+}
+.season-pairing-progress h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.7;
+}
+.pairing-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.3rem 0;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+.pairing-row:last-child {
+    border-bottom: none;
+}
+.pairing-name {
+    font-weight: 500;
+}
+.pairing-count {
+    font-weight: 600;
+    color: var(--primary, #1565C0);
+}
+.pairing-count.complete {
+    color: #2e7d32;
+}
+body.dark-mode .season-pairing-progress {
+    background: linear-gradient(135deg, rgba(21,101,192,0.12) 0%, rgba(30,58,95,0.10) 100%);
+    border-color: rgba(21,101,192,0.25);
+}
+body.dark-mode .pairing-row {
+    border-bottom-color: rgba(255,255,255,0.05);
 }
 
 /* Screen Management */
@@ -431,19 +501,6 @@ body.dark-mode .player-editable-item.absent .presence-text {
     text-align: center;
     position: relative;
     overflow: hidden;
-}
-
-.btn::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 0;
-    height: 0;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.3);
-    transform: translate(-50%, -50%);
-    transition: width 0.6s, height 0.6s;
 }
 
 .btn::before {
@@ -916,14 +973,6 @@ body.dark-mode .player-editable-item.absent .presence-text {
     flex-shrink: 0;
 }
 
-.match-result {
-    background-color: var(--surface-color);
-    padding: 1.5rem;
-    border-radius: 8px;
-    box-shadow: var(--shadow);
-    margin-bottom: 1.5rem;
-}
-
 .match-result h3 {
     font-size: 1.1rem;
     margin-bottom: 1rem;
@@ -1093,17 +1142,6 @@ body.dark-mode .player-editable-item.absent .presence-text {
     opacity: 1;
 }
 
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
 .stats-content h3 {
     font-size: 1.2rem;
     margin-bottom: 1rem;
@@ -1201,15 +1239,6 @@ body.dark-mode .player-editable-item.absent .presence-text {
     z-index: 10000;
     padding: 1rem;
     animation: fadeIn 0.2s ease-out;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
 }
 
 .stat-description-modal {
@@ -1759,7 +1788,7 @@ body.dark-mode .insight-stats span {
 }
 
 .heatmap-square.has-matches:hover::after {
-    content: attr(data-count) ' match' + (parseInt(attr(data-count)) > 1 ? 'es' : '');
+    content: attr(data-count) ' matches';
     position: absolute;
     bottom: 100%;
     left: 50%;
@@ -2495,6 +2524,62 @@ body.dark-mode .onboarding-modal {
     box-shadow: 0 0 0 3px rgba(30, 136, 229, 0.18);
 }
 
+/* Match prediction banner */
+.match-prediction {
+    background: linear-gradient(135deg, rgba(255,193,7,0.15) 0%, rgba(255,152,0,0.10) 100%);
+    border: 1px solid rgba(255,193,7,0.3);
+    border-radius: var(--radius-lg);
+    padding: 0.6rem 1rem;
+    margin: 0.5rem 0;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    animation: fadeIn 0.4s ease;
+}
+.match-prediction .prediction-icon {
+    font-size: 1rem;
+    margin-right: 0.3rem;
+}
+body.dark-mode .match-prediction {
+    background: linear-gradient(135deg, rgba(255,193,7,0.08) 0%, rgba(255,152,0,0.06) 100%);
+    border-color: rgba(255,193,7,0.2);
+}
+
+/* Confetti animation */
+.confetti-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 99999;
+    overflow: hidden;
+}
+.confetti-piece {
+    position: absolute;
+    top: -10px;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    animation: confettiFall 2.5s ease-out forwards;
+}
+.confetti-piece:nth-child(odd) {
+    width: 8px;
+    height: 12px;
+    border-radius: 50%;
+}
+@keyframes confettiFall {
+    0% {
+        opacity: 1;
+        transform: translateY(0) translateX(0) rotate(0deg) scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(100vh) translateX(var(--drift, 0px)) rotate(var(--rotation, 360deg)) scale(0.4);
+    }
+}
+
 /* Scoreboard widget: the match result section on the Match screen */
 .match-result {
     background: linear-gradient(160deg, #1565C0 0%, #1E3A5F 100%);
@@ -3010,12 +3095,6 @@ body.dark-mode .nav-btn:focus {
 }
 
 /* Match History */
-.history-controls {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-    flex-wrap: wrap;
-}
 
 .filter-select,
 .search-input {
@@ -3063,15 +3142,6 @@ body.dark-mode .nav-btn:focus {
 .view-toggle-btn:hover:not(.active) {
     border-color: var(--primary-color);
     background-color: #E3F2FD;
-}
-
-/* History Controls */
-.history-controls {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-    flex-wrap: wrap;
-    align-items: center;
 }
 
 .date-input {
@@ -3242,17 +3312,6 @@ body.dark-mode .nav-btn:focus {
     font-size: 0.8rem;
     color: var(--text-secondary);
     margin-top: 0.25rem;
-}
-
-.timeline-match-details {
-    display: none;
-    margin-top: 0.75rem;
-    padding-top: 0.75rem;
-    border-top: 1px solid var(--border-color);
-}
-
-.timeline-match-item.expanded .timeline-match-details {
-    display: block;
 }
 
 .timeline-match-actions {

@@ -34,25 +34,28 @@ export function init(controller) {
     if (syncTopTeamsBtn) {
         syncTopTeamsBtn.addEventListener('click', async () => {
             syncTopTeamsBtn.disabled = true;
-            controller.persistSelectedLeaguesFromCheckboxes();
-            const selectedLeagues = controller.getSelectedLeaguesFromCheckboxes() ?? (Array.isArray(controller.storage.getData().selectedLeagues) ? controller.storage.getData().selectedLeagues : []);
-            const result = await syncTeamsFromOnline({ toastManager: controller.toastManager, storage: controller.storage, selectedLeagues });
-            syncTopTeamsBtn.disabled = false;
-            if (result.success) {
-                controller.updateTeamNamesSavedCountUI();
-                controller.settingsManager.setUseRandomTeams(true);
-                const useRandomCheck = document.getElementById('useRandomTeamsCheckbox');
-                if (useRandomCheck) useRandomCheck.checked = true;
-                controller.loadTeamCombinations();
-                const currentSeason = controller.seasonManager.getCurrentSeason();
-                controller.storage.updateData(data => {
-                    if (data.seasons && data.seasons[currentSeason]) {
-                        const season = data.seasons[currentSeason];
-                        season.teamNames = {};
-                        season.matchTeamNames = undefined;
-                    }
-                });
-                if (result.entries && result.entries.length) controller.showSyncedTeamsListModal(result.entries);
+            try {
+                controller.persistSelectedLeaguesFromCheckboxes();
+                const selectedLeagues = controller.getSelectedLeaguesFromCheckboxes() ?? (Array.isArray(controller.storage.getData().selectedLeagues) ? controller.storage.getData().selectedLeagues : []);
+                const result = await syncTeamsFromOnline({ toastManager: controller.toastManager, storage: controller.storage, selectedLeagues });
+                if (result.success) {
+                    controller.updateTeamNamesSavedCountUI();
+                    controller.settingsManager.setUseRandomTeams(true);
+                    const useRandomCheck = document.getElementById('useRandomTeamsCheckbox');
+                    if (useRandomCheck) useRandomCheck.checked = true;
+                    controller.loadTeamCombinations();
+                    const currentSeason = controller.seasonManager.getCurrentSeason();
+                    controller.storage.updateData(data => {
+                        if (data.seasons && data.seasons[currentSeason]) {
+                            const season = data.seasons[currentSeason];
+                            season.teamNames = {};
+                            season.matchTeamNames = undefined;
+                        }
+                    });
+                    if (result.entries && result.entries.length) controller.showSyncedTeamsListModal(result.entries);
+                }
+            } finally {
+                syncTopTeamsBtn.disabled = false;
             }
         });
     }

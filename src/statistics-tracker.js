@@ -3,18 +3,18 @@
 // ============================================================================
 
 import { StatisticsCalculators } from './stats-calculators.js';
+import { resolveFinalScores } from './utils/match-derived-stats.js';
 
 function getTeamId(team) {
     const s = [...team].sort();
     return 'team_' + s.join('_');
 }
 
-let statsMode = 'raw'; // raw | perGame | projected
-
 class StatisticsTracker {
     constructor(storage, settingsManager) {
         this.storage = storage;
         this.settingsManager = settingsManager;
+        this.statsMode = 'raw'; // raw | perGame | projected
     }
 
     getSeasonMatches(seasonNumber) {
@@ -56,21 +56,19 @@ class StatisticsTracker {
                 teamStats[teamBId] = { played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, gd: 0, points: 0, players: match.team2 };
             }
 
-            // Update stats
             const teamAStats = teamStats[teamAId];
             const teamBStats = teamStats[teamBId];
 
+            const finalScores = resolveFinalScores(match);
             const teamAIsSolo = teamA.length === 1;
             const teamBIsSolo = teamB.length === 1;
 
-            // For solo teams, only count Ghost Proxy matches (exactly 1 absent)
-            // For partnerships, count all matches
             if (teamAIsSolo && !exactlyOneAbsent) {
                 // Skip - true solo match, not Ghost Proxy
             } else {
                 teamAStats.played++;
-                teamAStats.gf += match.team1Score || 0;
-                teamAStats.ga += match.team2Score || 0;
+                teamAStats.gf += finalScores.team1;
+                teamAStats.ga += finalScores.team2;
                 if (match.result === 'team1') {
                     teamAStats.won++;
                     teamAStats.points += pointsConfig.win;
@@ -86,8 +84,8 @@ class StatisticsTracker {
                 // Skip - true solo match, not Ghost Proxy
             } else {
                 teamBStats.played++;
-                teamBStats.gf += match.team2Score || 0;
-                teamBStats.ga += match.team1Score || 0;
+                teamBStats.gf += finalScores.team2;
+                teamBStats.ga += finalScores.team1;
                 if (match.result === 'team2') {
                     teamBStats.won++;
                     teamBStats.points += pointsConfig.win;
@@ -248,14 +246,14 @@ class StatisticsTracker {
     }
 
     setStatsMode(mode) {
-    if (['raw', 'perGame', 'projected'].includes(mode)) {
-        statsMode = mode;
-    }
-        return statsMode;
+        if (['raw', 'perGame', 'projected'].includes(mode)) {
+            this.statsMode = mode;
+        }
+        return this.statsMode;
     }
 
     getStatsMode() {
-        return statsMode || 'raw';
+        return this.statsMode || 'raw';
     }
 
     applyModeToStats(calculated, calculatorId, gamesPlayedMap, maxGamesPlayed) {

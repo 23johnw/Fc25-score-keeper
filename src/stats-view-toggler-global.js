@@ -167,7 +167,7 @@ function setupToggleUI() {
             window.currentStatsView = 'player';
             btn.textContent = 'Team view';
             var tab = (document.querySelector('#statsTabSelect') || {}).value || 'overall';
-            var season = app.seasonManager.getCurrentSeason();
+            var season = app.getViewingSeasonNumber ? app.getViewingSeasonNumber() : app.seasonManager.getCurrentSeason();
             if (tab === 'today') app.statisticsDisplay.displayTodayStats(container);
             else if (tab === 'season') app.statisticsDisplay.displaySeasonStats(season, container);
             else if (tab === 'overall') app.statisticsDisplay.displayOverallStats(container);

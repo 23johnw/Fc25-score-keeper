@@ -49,14 +49,12 @@ export function recordMatch(matchData) {
     if (matchData.team1League != null) match.team1League = matchData.team1League;
     if (matchData.team2League != null) match.team2League = matchData.team2League;
 
-    // Add extra time scores if provided
-    if (matchData.extraTimeScore1 !== null && matchData.extraTimeScore2 !== null) {
+    if (matchData.extraTimeScore1 != null && matchData.extraTimeScore2 != null) {
         match.team1ExtraTimeScore = matchData.extraTimeScore1;
         match.team2ExtraTimeScore = matchData.extraTimeScore2;
     }
 
-    // Add penalties scores if provided
-    if (matchData.penaltiesScore1 !== null && matchData.penaltiesScore2 !== null) {
+    if (matchData.penaltiesScore1 != null && matchData.penaltiesScore2 != null) {
         match.team1PenaltiesScore = matchData.penaltiesScore1;
         match.team2PenaltiesScore = matchData.penaltiesScore2;
     }
@@ -250,7 +248,9 @@ export function deleteMatch(timestamp) {
 }
 
 export function getPlayerPresenceSnapshot(team1, team2) {
-    const allPlayers = [...new Set([...team1, ...team2])];
+    const t1 = Array.isArray(team1) ? team1 : [team1];
+    const t2 = Array.isArray(team2) ? team2 : [team2];
+    const allPlayers = [...new Set([...t1, ...t2])];
     const snapshot = {};
     
     allPlayers.forEach(player => {

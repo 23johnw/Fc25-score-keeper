@@ -50,7 +50,7 @@ class AppController {
         this.matchRecorder = new MatchRecorder(this.storage, this.seasonManager, this.playerManager);
         this.statisticsTracker = new StatisticsTracker(this.storage, this.settingsManager);
         this.statisticsDisplay = new StatisticsDisplay(this.statisticsTracker, this.settingsManager);
-        this.shareManager = new ShareManager(this.storage, this.statisticsTracker, this.seasonManager);
+        this.shareManager = new ShareManager(this.storage, this.statisticsTracker, this.seasonManager, this.settingsManager);
         
         this.isAdmin = false;
         this.adminUnlockedThisSession = false; // Track if admin was unlocked in current session
@@ -62,6 +62,7 @@ class AppController {
         this.currentGameIndex = 0;
         this.currentStatsState = {};
         this.lastStatsTab = 'today';
+        this.viewingSeasonNumber = null;
         this.customFilterActive = false;
         this.editingMatchTimestamp = null;
         this.touchSwipeHandler = new TouchSwipeHandler(); // Initialize swipe gesture handler
@@ -112,6 +113,7 @@ class AppController {
         this.showScreen('playerScreen');
         
         this.updateSeasonInfo();
+        this.checkSeasonComplete();
         this.updatePlayerNameHistory(); // Add this line
         this.renderPlayerLockOptions();
 
@@ -521,23 +523,29 @@ class AppController {
 
     highlightSearchTerm(text, searchTerm) {
         if (!searchTerm || !text) return text;
-        if (typeof text !== 'string') return text; // Safety check
+        if (typeof text !== 'string') return text;
         
         try {
-            // Escape regex special characters in search term
             const escapedTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const regex = new RegExp(`(${escapedTerm})`, 'gi');
-            
-            // Simple highlight: wrap matches in mark tag
-            return text.replace(regex, '<mark class="search-highlight">$1</mark>');
+            return text.replace(/>([^<]*)</g, (full, content) => {
+                return '>' + content.replace(regex, '<mark class="search-highlight">$1</mark>') + '<';
+            });
         } catch (e) {
-            console.error('Error highlighting search term:', e);
-            return text; // Return original text on error
+            return text;
         }
     }
 
     escapeRegex(str) {
         return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    isMatchFromToday(timestamp) {
+        const matchDate = new Date(timestamp);
+        const today = new Date();
+        const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const startOfMatchDay = new Date(matchDate.getFullYear(), matchDate.getMonth(), matchDate.getDate());
+        return startOfMatchDay.getTime() === startOfToday.getTime();
     }
 
     getEditorPlayersTrimmed() {
@@ -975,13 +983,9 @@ class AppController {
     // Round Structures
     loadTeamCombinations() {
         const players = this.playerManager.getPlayers();
-        if (players.length < 2) {
-            this.showScreen('playerScreen');
-            return;
-        }
-
         if (!players || players.length < 2) {
             this.toastManager.warning('Add at least 2 players to randomize teams', 'Not Enough Players');
+            this.showScreen('playerScreen');
             return;
         }
 
@@ -1288,7 +1292,11 @@ class AppController {
         if (entries.length < needCount) {
             return { assigned: false, needCount };
         }
-        const shuffled = [...entries].sort(() => Math.random() - 0.5);
+        const shuffled = [...entries];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
         const currentSeason = this.seasonManager.getCurrentSeason();
         this.storage.updateData(data => {
             if (!data.seasons[currentSeason]) {
@@ -1478,8 +1486,127 @@ class AppController {
         document.getElementById('extraTimeSection').style.display = 'block';
         document.getElementById('penaltiesSection').style.display = 'block';
         
+        this.updateMatchPrediction(match);
+
         this.currentMatch = match;
         this.showScreen('matchScreen');
+    }
+
+    updateMatchPrediction(match) {
+        const el = document.getElementById('matchPrediction');
+        if (!el) return;
+
+        try {
+            const data = this.storage.getData();
+            const overall = data.overallStats?.players || {};
+            const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
+            const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
+
+            const getWinRate = (players) => {
+                let totalWins = 0, totalGames = 0;
+                players.forEach(p => {
+                    const s = overall[p];
+                    if (!s) return;
+                    const games = s.wins + s.losses + s.draws;
+                    totalWins += s.wins;
+                    totalGames += games;
+                });
+                return totalGames >= 3 ? (totalWins / totalGames) * 100 : null;
+            };
+
+            const allMatches = [];
+            Object.values(data.seasons || {}).forEach(season => {
+                if (season.matches) allMatches.push(...season.matches);
+            });
+
+            let h2hT1Wins = 0, h2hT2Wins = 0, h2hDraws = 0;
+            allMatches.forEach(m => {
+                const mT1 = Array.isArray(m.team1) ? m.team1 : [m.team1];
+                const mT2 = Array.isArray(m.team2) ? m.team2 : [m.team2];
+                const t1AsT1 = team1Players.every(p => mT1.includes(p)) && team1Players.length === mT1.length;
+                const t1AsT2 = team1Players.every(p => mT2.includes(p)) && team1Players.length === mT2.length;
+                const t2AsT1 = team2Players.every(p => mT1.includes(p)) && team2Players.length === mT1.length;
+                const t2AsT2 = team2Players.every(p => mT2.includes(p)) && team2Players.length === mT2.length;
+
+                if (t1AsT1 && t2AsT2) {
+                    if (m.result === 'team1') h2hT1Wins++;
+                    else if (m.result === 'team2') h2hT2Wins++;
+                    else h2hDraws++;
+                } else if (t1AsT2 && t2AsT1) {
+                    if (m.result === 'team2') h2hT1Wins++;
+                    else if (m.result === 'team1') h2hT2Wins++;
+                    else h2hDraws++;
+                }
+            });
+
+            const h2hTotal = h2hT1Wins + h2hT2Wins + h2hDraws;
+            const wr1 = getWinRate(team1Players);
+            const wr2 = getWinRate(team2Players);
+
+            let prediction = '';
+
+            if (h2hTotal >= 3) {
+                const h2hWr1 = (h2hT1Wins / h2hTotal) * 100;
+                const h2hWr2 = (h2hT2Wins / h2hTotal) * 100;
+                const diff = Math.abs(h2hWr1 - h2hWr2);
+                const name1 = this.teamGenerator.formatTeamName(match.team1);
+                const name2 = this.teamGenerator.formatTeamName(match.team2);
+
+                if (diff < 10) {
+                    prediction = `<span class="prediction-icon">🔮</span> This one's a coin flip! (H2H: ${h2hT1Wins}-${h2hDraws}-${h2hT2Wins})`;
+                } else {
+                    const favoured = h2hWr1 > h2hWr2 ? name1 : name2;
+                    const pct = Math.round(Math.max(h2hWr1, h2hWr2));
+                    prediction = `<span class="prediction-icon">🔮</span> ${favoured} is favoured (${pct}% H2H win rate, ${h2hTotal} games)`;
+                }
+            } else if (wr1 !== null && wr2 !== null) {
+                const diff = Math.abs(wr1 - wr2);
+                const name1 = this.teamGenerator.formatTeamName(match.team1);
+                const name2 = this.teamGenerator.formatTeamName(match.team2);
+
+                if (diff < 5) {
+                    prediction = `<span class="prediction-icon">🔮</span> This one's a coin flip!`;
+                } else {
+                    const favoured = wr1 > wr2 ? name1 : name2;
+                    const pct = Math.round(Math.max(wr1, wr2));
+                    prediction = `<span class="prediction-icon">🔮</span> ${favoured} is favoured (${pct}% overall win rate)`;
+                }
+            }
+
+            if (prediction) {
+                el.innerHTML = prediction;
+                el.style.display = '';
+            } else {
+                el.style.display = 'none';
+            }
+        } catch (_) {
+            el.style.display = 'none';
+        }
+    }
+
+    launchConfetti() {
+        const PIECE_COUNT = 40;
+        const COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9', '#F1948A', '#82E0AA'];
+        const container = document.createElement('div');
+        container.className = 'confetti-container';
+        document.body.appendChild(container);
+
+        for (let i = 0; i < PIECE_COUNT; i++) {
+            const piece = document.createElement('div');
+            piece.className = 'confetti-piece';
+            piece.style.backgroundColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+            piece.style.left = Math.random() * 100 + '%';
+            piece.style.animationDelay = (Math.random() * 0.5) + 's';
+            piece.style.animationDuration = (1.5 + Math.random() * 1.5) + 's';
+            const drift = (Math.random() - 0.5) * 200;
+            piece.style.setProperty('--drift', drift + 'px');
+            piece.style.setProperty('--rotation', (Math.random() * 720 - 360) + 'deg');
+            container.appendChild(piece);
+        }
+
+        const cleanup = () => { if (container.parentNode) container.parentNode.removeChild(container); };
+        container.addEventListener('animationend', cleanup, { once: true });
+        setTimeout(cleanup, 4000);
     }
 
     // Match Recording
@@ -1543,6 +1670,8 @@ class AppController {
             this.lastRecordedMatch = { match: savedMatch, gameIndex: matchIndex };
 
             playIconicScoreSound(team1Score, team2Score);
+            this.launchConfetti();
+            this.updateSeasonInfo();
 
             // Reset score inputs
             document.getElementById('team1Score').value = 0;
@@ -1564,6 +1693,8 @@ class AppController {
                 }
                 this.showCurrentMatch();
             }
+
+            this.checkSeasonComplete();
         } else {
             this.toastManager.error('Error recording match result');
         }
@@ -1783,8 +1914,10 @@ class AppController {
 
         const defaultGroup = STAT_GROUPS[0]?.key || 'overview';
         if (tab === 'season') {
+            this.populateSeasonPicker();
             this.renderCategoryTabs('season', defaultGroup);
             this.switchStatsCategory('season', defaultGroup);
+            this.renderSeasonPairingProgress();
         } else if (tab === 'overall') {
             this.renderCategoryTabs('overall', defaultGroup);
             this.switchStatsCategory('overall', defaultGroup);
@@ -1947,13 +2080,13 @@ class AppController {
             }
         }
         
-        const currentSeason = this.seasonManager.getCurrentSeason();
         const selectedGroup = STAT_GROUPS.find(g => g.key === category) || STAT_GROUPS[0];
         const allowedCalculatorIds = selectedGroup ? selectedGroup.calculatorIds : null;
         
         if (type === 'season') {
+            const viewingSeason = this.getViewingSeasonNumber();
             this.statisticsDisplay.displaySeasonStats(
-                currentSeason, 
+                viewingSeason, 
                 document.getElementById('seasonStatsDisplay'),
                 null,
                 null,
@@ -2020,8 +2153,132 @@ class AppController {
 
     updateSeasonInfo() {
         const season = this.seasonManager.getCurrentSeason();
+        const data = this.storage.getData();
+        const seasonData = data.seasons[season];
+        const played = seasonData?.matches?.length ?? 0;
+        const players = data.players || [];
+        const structures = this.teamGenerator.generateRoundStructures(players);
+        const numPairings = structures.length > 0 ? structures[0].matches.length : 0;
+        const total = this.settingsManager.getSeasonLength() * numPairings;
+
         document.getElementById('currentSeasonNumber').textContent = season;
+        const progressEl = document.getElementById('seasonProgress');
+        if (progressEl) {
+            progressEl.textContent = total > 0 ? `Game ${played}/${total}` : '';
+        }
         document.getElementById('seasonInfo').style.display = 'block';
+    }
+
+    getSeasonPairingCounts(seasonNumber) {
+        const data = this.storage.getData();
+        const sn = seasonNumber ?? this.seasonManager.getCurrentSeason();
+        const season = data.seasons[sn];
+        const matches = season?.matches || [];
+        const counts = {};
+
+        for (const m of matches) {
+            const t1 = (Array.isArray(m.team1) ? [...m.team1] : [m.team1]).sort().join(',');
+            const t2 = (Array.isArray(m.team2) ? [...m.team2] : [m.team2]).sort().join(',');
+            const key = [t1, t2].sort().join(' vs ');
+            counts[key] = (counts[key] || 0) + 1;
+        }
+        return counts;
+    }
+
+    getExpectedPairings() {
+        const players = this.storage.getData().players || [];
+        const structures = this.teamGenerator.generateRoundStructures(players);
+        if (structures.length === 0) return [];
+        return structures[0].matches.map(m => {
+            const t1 = [...m.team1].sort().join(',');
+            const t2 = [...m.team2].sort().join(',');
+            return [t1, t2].sort().join(' vs ');
+        });
+    }
+
+    formatPairingKey(key) {
+        return key.split(' vs ').map(side => side.split(',').join(' & ')).join(' vs ');
+    }
+
+    populateSeasonPicker() {
+        const select = document.getElementById('seasonPickerSelect');
+        if (!select) return;
+
+        const data = this.storage.getData();
+        const currentSeason = this.seasonManager.getCurrentSeason();
+        const seasonKeys = Object.keys(data.seasons || {})
+            .map(Number)
+            .filter(n => !isNaN(n))
+            .sort((a, b) => b - a);
+
+        if (seasonKeys.length === 0) seasonKeys.push(currentSeason);
+        if (!seasonKeys.includes(currentSeason)) seasonKeys.unshift(currentSeason);
+
+        if (!this.viewingSeasonNumber || !seasonKeys.includes(this.viewingSeasonNumber)) {
+            this.viewingSeasonNumber = currentSeason;
+        }
+
+        select.innerHTML = seasonKeys.map(s => {
+            const label = s === currentSeason ? `Season ${s} (Current)` : `Season ${s}`;
+            return `<option value="${s}"${s === this.viewingSeasonNumber ? ' selected' : ''}>${label}</option>`;
+        }).join('');
+
+        select.onchange = () => {
+            this.viewingSeasonNumber = parseInt(select.value, 10);
+            const defaultGroup = STAT_GROUPS[0]?.key || 'overview';
+            const currentCategory = this.currentStatsState?.season?.category || defaultGroup;
+            this.switchStatsCategory('season', currentCategory);
+            this.renderSeasonPairingProgress();
+        };
+    }
+
+    getViewingSeasonNumber() {
+        return this.viewingSeasonNumber || this.seasonManager.getCurrentSeason();
+    }
+
+    renderSeasonPairingProgress() {
+        const el = document.getElementById('seasonPairingProgress');
+        if (!el) return;
+
+        const viewingSeason = this.getViewingSeasonNumber();
+        const counts = this.getSeasonPairingCounts(viewingSeason);
+        const pairingKeys = Object.keys(counts);
+
+        if (pairingKeys.length === 0) {
+            el.style.display = 'none';
+            return;
+        }
+
+        const limit = this.settingsManager.getSeasonLength();
+
+        const rows = pairingKeys.sort().map(key => {
+            const played = counts[key] || 0;
+            const completeClass = played >= limit ? ' complete' : '';
+            return `<div class="pairing-row"><span class="pairing-name">${this.formatPairingKey(key)}</span><span class="pairing-count${completeClass}">${played}/${limit}</span></div>`;
+        }).join('');
+
+        el.innerHTML = `<h4>Season Progress by Matchup</h4>${rows}`;
+        el.style.display = '';
+    }
+
+    checkSeasonComplete() {
+        const expectedPairings = this.getExpectedPairings();
+        if (expectedPairings.length === 0) return;
+
+        const counts = this.getSeasonPairingCounts();
+        const limit = this.settingsManager.getSeasonLength();
+        const allComplete = expectedPairings.every(key => (counts[key] || 0) >= limit);
+
+        if (allComplete) {
+            const total = limit * expectedPairings.length;
+            setTimeout(() => {
+                if (confirm(`Season ${this.seasonManager.getCurrentSeason()} complete! (${total} games played across ${expectedPairings.length} matchups). Start a new season?`)) {
+                    this.seasonManager.startNewSeason();
+                    this.updateSeasonInfo();
+                    this.toastManager.success('New season started!', 'Season Complete');
+                }
+            }, 500);
+        }
     }
 
     async clearAllStatistics() {
@@ -3409,20 +3666,8 @@ class AppController {
     }
 
     async editMatch(timestamp) {
-        // Check if match can be edited (admin can always edit, or match is not locked)
-        const matchDate = new Date(timestamp);
-        const today = new Date();
+        const isTodayMatch = this.isMatchFromToday(timestamp);
 
-        // Get start of today in local timezone
-        const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-        // Get start of match day in local timezone
-        const startOfMatchDay = new Date(matchDate.getFullYear(), matchDate.getMonth(), matchDate.getDate());
-
-        const isTodayMatch = startOfMatchDay.getTime() === startOfToday.getTime();
-
-
-        // If match is from previous day(s) - require admin PIN
         if (!isTodayMatch && !this.isAdmin) {
             const pin = await this.showPinModal('Enter Admin PIN', 'This match is from a previous day. Enter admin PIN to edit:');
             if (!pin) {
@@ -3534,17 +3779,7 @@ class AppController {
     async saveEditMatch() {
         if (!this.editingMatchTimestamp) return;
 
-        // Check if match is from today (same day)
-        const matchDate = new Date(this.editingMatchTimestamp);
-        const today = new Date();
-
-        // Get start of today in local timezone
-        const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-        // Get start of match day in local timezone
-        const startOfMatchDay = new Date(matchDate.getFullYear(), matchDate.getMonth(), matchDate.getDate());
-
-        const isTodayMatch = startOfMatchDay.getTime() === startOfToday.getTime();
+        const isTodayMatch = this.isMatchFromToday(this.editingMatchTimestamp);
 
         // If match is from today or already authorized when opening modal, allow save directly.
         if (isTodayMatch || this.isAdmin || this.editAdminBypassForCurrentModal) {
@@ -3638,18 +3873,7 @@ class AppController {
         const matchTimestamp = timestamp || this.editingMatchTimestamp;
         if (!matchTimestamp) return;
         
-        // Check if match is from today (same day)
-        const matchDate = new Date(matchTimestamp);
-        const today = new Date();
-
-        // Get start of today in local timezone
-        const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-        // Get start of match day in local timezone
-        const startOfMatchDay = new Date(matchDate.getFullYear(), matchDate.getMonth(), matchDate.getDate());
-
-        const isTodayMatch = startOfMatchDay.getTime() === startOfToday.getTime();
-
+        const isTodayMatch = this.isMatchFromToday(matchTimestamp);
 
         const matchInfo = this.matchRecorder.findMatch(matchTimestamp);
         let details = '';
@@ -4021,6 +4245,10 @@ class AppController {
         if (pointsDrawInput) pointsDrawInput.value = points.draw;
         if (pointsLossInput) pointsLossInput.value = points.loss;
 
+        // Load season length (only if element exists)
+        const seasonLengthInput = document.getElementById('seasonLengthInput');
+        if (seasonLengthInput) seasonLengthInput.value = this.settingsManager.getSeasonLength();
+
         // Load dark mode (only if element exists)
         const darkModeSetting = document.getElementById('darkModeSetting');
         if (darkModeSetting) {
@@ -4183,10 +4411,20 @@ class AppController {
         this.settingsManager.setLabel('neutral', neutralLabel);
 
         // Save points settings
-        const winPoints = parseFloat(document.getElementById('pointsWinInput').value) || 1;
-        const drawPoints = parseFloat(document.getElementById('pointsDrawInput').value) || 1;
-        const lossPoints = parseFloat(document.getElementById('pointsLossInput').value) || 0;
+        const winVal = parseFloat(document.getElementById('pointsWinInput').value);
+        const drawVal = parseFloat(document.getElementById('pointsDrawInput').value);
+        const lossVal = parseFloat(document.getElementById('pointsLossInput').value);
+        const winPoints = Number.isFinite(winVal) ? winVal : 1;
+        const drawPoints = Number.isFinite(drawVal) ? drawVal : 1;
+        const lossPoints = Number.isFinite(lossVal) ? lossVal : 0;
         this.settingsManager.setPointsPerResult({ win: winPoints, draw: drawPoints, loss: lossPoints });
+
+        // Save season length
+        const seasonLengthInput = document.getElementById('seasonLengthInput');
+        if (seasonLengthInput) {
+            this.settingsManager.setSeasonLength(seasonLengthInput.value);
+            this.updateSeasonInfo();
+        }
 
         // Update lock labels in app
         this.updateLockLabels();
@@ -4384,7 +4622,12 @@ class AppController {
                 inputEl.focus();
             }, 100);
 
-            // Cleanup function
+            const backdropHandler = (e) => {
+                if (e.target === modal) {
+                    cancelHandler();
+                }
+            };
+
             const cleanup = () => {
                 modal.style.display = 'none';
                 inputEl.value = '';
@@ -4392,9 +4635,9 @@ class AppController {
                 submitBtn.removeEventListener('click', submitHandler);
                 cancelBtn.removeEventListener('click', cancelHandler);
                 inputEl.removeEventListener('keydown', keyHandler);
+                modal.removeEventListener('click', backdropHandler);
             };
 
-            // Submit handler
             const submitHandler = () => {
                 const pin = inputEl.value.trim();
                 if (!/^\d{4}$/.test(pin)) {
@@ -4407,13 +4650,11 @@ class AppController {
                 resolve(pin);
             };
 
-            // Cancel handler
             const cancelHandler = () => {
                 cleanup();
                 resolve(null);
             };
 
-            // Key handler (Enter to submit, Escape to cancel)
             const keyHandler = (e) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
@@ -4424,17 +4665,10 @@ class AppController {
                 }
             };
 
-            // Attach event listeners
             submitBtn.addEventListener('click', submitHandler);
             cancelBtn.addEventListener('click', cancelHandler);
             inputEl.addEventListener('keydown', keyHandler);
-
-            // Close on backdrop click
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    cancelHandler();
-                }
-            });
+            modal.addEventListener('click', backdropHandler);
         });
     }
 
@@ -4443,14 +4677,31 @@ class AppController {
      * @param {string} pin - The PIN to verify
      * @returns {Promise<boolean>} - True if PIN is valid and admin granted
      */
+    async hashPin(pin) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(pin);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
     async verifyPinAndGrantAdmin(pin) {
         if (!pin || !/^\d{4}$/.test(pin)) {
             return false;
         }
 
         const storedPin = this.storage.getData().adminPin;
-        if (storedPin && pin === storedPin) {
+        if (!storedPin) return false;
+
+        if (storedPin.length === 64) {
+            const hashed = await this.hashPin(pin);
+            if (hashed === storedPin) {
+                this.isAdmin = true;
+                return true;
+            }
+        } else if (pin === storedPin) {
             this.isAdmin = true;
+            const hashed = await this.hashPin(pin);
+            this.storage.updateData(data => { data.adminPin = hashed; });
             return true;
         }
         return false;
@@ -4488,8 +4739,9 @@ class AppController {
             return;
         }
 
+        const hashed = await this.hashPin(pin);
         this.storage.updateData(data => {
-            data.adminPin = pin;
+            data.adminPin = hashed;
         });
         this.adminUnlockedThisSession = true;
         this.isAdmin = true;
@@ -4508,8 +4760,9 @@ class AppController {
         if (!this.isAdmin) return;
         const newPin = await this.showPinModal('Reset Admin PIN', 'Enter a NEW 4-digit PIN:');
         if (!newPin) return;
+        const hashed = await this.hashPin(newPin);
         this.storage.updateData(data => {
-            data.adminPin = newPin;
+            data.adminPin = hashed;
         });
         this.updateAdminUI();
         this.toastManager.success('PIN reset');
@@ -5294,7 +5547,11 @@ class AppController {
             }
             const needCount = useSamePerRound ? matches.length : (useSameAll ? 1 : teamIds.size);
             if (entries.length >= needCount) {
-                const shuffled = [...entries].sort(() => Math.random() - 0.5);
+                const shuffled = [...entries];
+                for (let si = shuffled.length - 1; si > 0; si--) {
+                    const sj = Math.floor(Math.random() * (si + 1));
+                    [shuffled[si], shuffled[sj]] = [shuffled[sj], shuffled[si]];
+                }
                 const currentSeason = this.seasonManager.getCurrentSeason();
                 this.storage.updateData(data => {
                     if (!data.seasons[currentSeason]) {
@@ -5340,7 +5597,7 @@ class AppController {
         }
 
         // Generate teams and start games
-        this.selectStructure(this.sessionSelectedStructure);
+        this.selectStructure(this.sessionSelectedStructureIndex);
         this.startGames();
 
         // Advance to match step
@@ -5409,6 +5666,8 @@ class AppController {
             this.lastRecordedMatch = { match: savedMatch, gameIndex: matchIndex };
 
             playIconicScoreSound(team1Score, team2Score);
+            this.launchConfetti();
+            this.updateSeasonInfo();
 
             // Update played dates and stats
             this.updatePlayedDates();
@@ -5443,6 +5702,8 @@ class AppController {
                 this.currentGameIndex = 0;
                 this.saveSessionState();
             }
+
+            this.checkSeasonComplete();
         } else {
             this.toastManager.error('Error recording match result');
         }

@@ -12,6 +12,15 @@ function wasPlayerPresentInMatch(match, playerName) {
     return presence !== false; // Default to true if not specified
 }
 
+function escapeHtmlGlobal(str = '') {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 class StatisticsCalculators {
     static registry = [];
 
@@ -72,7 +81,8 @@ const STAT_GROUPS = [
             'avgGoalsPerGame',
             'totalGoals',
             'goalDifference',
-            'extraTimePenalties'
+            'extraTimePenalties',
+            'worstLosses'
         ]
     },
     {
@@ -101,7 +111,8 @@ const STAT_GROUPS = [
         calculatorIds: [
             'headToHead',
             'comparativeStats',
-            'comparisonBarChart'
+            'comparisonBarChart',
+            'rivalryStats'
         ]
     },
     {
@@ -110,7 +121,8 @@ const STAT_GROUPS = [
         calculatorIds: [
             'dailyMatchesChart',
             'dayOfWeekChart',
-            'matchDistributionChart'
+            'matchDistributionChart',
+            'performanceHeatmap'
         ]
     }
 ];
@@ -321,7 +333,7 @@ StatisticsCalculators.register({
                 <tbody>
                     ${sorted.map(([player, stats]) => `
                         <tr>
-                            <td class="player-name">${player}</td>
+                            <td class="player-name">${escapeHtmlGlobal(player)}</td>
                             <td>${stats.games}</td>
                             <td>${stats.wins}</td>
                             <td>${stats.draws}</td>
@@ -349,7 +361,7 @@ StatisticsCalculators.register({
         
         Object.entries(wld).forEach(([player, stats]) => {
             winRates[player] = {
-                winRate: stats.games > 0 ? ((stats.wins / stats.games) * 100).toFixed(1) : 0,
+                winRate: stats.games > 0 ? Number(((stats.wins / stats.games) * 100).toFixed(1)) : 0,
                 games: stats.games
             };
         });
@@ -428,6 +440,9 @@ StatisticsCalculators.register({
                 const inTeam2 = team2Players.includes(player);
                 
                 if (!inTeam1 && !inTeam2) continue;
+                if (!wasPlayerPresentInMatch(match, player)) continue;
+
+                if (result === 'draw') break;
                 
                 let won = false;
                 if (result === 'team1' && inTeam1) won = true;
@@ -438,14 +453,12 @@ StatisticsCalculators.register({
                     streakType = won ? 'win' : 'loss';
                 } else if (
                     (streakType === 'win' && won) ||
-                    (streakType === 'loss' && !won && result !== 'draw')
+                    (streakType === 'loss' && !won)
                 ) {
                     streak++;
                 } else {
                     break;
                 }
-                
-                if (result === 'draw') break; // Draws break streaks
             }
             
             streaks[player] = {
@@ -470,7 +483,7 @@ StatisticsCalculators.register({
                     : 'No streak';
                 
                 return `
-                    <h4>${player}</h4>
+                    <h4>${escapeHtmlGlobal(player)}</h4>
                     <div class="stat-item">
                         <span class="label">Current Streak:</span>
                         <span class="value">${streakText}</span>
@@ -717,7 +730,7 @@ StatisticsCalculators.register({
                         return `
                             <tr class="${positionClass}">
                                 <td class="position">${position}</td>
-                                <td class="player-name">${positionSymbol} ${player}</td>
+                                <td class="player-name">${positionSymbol} ${escapeHtmlGlobal(player)}</td>
                                 <td>${stats.goalsFor}</td>
                                 <td>${stats.goalsAgainst}</td>
                                 <td class="goal-diff ${goalDiffClass}">${goalDiffSign}${stats.goalDifference}</td>
@@ -893,7 +906,7 @@ StatisticsCalculators.register({
                         return `
                             <tr class="${positionClass}">
                                 <td class="position">${position}</td>
-                                <td class="player-name">${positionSymbol} ${player}</td>
+                                <td class="player-name">${positionSymbol} ${escapeHtmlGlobal(player)}</td>
                                 <td class="points">${stats.points}</td>
                                 <td>${stats.games}</td>
                                 <td>${stats.wins}</td>
@@ -956,9 +969,8 @@ StatisticsCalculators.register({
                 }
             };
             
-            // Process team 1 players
             team1Players.forEach(player => {
-                if (!stats[player]) return;
+                if (!stats[player] || !wasPlayerPresentInMatch(match, player)) return;
                 
                 const teammates = getTeammates(player, team1Players);
                 const opponents = team2Players;
@@ -1021,9 +1033,8 @@ StatisticsCalculators.register({
                 }
             });
             
-            // Process team 2 players
             team2Players.forEach(player => {
-                if (!stats[player]) return;
+                if (!stats[player] || !wasPlayerPresentInMatch(match, player)) return;
                 
                 const teammates = getTeammates(player, team2Players);
                 const opponents = team1Players;
@@ -1246,7 +1257,7 @@ StatisticsCalculators.register({
             const goals = totalGoals[player]?.goals || 0;
             const games = wld[player]?.games || 0;
             stats[player] = {
-                avgGoals: games > 0 ? (goals / games).toFixed(2) : 0,
+                avgGoals: games > 0 ? Number((goals / games).toFixed(2)) : 0,
                 totalGoals: goals,
                 games: games
             };
@@ -1458,7 +1469,6 @@ StatisticsCalculators.register({
             const team1Players = Array.isArray(team1) ? team1 : [team1];
             const team2Players = Array.isArray(team2) ? team2 : [team2];
             
-            // Check all player pairs
             for (let i = 0; i < players.length; i++) {
                 for (let j = i + 1; j < players.length; j++) {
                     const p1 = players[i];
@@ -1469,8 +1479,11 @@ StatisticsCalculators.register({
                     const p2InTeam1 = team1Players.includes(p2);
                     const p1InTeam2 = team2Players.includes(p1);
                     const p2InTeam2 = team2Players.includes(p2);
+
+                    const p1Present = wasPlayerPresentInMatch(match, p1);
+                    const p2Present = wasPlayerPresentInMatch(match, p2);
+                    if (!p1Present || !p2Present) continue;
                     
-                    // Playing together
                     if ((p1InTeam1 && p2InTeam1) || (p1InTeam2 && p2InTeam2)) {
                         stats[key].together.games++;
                         if (result === 'draw') {
@@ -1609,6 +1622,7 @@ StatisticsCalculators.register({
                 const inTeam1 = team1Players.includes(player);
                 const inTeam2 = team2Players.includes(player);
                 if (!inTeam1 && !inTeam2) return;
+                if (!wasPlayerPresentInMatch(match, player)) return;
 
                 const data = playerData[player];
                 data.cumulativeGames++;
@@ -1745,7 +1759,7 @@ StatisticsCalculators.register({
             const team2Players = Array.isArray(team2) ? team2 : [team2];
 
             team1Players.forEach(player => {
-                if (goalsData[player]) {
+                if (goalsData[player] && wasPlayerPresentInMatch(match, player)) {
                     goalsData[player].goalsFor += team1Score || 0;
                     goalsData[player].goalsAgainst += team2Score || 0;
                     goalsData[player].totalGoals += team1Score || 0;
@@ -1753,7 +1767,7 @@ StatisticsCalculators.register({
             });
 
             team2Players.forEach(player => {
-                if (goalsData[player]) {
+                if (goalsData[player] && wasPlayerPresentInMatch(match, player)) {
                     goalsData[player].goalsFor += team2Score || 0;
                     goalsData[player].goalsAgainst += team1Score || 0;
                     goalsData[player].totalGoals += team2Score || 0;
@@ -1866,20 +1880,28 @@ StatisticsCalculators.register({
 
         matches.forEach(match => {
             const result = getMatchResult(match);
-            if (result === 'team1' || result === 'team2') {
-                wins++;
-            } else if (result === 'draw') {
+            if (result === 'draw') {
                 draws++;
+                return;
             }
+            const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
+            const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
+            const playersInMatch = players.filter(p =>
+                (team1Players.includes(p) || team2Players.includes(p)) && wasPlayerPresentInMatch(match, p)
+            );
+            playersInMatch.forEach(p => {
+                const inTeam1 = team1Players.includes(p);
+                const playerWon = (result === 'team1' && inTeam1) || (result === 'team2' && !inTeam1);
+                if (playerWon) wins++;
+                else losses++;
+            });
         });
 
-        // For individual player perspective, we'd need to calculate per player
-        // For now, showing overall distribution
         return {
             wins,
             losses,
             draws,
-            total: matches.length
+            total: wins + losses + draws
         };
     },
     display: (data) => {
@@ -2099,7 +2121,7 @@ StatisticsCalculators.register({
                 .filter(m => {
                     const team1 = Array.isArray(m.team1) ? m.team1 : [m.team1];
                     const team2 = Array.isArray(m.team2) ? m.team2 : [m.team2];
-                    return team1.includes(player) || team2.includes(player);
+                    return (team1.includes(player) || team2.includes(player)) && wasPlayerPresentInMatch(m, player);
                 })
                 .sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
 
@@ -2326,7 +2348,7 @@ StatisticsCalculators.register({
             const playerMatches = matches.filter(match => {
                 const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
                 const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
-                return team1Players.includes(player) || team2Players.includes(player);
+                return (team1Players.includes(player) || team2Players.includes(player)) && wasPlayerPresentInMatch(match, player);
             });
 
             if (playerMatches.length === 0) {
@@ -2590,7 +2612,7 @@ StatisticsCalculators.register({
             const playerMatches = sortedMatches.filter(match => {
                 const team1Players = Array.isArray(match.team1) ? match.team1 : [match.team1];
                 const team2Players = Array.isArray(match.team2) ? match.team2 : [match.team2];
-                return team1Players.includes(player) || team2Players.includes(player);
+                return (team1Players.includes(player) || team2Players.includes(player)) && wasPlayerPresentInMatch(match, player);
             });
 
             if (playerMatches.length < 5) {
@@ -2792,8 +2814,10 @@ StatisticsCalculators.register({
                     const p2InTeam1 = team1Players.includes(player2);
                     const p2InTeam2 = team2Players.includes(player2);
 
-                    // Head-to-head (playing against each other)
-                    if ((p1InTeam1 && p2InTeam2) || (p1InTeam2 && p2InTeam1)) {
+                    const p1Present = (p1InTeam1 || p1InTeam2) && wasPlayerPresentInMatch(match, player1);
+                    const p2Present = (p2InTeam1 || p2InTeam2) && wasPlayerPresentInMatch(match, player2);
+
+                    if (p1Present && p2Present && ((p1InTeam1 && p2InTeam2) || (p1InTeam2 && p2InTeam1))) {
                         headToHead.games++;
                         if (result === 'team1' && p1InTeam1) headToHead.p1Wins++;
                         else if (result === 'team2' && p1InTeam2) headToHead.p1Wins++;
@@ -2802,8 +2826,7 @@ StatisticsCalculators.register({
                         else if (result === 'draw') headToHead.draws++;
                     }
 
-                    // Player 1 stats
-                    if (p1InTeam1 || p1InTeam2) {
+                    if (p1Present && (p1InTeam1 || p1InTeam2)) {
                         p1Stats.games++;
                         if (p1InTeam1) {
                             p1Stats.goalsFor += team1Score || 0;
@@ -2820,8 +2843,7 @@ StatisticsCalculators.register({
                         }
                     }
 
-                    // Player 2 stats
-                    if (p2InTeam1 || p2InTeam2) {
+                    if (p2Present && (p2InTeam1 || p2InTeam2)) {
                         p2Stats.games++;
                         if (p2InTeam1) {
                             p2Stats.goalsFor += team1Score || 0;
@@ -3020,7 +3042,7 @@ StatisticsCalculators.register({
 
             // Count all matches for each player
             [...team1Players, ...team2Players].forEach(player => {
-                if (stats[player]) {
+                if (stats[player] && wasPlayerPresentInMatch(match, player)) {
                     stats[player].totalMatches++;
                     
                     const inTeam1 = team1Players.includes(player);
@@ -3308,6 +3330,119 @@ StatisticsCalculators.register({
                 </div>
             </div>
         `;
+
+        container.innerHTML = html;
+        return container;
+    }
+});
+
+// Rivalry Stats: Nemesis, Favourite Opponent, Best Partner per player
+StatisticsCalculators.register({
+    id: 'rivalryStats',
+    name: 'Rivalries',
+    category: 'performance',
+    subcategory: 'rivalry',
+    calculate: (matches, players) => {
+        if (players.length < 2) return {};
+
+        const playerData = {};
+        players.forEach(p => {
+            playerData[p] = { opponents: {}, partners: {} };
+        });
+
+        matches.forEach(match => {
+            const { team1, team2, result } = match;
+            const team1Players = Array.isArray(team1) ? team1 : [team1];
+            const team2Players = Array.isArray(team2) ? team2 : [team2];
+
+            const processPlayer = (player, teammates, opponents, playerWon, playerLost) => {
+                if (!playerData[player] || !wasPlayerPresentInMatch(match, player)) return;
+
+                opponents.forEach(opp => {
+                    if (!wasPlayerPresentInMatch(match, opp)) return;
+                    if (!playerData[player].opponents[opp]) {
+                        playerData[player].opponents[opp] = { wins: 0, losses: 0, draws: 0, games: 0 };
+                    }
+                    const rec = playerData[player].opponents[opp];
+                    rec.games++;
+                    if (playerWon) rec.wins++;
+                    else if (playerLost) rec.losses++;
+                    else rec.draws++;
+                });
+
+                teammates.forEach(mate => {
+                    if (mate === player || !wasPlayerPresentInMatch(match, mate)) return;
+                    if (!playerData[player].partners[mate]) {
+                        playerData[player].partners[mate] = { wins: 0, losses: 0, draws: 0, games: 0 };
+                    }
+                    const rec = playerData[player].partners[mate];
+                    rec.games++;
+                    if (playerWon) rec.wins++;
+                    else if (playerLost) rec.losses++;
+                    else rec.draws++;
+                });
+            };
+
+            const t1Won = result === 'team1';
+            const t2Won = result === 'team2';
+
+            team1Players.forEach(p => processPlayer(p, team1Players, team2Players, t1Won, t2Won));
+            team2Players.forEach(p => processPlayer(p, team2Players, team1Players, t2Won, t1Won));
+        });
+
+        const results = {};
+        players.forEach(player => {
+            const d = playerData[player];
+            let nemesis = null, favourite = null, bestPartner = null;
+
+            Object.entries(d.opponents).forEach(([opp, rec]) => {
+                if (rec.losses > 0 && (!nemesis || rec.losses > nemesis.losses || (rec.losses === nemesis.losses && rec.games > nemesis.games))) {
+                    nemesis = { name: opp, ...rec };
+                }
+                if (rec.wins > 0 && (!favourite || rec.wins > favourite.wins || (rec.wins === favourite.wins && rec.games > favourite.games))) {
+                    favourite = { name: opp, ...rec };
+                }
+            });
+
+            Object.entries(d.partners).forEach(([mate, rec]) => {
+                if (rec.wins > 0 && (!bestPartner || rec.wins > bestPartner.wins || (rec.wins === bestPartner.wins && rec.games > bestPartner.games))) {
+                    bestPartner = { name: mate, ...rec };
+                }
+            });
+
+            results[player] = { nemesis, favourite, bestPartner };
+        });
+
+        return results;
+    },
+    display: (data) => {
+        const container = document.createElement('div');
+        container.className = 'stat-card';
+
+        const entries = Object.entries(data).filter(([_, v]) => v.nemesis || v.favourite || v.bestPartner);
+        if (entries.length === 0) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🤝</div><h3>No Rivalries Yet</h3><p>Play more matches to discover your rivals!</p></div>';
+            return container;
+        }
+
+        const pct = (wins, games) => games > 0 ? ((wins / games) * 100).toFixed(0) : 0;
+
+        const html = entries.map(([player, r]) => {
+            const rows = [];
+            if (r.nemesis) {
+                const lp = pct(r.nemesis.losses, r.nemesis.games);
+                rows.push(`<div class="stat-item"><span class="label">😈 Nemesis:</span><span class="value">${escapeHtmlGlobal(r.nemesis.name)} (${r.nemesis.losses} losses in ${r.nemesis.games} games, ${lp}%)</span></div>`);
+            }
+            if (r.favourite) {
+                const wp = pct(r.favourite.wins, r.favourite.games);
+                rows.push(`<div class="stat-item"><span class="label">🎯 Favourite Opponent:</span><span class="value">${escapeHtmlGlobal(r.favourite.name)} (${r.favourite.wins} wins in ${r.favourite.games} games, ${wp}%)</span></div>`);
+            }
+            if (r.bestPartner) {
+                const wp = pct(r.bestPartner.wins, r.bestPartner.games);
+                rows.push(`<div class="stat-item"><span class="label">🤝 Best Partner:</span><span class="value">${escapeHtmlGlobal(r.bestPartner.name)} (${r.bestPartner.wins} wins in ${r.bestPartner.games} games, ${wp}%)</span></div>`);
+            }
+            return `<h4>${escapeHtmlGlobal(player)}</h4>${rows.join('')}`;
+        }).join('');
 
         container.innerHTML = html;
         return container;

@@ -30,7 +30,8 @@ class SettingsManager {
             darkMode: false,
             useRandomTeams: false,
             useSameTeamName: false,
-            useSameTeamPerRound: false
+            useSameTeamPerRound: false,
+            seasonLength: 38
         };
     }
 
@@ -38,7 +39,14 @@ class SettingsManager {
         try {
             const data = this.storage.getData();
             if (data.settings) {
-                return { ...this.getDefaultSettings(), ...data.settings };
+                const defaults = this.getDefaultSettings();
+                return {
+                    ...defaults,
+                    ...data.settings,
+                    labels: { ...defaults.labels, ...(data.settings.labels || {}) },
+                    pointsPerResult: { ...defaults.pointsPerResult, ...(data.settings.pointsPerResult || {}) },
+                    playerColors: { ...defaults.playerColors, ...(data.settings.playerColors || {}) }
+                };
             }
         } catch (error) {
             console.error('Error loading settings:', error);
@@ -160,6 +168,16 @@ class SettingsManager {
 
     setUseSameTeamPerRound(enabled) {
         this.settings.useSameTeamPerRound = enabled === true;
+        return this.saveSettings();
+    }
+
+    getSeasonLength() {
+        return this.settings.seasonLength ?? 38;
+    }
+
+    setSeasonLength(val) {
+        const num = parseInt(val, 10);
+        this.settings.seasonLength = (Number.isFinite(num) && num >= 1 && num <= 200) ? num : 38;
         return this.saveSettings();
     }
 

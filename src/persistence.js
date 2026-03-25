@@ -276,15 +276,16 @@ class LocalStorageManager {
                         }
                     }));
                 }
-            }
-            console.error('Error saving data:', error);
-            if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
-                window.dispatchEvent(new CustomEvent('fc25-storage-error', {
-                    detail: {
-                        type: 'save_failed',
-                        message: 'Failed to save data. Please export a backup and refresh.'
-                    }
-                }));
+            } else {
+                console.error('Error saving data:', error);
+                if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+                    window.dispatchEvent(new CustomEvent('fc25-storage-error', {
+                        detail: {
+                            type: 'save_failed',
+                            message: 'Failed to save data. Please export a backup and refresh.'
+                        }
+                    }));
+                }
             }
             return false;
         }

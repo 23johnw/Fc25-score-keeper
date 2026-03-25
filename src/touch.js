@@ -21,21 +21,21 @@ class TouchSwipeHandler {
     attach(element, callbacks = {}) {
         if (!element) return;
 
+        let startX = 0, startY = 0;
+
         element.addEventListener('touchstart', (e) => {
-            this.touchStartX = e.changedTouches[0].screenX;
-            this.touchStartY = e.changedTouches[0].screenY;
+            startX = e.changedTouches[0].screenX;
+            startY = e.changedTouches[0].screenY;
         }, { passive: true });
 
         element.addEventListener('touchend', (e) => {
-            this.touchEndX = e.changedTouches[0].screenX;
-            this.touchEndY = e.changedTouches[0].screenY;
-            this.handleSwipe(callbacks);
+            const endX = e.changedTouches[0].screenX;
+            const endY = e.changedTouches[0].screenY;
+            this.handleSwipe(callbacks, endX - startX, endY - startY);
         }, { passive: true });
     }
 
-    handleSwipe(callbacks) {
-        const deltaX = this.touchEndX - this.touchStartX;
-        const deltaY = this.touchEndY - this.touchStartY;
+    handleSwipe(callbacks, deltaX, deltaY) {
         const absDeltaX = Math.abs(deltaX);
         const absDeltaY = Math.abs(deltaY);
 
@@ -158,6 +158,13 @@ class TouchSwipeHandler {
             }
         }, { passive: true });
 
+        const outsideClickHandler = (e) => {
+            if (!item.contains(e.target) && !deleteButton.contains(e.target)) {
+                resetPosition();
+                document.removeEventListener('click', outsideClickHandler);
+            }
+        };
+
         item.addEventListener('touchend', () => {
             if (!isSwipeActive) return;
             const deltaX = Math.abs(currentX - startX);
@@ -166,20 +173,13 @@ class TouchSwipeHandler {
             if (deltaX < deleteThreshold || deltaY > maxVerticalDrift) {
                 resetPosition();
             } else {
-                // Lock in the delete button position
                 item.style.transform = `translateX(-${deleteThreshold}px)`;
                 deleteButton.style.opacity = '1';
                 deleteButton.style.transform = 'translateX(0)';
+                document.addEventListener('click', outsideClickHandler);
             }
             isSwipeActive = false;
         }, { passive: true });
-
-        // Reset on click outside
-        document.addEventListener('click', (e) => {
-            if (!item.contains(e.target) && !deleteButton.contains(e.target)) {
-                resetPosition();
-            }
-        });
     }
 
     /**

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#2196F3">
     <meta name="description" content="FC 25 Score Tracker - Track your football match scores and statistics">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -82,11 +82,11 @@
     </div>
     <!-- Toast Notification Container -->
     <div id="toastContainer" class="toast-container"></div>
-    <div id="byDatePanel" class="by-date-panel" style="display: none;">
+    <div id="byDatePanel" class="by-date-panel" role="dialog" aria-modal="true" aria-label="Select Dates" style="display: none;">
         <div class="by-date-modal" style="background: var(--card-bg, #fff); padding: 1rem; border-radius: 12px; width: min(420px, 92vw); box-shadow: 0 12px 32px rgba(0,0,0,0.2); display: flex; flex-direction: column; gap: 0.75rem;">
             <div class="by-date-header" style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
                 <h3 style="margin: 0;">Select Dates</h3>
-                <button id="closeByDatePanel" class="btn btn-secondary" style="padding: 0.3rem 0.65rem;">✕</button>
+                <button id="closeByDatePanel" class="btn btn-secondary" type="button" aria-label="Close" style="padding: 0.3rem 0.65rem;">✕</button>
             </div>
             <div class="by-date-content" style="display: flex; flex-direction: column; gap: 0.75rem;">
                 <div class="by-date-range" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.5rem;">
@@ -112,8 +112,8 @@
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <h1>FC 25 Score Tracker</h1>
             <div style="display: flex; gap: 0.5rem;">
-                <button id="refreshAppBtn" class="dark-mode-toggle" title="Check for Updates" style="font-size: 1rem;">🔄</button>
-                <button id="darkModeToggle" class="dark-mode-toggle" title="Toggle Dark Mode">🌙</button>
+                <button id="refreshAppBtn" class="dark-mode-toggle" type="button" title="Check for Updates" aria-label="Check for Updates" style="font-size: 1rem;">🔄</button>
+                <button id="darkModeToggle" class="dark-mode-toggle" type="button" title="Toggle Dark Mode" aria-label="Toggle Dark Mode">🌙</button>
             </div>
         </div>
         <div class="version-banner">
@@ -121,6 +121,7 @@
         </div>
         <div class="season-info" id="seasonInfo" style="display: none;">
             <span>Season <span id="currentSeasonNumber">1</span></span>
+            <span class="season-progress" id="seasonProgress"></span>
         </div>
     </header>
 
@@ -134,7 +135,7 @@
                     <p class="screen-description">Tap Start to begin a guided session</p>
                     <button id="sessionStartBtn" class="btn btn-primary session-start-btn">Start</button>
                 </div>
-                <a href="#" id="sessionAdvancedModeBtn" class="session-advanced-link">Switch to full app</a>
+                <button type="button" id="sessionAdvancedModeBtn" class="session-advanced-link">Switch to full app</button>
             </div>
 
             <!-- Stepper Header -->
@@ -211,7 +212,7 @@
 
             <!-- Action Bar -->
             <div class="session-actions" id="sessionWizardActions" style="display:none;">
-                <a href="#" id="sessionAdvancedLink" class="session-advanced-link">Exit session</a>
+                <button type="button" id="sessionAdvancedLink" class="session-advanced-link">Exit session</button>
                 <button id="sessionContinueBtn" class="btn btn-primary session-continue-btn">Continue</button>
             </div>
         </div>
@@ -349,6 +350,8 @@
                 </div>
             </div>
 
+            <div id="matchPrediction" class="match-prediction" style="display:none;"></div>
+
             <div class="match-result">
                 <h3>Enter Scores</h3>
                 <div class="score-input-container">
@@ -457,7 +460,12 @@
                         <button id="exportSeasonPDFBtn" class="btn btn-share" title="Export as PDF">📄 PDF</button>
                     </div>
                 </div>
+                <div class="season-picker-row">
+                    <label for="seasonPickerSelect">Viewing:</label>
+                    <select id="seasonPickerSelect" class="settings-input season-picker-select"></select>
+                </div>
                 <div class="category-tabs" id="seasonCategoryTabs"></div>
+                <div id="seasonPairingProgress" class="season-pairing-progress" style="display:none;"></div>
                 <div id="seasonStatsDisplay" class="stats-display"></div>
             </div>
 
@@ -581,7 +589,7 @@
     </section>
 
     <!-- Admin PIN Entry Modal -->
-    <div id="adminPinModal" class="modal" style="display: none;">
+    <div id="adminPinModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="adminPinModalTitle" style="display: none;">
         <div class="modal-content" style="max-width: 400px;">
             <h3 id="adminPinModalTitle">Enter Admin PIN</h3>
             <p id="adminPinModalMessage" style="margin: 0.5rem 0 1rem 0; color: var(--text-secondary);">Please enter your 4-digit PIN to continue</p>
@@ -599,7 +607,7 @@
     </div>
 
     <!-- Synced / uploaded teams list modal -->
-    <div id="syncedTeamsListModal" class="modal" style="display: none;">
+    <div id="syncedTeamsListModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="syncedTeamsListModalTitle" style="display: none;">
         <div class="modal-content" style="max-width: 480px;">
             <h3 id="syncedTeamsListModalTitle">Team names list</h3>
             <div id="syncedTeamsListBody" style="max-height: 60vh; overflow-y: auto; margin: 0.5rem 0 1rem 0; padding-right: 0.25rem;"></div>
@@ -610,7 +618,7 @@
     </div>
 
     <!-- Edit Match Modal -->
-    <div id="editMatchModal" class="modal" style="display: none;">
+    <div id="editMatchModal" class="modal" role="dialog" aria-modal="true" aria-label="Edit Match" style="display: none;">
         <div class="modal-content">
             <h3>Edit Match</h3>
             <div class="match-info">
@@ -775,6 +783,14 @@
                         </p>
                     </div>
                 </div>
+                <div class="settings-section" style="margin-top: 2rem;">
+                    <h3>Season Length</h3>
+                    <p class="settings-description">Each team pairing plays this many games per season (e.g. 38 like real football)</p>
+                    <div class="settings-group">
+                        <label for="seasonLengthInput">Games per Team Pairing:</label>
+                        <input type="number" id="seasonLengthInput" min="1" max="200" value="38" class="settings-input" style="width: 80px;">
+                    </div>
+                </div>
             </div>
             
             <!-- Visual Settings Tab -->
@@ -897,7 +913,7 @@
     </section>
 
     <!-- Navigation -->
-    <nav class="bottom-nav">
+    <nav class="bottom-nav" aria-label="Main navigation">
         <button class="nav-btn active" data-screen="playerScreen">
             <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22" aria-hidden="true"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
             <span>Players</span>
@@ -921,7 +937,7 @@
     </nav>
 
     <!-- Hidden file input for import -->
-    <input type="file" id="importFileInput" accept=".json" style="display: none;">
+    <input type="file" id="importFileInput" accept=".json" aria-label="Import data file" style="display: none;">
 
     <!-- Chart.js and jsPDF are lazy-loaded when Stats screen or PDF export is used -->
     <!-- Application scripts - single ES module entry point -->
