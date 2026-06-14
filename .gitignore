@@ -40,6 +40,10 @@ desktop.ini
 *.temp
 *.cache
 
+# APK recovery (local unpack output + downloaded tools)
+apk-recovered/
+tools/
+
 # Build outputs
 dist/
 build/
