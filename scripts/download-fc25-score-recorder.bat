@@ -1,5 +1,5 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions EnableDelayedExpansion
 
 rem Download or update FC 25 Score Tracker into your local Projects folder.
 rem Requires Git: https://git-scm.com/download/win
@@ -47,18 +47,15 @@ if exist "%TARGET%\.git" (
         pause
         exit /b 1
     )
-) else (
-    rem Folder exists but is not a git repo yet
-    dir /b "%TARGET%" 2>nul | findstr /r "." >nul
-    if not errorlevel 1 (
-        echo [ERROR] Folder exists but is not a git clone:
-        echo   %TARGET%
-        echo Move or rename that folder, then run this script again.
-        pause
-        exit /b 1
-    )
+    goto :done
+)
 
-    echo Cloning repository...
+rem Folder exists but is not a git repo yet (e.g. you created the folder manually)
+set "HASFILES=0"
+for /f "delims=" %%A in ('dir /b /a "%TARGET%" 2^>nul') do set "HASFILES=1"
+
+if "!HASFILES!"=="0" (
+    echo Cloning repository into empty folder...
     git clone --branch %BRANCH% --single-branch "%REPO%" "%TARGET%"
     if errorlevel 1 (
         echo [ERROR] git clone failed.
@@ -66,8 +63,41 @@ if exist "%TARGET%\.git" (
         exit /b 1
     )
     cd /d "%TARGET%"
+    goto :done
 )
 
+echo Folder exists but is not a git clone yet.
+echo Downloading repository files into:
+echo   %TARGET%
+echo.
+echo Note: existing files with the same name may be overwritten.
+echo.
+
+set "TEMPCLONE=%TEMP%\fc25-score-recorder-%RANDOM%"
+echo Cloning to temporary folder...
+git clone --branch %BRANCH% --single-branch "%REPO%" "%TEMPCLONE%"
+if errorlevel 1 (
+    echo [ERROR] git clone failed.
+    if exist "%TEMPCLONE%" rd /s /q "%TEMPCLONE%"
+    pause
+    exit /b 1
+)
+
+echo Copying files into your Projects folder...
+robocopy "%TEMPCLONE%" "%TARGET%" /E /NFL /NDL /NJH /NJS /nc /ns /np >nul
+set "RC=!ERRORLEVEL!"
+rd /s /q "%TEMPCLONE%"
+
+if !RC! GEQ 8 (
+    echo [ERROR] Copy failed (robocopy error !RC!).
+    pause
+    exit /b 1
+)
+
+cd /d "%TARGET%"
+git checkout %BRANCH% >nul 2>nul
+
+:done
 echo.
 echo Done.
 echo Files are in:
